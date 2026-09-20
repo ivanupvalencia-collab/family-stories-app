@@ -1,4 +1,10 @@
+import 'dart:async';
+
 import 'package:family_stories_app/main.dart';
+import 'package:family_stories_app/models/family_member.dart';
+import 'package:family_stories_app/models/question.dart';
+import 'package:family_stories_app/screens/question_screen.dart';
+import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,10 +107,7 @@ void main() {
     expect(find.text('Para Ana'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
 
-    await tester.tap(find.text('Grabar respuesta'));
-    await tester.pump();
-
-    expect(find.text('Grabación de audio próximamente'), findsOneWidget);
+    expect(find.text('Preparado para grabar'), findsOneWidget);
   });
 
   testWidgets('permite escribir y continuar con una pregunta personalizada', (
@@ -146,4 +149,119 @@ void main() {
     expect(find.text('Para Ana'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
   });
+
+  testWidgets('recorre los estados de grabación y reproducción', (
+    tester,
+  ) async {
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuestionScreen(
+          familyMember: const FamilyMember(
+            name: 'Ana',
+            relationship: 'Abuelo/a',
+          ),
+          question: const Question('¿Cuál es tu primer recuerdo?'),
+          audioService: audioService,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Grabar respuesta'));
+    await tester.pump();
+
+    expect(find.text('Grabando'), findsOneWidget);
+    expect(find.text('00:00'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('00:01'), findsOneWidget);
+
+    await tester.tap(find.text('Detener grabación'));
+    await tester.pump();
+
+    expect(find.text('Grabación terminada'), findsOneWidget);
+    expect(find.text('Duración: 00:01'), findsOneWidget);
+    expect(find.text('Reproducir'), findsOneWidget);
+
+    await tester.tap(find.text('Reproducir'));
+    await tester.pump();
+    expect(find.text('Reproduciendo'), findsOneWidget);
+    expect(find.text('Pausar'), findsOneWidget);
+
+    await tester.tap(find.text('Pausar'));
+    await tester.pump();
+    expect(find.text('Reproducir'), findsOneWidget);
+
+    await tester.tap(find.text('Volver a grabar'));
+    await tester.pump();
+    expect(find.text('Preparado para grabar'), findsOneWidget);
+    expect(audioService.discardedPaths, ['/temporary/answer.m4a']);
+  });
+
+  testWidgets('informa cuando se rechaza el permiso del micrófono', (
+    tester,
+  ) async {
+    final audioService = FakeAudioAnswerService(hasPermission: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QuestionScreen(
+          familyMember: const FamilyMember(
+            name: 'Ana',
+            relationship: 'Abuelo/a',
+          ),
+          question: const Question('¿Cuál es tu primer recuerdo?'),
+          audioService: audioService,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Grabar respuesta'));
+    await tester.pump();
+
+    expect(
+      find.text('Se necesita acceso al micrófono para grabar respuestas.'),
+      findsOneWidget,
+    );
+    expect(find.text('Preparado para grabar'), findsOneWidget);
+  });
+}
+
+class FakeAudioAnswerService implements AudioAnswerService {
+  FakeAudioAnswerService({this.hasPermission = true});
+
+  final bool hasPermission;
+  final List<String> discardedPaths = [];
+  final StreamController<void> _playbackCompleteController =
+      StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get onPlaybackComplete => _playbackCompleteController.stream;
+
+  @override
+  Future<bool> requestPermission() async => hasPermission;
+
+  @override
+  Future<void> startRecording() async {}
+
+  @override
+  Future<String?> stopRecording() async => '/temporary/answer.m4a';
+
+  @override
+  Future<void> play(String path) async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
+  Future<void> discard(String path) async {
+    discardedPaths.add(path);
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _playbackCompleteController.close();
+  }
 }
