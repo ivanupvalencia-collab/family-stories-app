@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/audio_answer_service.dart';
+import '../services/family_story_storage.dart';
 
 enum _RecordingStatus { ready, recording, recorded }
 
@@ -13,12 +14,14 @@ class QuestionScreen extends StatefulWidget {
     required this.familyMember,
     required this.question,
     this.audioService,
+    this.familyStoryStorage,
     super.key,
   });
 
   final FamilyMember familyMember;
   final Question question;
   final AudioAnswerService? audioService;
+  final FamilyStoryStorage? familyStoryStorage;
 
   @override
   State<QuestionScreen> createState() => _QuestionScreenState();
@@ -26,6 +29,7 @@ class QuestionScreen extends StatefulWidget {
 
 class _QuestionScreenState extends State<QuestionScreen> {
   late final AudioAnswerService _audioService;
+  late final FamilyStoryStorage _familyStoryStorage;
   late final StreamSubscription<void> _playbackCompleteSubscription;
 
   _RecordingStatus _status = _RecordingStatus.ready;
@@ -40,6 +44,8 @@ class _QuestionScreenState extends State<QuestionScreen> {
   void initState() {
     super.initState();
     _audioService = widget.audioService ?? DeviceAudioAnswerService();
+    _familyStoryStorage =
+        widget.familyStoryStorage ?? LocalFamilyStoryStorage();
     _playbackCompleteSubscription = _audioService.onPlaybackComplete.listen((
       _,
     ) {
@@ -201,6 +207,41 @@ class _QuestionScreenState extends State<QuestionScreen> {
     }
   }
 
+  Future<void> _saveStory() async {
+    if (_isBusy || _recordingPath == null) {
+      return;
+    }
+
+    setState(() => _isBusy = true);
+    try {
+      if (_isPlaying) {
+        await _audioService.pause();
+      }
+      await _familyStoryStorage.saveRecording(
+        familyMemberId: widget.familyMember.id,
+        question: widget.question.text,
+        temporaryAudioPath: _recordingPath!,
+        duration: _recordingDuration,
+      );
+      _recordingPath = null;
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (_) {
+      _showMessage('No se pudo guardar la historia. Inténtalo de nuevo.');
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _isPlaybackPaused = false;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isBusy = false);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _recordingTimer?.cancel();
@@ -263,12 +304,18 @@ class _QuestionScreenState extends State<QuestionScreen> {
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
+              onPressed: _isBusy ? null : _saveStory,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Guardar historia'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
               onPressed: _isBusy ? null : _togglePlayback,
               icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
               label: Text(_isPlaying ? 'Pausar' : 'Reproducir'),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
+            TextButton.icon(
               onPressed: _isBusy ? null : _recordAgain,
               icon: const Icon(Icons.refresh),
               label: const Text('Volver a grabar'),

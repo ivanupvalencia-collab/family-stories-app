@@ -1,18 +1,63 @@
 import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
+import '../services/family_member_storage.dart';
+import '../services/family_story_storage.dart';
 import 'add_family_member_screen.dart';
 import 'family_member_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    this.familyMemberStorage,
+    this.familyStoryStorage,
+    super.key,
+  });
+
+  final FamilyMemberStorage? familyMemberStorage;
+  final FamilyStoryStorage? familyStoryStorage;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late final FamilyMemberStorage _familyMemberStorage;
   final List<FamilyMember> _familyMembers = [];
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _familyMemberStorage =
+        widget.familyMemberStorage ?? SharedPreferencesFamilyMemberStorage();
+    _loadFamilyMembers();
+  }
+
+  Future<void> _loadFamilyMembers() async {
+    try {
+      final familyMembers = await _familyMemberStorage.load();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _familyMembers.addAll(familyMembers);
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isLoading = false);
+      _showMessage('No se pudieron cargar los familiares guardados.');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   Future<void> _addFamilyMember() async {
     final familyMember = await Navigator.of(context).push<FamilyMember>(
@@ -23,15 +68,33 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    setState(() {
-      _familyMembers.add(familyMember);
-    });
+    setState(() => _isSaving = true);
+    try {
+      await _familyMemberStorage.save([..._familyMembers, familyMember]);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _familyMembers.add(familyMember);
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo guardar el familiar. Inténtalo de nuevo.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   void _openFamilyMember(FamilyMember familyMember) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => FamilyMemberScreen(familyMember: familyMember),
+        builder: (context) => FamilyMemberScreen(
+          familyMember: familyMember,
+          familyStoryStorage: widget.familyStoryStorage,
+        ),
       ),
     );
   }
@@ -67,7 +130,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
-                    onPressed: _addFamilyMember,
+                    onPressed: _isLoading || _isSaving
+                        ? null
+                        : _addFamilyMember,
                     icon: const Icon(Icons.person_add_alt_1),
                     label: const Text('Añadir familiar'),
                   ),
@@ -80,7 +145,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 24),
                   Expanded(
-                    child: _familyMembers.isEmpty
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _familyMembers.isEmpty
                         ? Center(
                             child: Text(
                               'Todavía no has añadido ningún familiar.',

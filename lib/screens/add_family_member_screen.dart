@@ -35,7 +35,7 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
     }
 
     Navigator.of(context).pop(
-      FamilyMember(
+      FamilyMember.create(
         name: _nameController.text.trim(),
         relationship: _relationship!,
       ),

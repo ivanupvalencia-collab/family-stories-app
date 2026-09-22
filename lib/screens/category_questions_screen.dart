@@ -2,25 +2,34 @@ import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
 import '../models/question.dart';
+import '../services/family_story_storage.dart';
 import 'question_screen.dart';
 
 class CategoryQuestionsScreen extends StatelessWidget {
   const CategoryQuestionsScreen({
     required this.familyMember,
     required this.category,
+    required this.familyStoryStorage,
     super.key,
   });
 
   final FamilyMember familyMember;
   final QuestionCategory category;
+  final FamilyStoryStorage familyStoryStorage;
 
-  void _openQuestion(BuildContext context, Question question) {
-    Navigator.of(context).push(
+  Future<void> _openQuestion(BuildContext context, Question question) async {
+    final storySaved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) =>
-            QuestionScreen(familyMember: familyMember, question: question),
+        builder: (context) => QuestionScreen(
+          familyMember: familyMember,
+          question: question,
+          familyStoryStorage: familyStoryStorage,
+        ),
       ),
     );
+    if (storySaved == true && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override

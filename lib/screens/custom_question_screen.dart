@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
 import '../models/question.dart';
+import '../services/family_story_storage.dart';
 import 'question_screen.dart';
 
 class CustomQuestionScreen extends StatefulWidget {
-  const CustomQuestionScreen({required this.familyMember, super.key});
+  const CustomQuestionScreen({
+    required this.familyMember,
+    required this.familyStoryStorage,
+    super.key,
+  });
 
   final FamilyMember familyMember;
+  final FamilyStoryStorage familyStoryStorage;
 
   @override
   State<CustomQuestionScreen> createState() => _CustomQuestionScreenState();
@@ -23,19 +29,23 @@ class _CustomQuestionScreenState extends State<CustomQuestionScreen> {
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    Navigator.of(context).push(
+    final storySaved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => QuestionScreen(
           familyMember: widget.familyMember,
           question: Question(_questionController.text.trim()),
+          familyStoryStorage: widget.familyStoryStorage,
         ),
       ),
     );
+    if (storySaved == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override

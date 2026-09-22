@@ -3,31 +3,50 @@ import 'package:flutter/material.dart';
 import '../data/predefined_questions.dart';
 import '../models/family_member.dart';
 import '../models/question.dart';
+import '../services/family_story_storage.dart';
 import 'category_questions_screen.dart';
 import 'custom_question_screen.dart';
 
 class QuestionsScreen extends StatelessWidget {
-  const QuestionsScreen({required this.familyMember, super.key});
+  const QuestionsScreen({
+    required this.familyMember,
+    required this.familyStoryStorage,
+    super.key,
+  });
 
   final FamilyMember familyMember;
+  final FamilyStoryStorage familyStoryStorage;
 
-  void _openCategory(BuildContext context, QuestionCategory category) {
-    Navigator.of(context).push(
+  Future<void> _openCategory(
+    BuildContext context,
+    QuestionCategory category,
+  ) async {
+    final storySaved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => CategoryQuestionsScreen(
           familyMember: familyMember,
           category: category,
+          familyStoryStorage: familyStoryStorage,
         ),
       ),
     );
+    if (storySaved == true && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
-  void _openCustomQuestion(BuildContext context) {
-    Navigator.of(context).push(
+  Future<void> _openCustomQuestion(BuildContext context) async {
+    final storySaved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) => CustomQuestionScreen(familyMember: familyMember),
+        builder: (context) => CustomQuestionScreen(
+          familyMember: familyMember,
+          familyStoryStorage: familyStoryStorage,
+        ),
       ),
     );
+    if (storySaved == true && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   IconData _categoryIcon(String categoryName) {
