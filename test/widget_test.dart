@@ -114,6 +114,29 @@ void main() {
     await tester.tap(find.text('¿Cómo era tu casa cuando eras pequeño/a?'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Responder ahora'), findsOneWidget);
+    expect(find.text('Enviar a Ana'), findsOneWidget);
+
+    await tester.tap(find.text('Enviar a Ana'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Para enviar preguntas a Ana, primero tendrás que invitarle a Family Stories.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Invitar a Ana'), findsOneWidget);
+
+    await tester.tap(find.text('Invitar a Ana'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Las invitaciones estarán disponibles próximamente.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Responder ahora'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Para Ana'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
 
@@ -151,12 +174,21 @@ void main() {
 
     await tester.enterText(
       find.byType(EditableText),
-      '¿Cuál es tu receta favorita?',
+      '¿Ñandú, pingüino y canción? ¡Sí, qué ilusión!',
     );
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('¿Cuál es tu receta favorita?'), findsOneWidget);
+    expect(
+      find.text('¿Ñandú, pingüino y canción? ¡Sí, qué ilusión!'),
+      findsOneWidget,
+    );
+    expect(find.text('Responder ahora'), findsOneWidget);
+    expect(find.text('Enviar a Ana'), findsOneWidget);
+
+    await tester.tap(find.text('Responder ahora'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Para Ana'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
   });

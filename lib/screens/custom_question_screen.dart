@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/family_story_storage.dart';
-import 'question_screen.dart';
+import 'answer_options_screen.dart';
 
 class CustomQuestionScreen extends StatefulWidget {
   const CustomQuestionScreen({
@@ -36,7 +36,7 @@ class _CustomQuestionScreenState extends State<CustomQuestionScreen> {
 
     final storySaved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) => QuestionScreen(
+        builder: (context) => AnswerOptionsScreen(
           familyMember: widget.familyMember,
           question: Question(_questionController.text.trim()),
           familyStoryStorage: widget.familyStoryStorage,
@@ -75,6 +75,8 @@ class _CustomQuestionScreenState extends State<CustomQuestionScreen> {
                     TextFormField(
                       controller: _questionController,
                       autofocus: true,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
                       minLines: 3,
                       maxLines: 5,
                       textCapitalization: TextCapitalization.sentences,

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/family_story_storage.dart';
-import 'question_screen.dart';
+import 'answer_options_screen.dart';
 
 class CategoryQuestionsScreen extends StatelessWidget {
   const CategoryQuestionsScreen({
@@ -20,7 +20,7 @@ class CategoryQuestionsScreen extends StatelessWidget {
   Future<void> _openQuestion(BuildContext context, Question question) async {
     final storySaved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) => QuestionScreen(
+        builder: (context) => AnswerOptionsScreen(
           familyMember: familyMember,
           question: question,
           familyStoryStorage: familyStoryStorage,
