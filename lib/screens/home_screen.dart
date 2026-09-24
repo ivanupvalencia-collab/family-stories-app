@@ -5,6 +5,7 @@ import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
 import 'add_family_member_screen.dart';
 import 'family_member_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -99,12 +100,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openProfile() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
 
     return Scaffold(
+      appBar: AppBar(
+        actions: [
+          IconButton(
+            onPressed: _openProfile,
+            tooltip: 'Perfil',
+            icon: const Icon(Icons.account_circle_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

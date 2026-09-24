@@ -27,6 +27,26 @@ void main() {
       find.text('Todavía no has añadido ningún familiar.'),
       findsOneWidget,
     );
+    expect(find.byTooltip('Perfil'), findsOneWidget);
+  });
+
+  testWidgets('abre el perfil y muestra el acceso futuro con Google', (
+    tester,
+  ) async {
+    await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Perfil'), findsOneWidget);
+    expect(find.text('Aún no has iniciado sesión'), findsOneWidget);
+    expect(find.text('Continuar con Google'), findsOneWidget);
+
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pump();
+
+    expect(find.text('Inicio de sesión próximamente'), findsOneWidget);
   });
 
   testWidgets('permite añadir un familiar', (tester) async {
