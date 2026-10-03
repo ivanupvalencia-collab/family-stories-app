@@ -5,17 +5,10 @@ const _googleWebClientId =
     '922531861898-dv4srvf7daasfmiheuk2e5b2fdcse2pt.apps.googleusercontent.com';
 
 class AuthUser {
-  const AuthUser({
-    required this.id,
-    required this.email,
-    this.name,
-    this.photoUrl,
-  });
+  const AuthUser({required this.id, required this.email});
 
   final String id;
   final String email;
-  final String? name;
-  final String? photoUrl;
 }
 
 abstract class AuthService {
@@ -99,25 +92,6 @@ class SupabaseGoogleAuthService implements AuthService {
       return null;
     }
 
-    final metadata = user.userMetadata;
-    return AuthUser(
-      id: user.id,
-      email: user.email ?? '',
-      name: _metadataValue(metadata, const ['full_name', 'name']),
-      photoUrl: _metadataValue(metadata, const ['avatar_url', 'picture']),
-    );
-  }
-
-  static String? _metadataValue(
-    Map<String, dynamic>? metadata,
-    List<String> keys,
-  ) {
-    for (final key in keys) {
-      final value = metadata?[key];
-      if (value is String && value.trim().isNotEmpty) {
-        return value;
-      }
-    }
-    return null;
+    return AuthUser(id: user.id, email: user.email ?? '');
   }
 }

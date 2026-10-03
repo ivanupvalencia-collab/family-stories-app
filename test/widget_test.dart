@@ -4,11 +4,13 @@ import 'package:family_stories_app/main.dart';
 import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/models/question.dart';
+import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
 import 'package:family_stories_app/services/auth_service.dart';
 import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
+import 'package:family_stories_app/services/profile_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -33,8 +35,13 @@ void main() {
 
   testWidgets('inicia sesión con Google desde el perfil', (tester) async {
     final authService = FakeAuthService();
+    final profileService = FakeProfileService();
     await tester.pumpWidget(
-      testApp(MemoryFamilyMemberStorage(), authService: authService),
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: authService,
+        profileService: profileService,
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -43,12 +50,19 @@ void main() {
 
     expect(find.text('Perfil'), findsOneWidget);
     expect(find.text('Aún no has iniciado sesión'), findsOneWidget);
+    expect(
+      find.text(
+        'Inicia sesión para guardar tus historias y acceder a ellas desde otros dispositivos.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Continuar con Google'), findsOneWidget);
 
     await tester.tap(find.text('Continuar con Google'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(authService.signInCalls, 1);
+    expect(profileService.requestedUserIds, ['google-user-id']);
     expect(find.text('Ana García'), findsOneWidget);
     expect(find.text('ana@example.com'), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsOneWidget);
@@ -73,6 +87,35 @@ void main() {
     expect(authService.signOutCalls, 1);
     expect(find.text('Aún no has iniciado sesión'), findsOneWidget);
     expect(find.text('Continuar con Google'), findsOneWidget);
+  });
+
+  testWidgets('mantiene disponible el perfil si falla su carga', (
+    tester,
+  ) async {
+    final profileService = FakeProfileService(error: Exception('fallo'));
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pudo cargar tu perfil.'), findsOneWidget);
+    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('Cerrar sesión'), findsOneWidget);
+
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(profileService.requestedUserIds, [
+      'google-user-id',
+      'google-user-id',
+    ]);
   });
 
   testWidgets('permite añadir un familiar', (tester) async {
@@ -424,21 +467,38 @@ void main() {
   });
 }
 
-const testAuthUser = AuthUser(
-  id: 'google-user-id',
-  email: 'ana@example.com',
-  name: 'Ana García',
-);
+const testAuthUser = AuthUser(id: 'google-user-id', email: 'ana@example.com');
+
+const testUserProfile = UserProfile(id: 'google-user-id', name: 'Ana García');
 
 FamilyStoriesApp testApp(
   FamilyMemberStorage familyMemberStorage, {
   AuthService? authService,
+  ProfileService? profileService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
+    profileService: profileService ?? FakeProfileService(),
     familyMemberStorage: familyMemberStorage,
     familyStoryStorage: MemoryFamilyStoryStorage(),
   );
+}
+
+class FakeProfileService implements ProfileService {
+  FakeProfileService({this.profile = testUserProfile, this.error});
+
+  final UserProfile profile;
+  final Object? error;
+  final List<String> requestedUserIds = [];
+
+  @override
+  Future<UserProfile> loadForUser(String userId) async {
+    requestedUserIds.add(userId);
+    if (error != null) {
+      throw error!;
+    }
+    return profile;
+  }
 }
 
 class FakeAuthService implements AuthService {

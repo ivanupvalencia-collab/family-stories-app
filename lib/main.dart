@@ -5,6 +5,7 @@ import 'screens/home_screen.dart';
 import 'services/auth_service.dart';
 import 'services/family_member_storage.dart';
 import 'services/family_story_storage.dart';
+import 'services/profile_service.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
 const _supabasePublishableKey =
@@ -23,12 +24,14 @@ Future<void> main() async {
 class FamilyStoriesApp extends StatelessWidget {
   const FamilyStoriesApp({
     this.authService,
+    this.profileService,
     this.familyMemberStorage,
     this.familyStoryStorage,
     super.key,
   });
 
   final AuthService? authService;
+  final ProfileService? profileService;
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyStoryStorage? familyStoryStorage;
 
@@ -43,6 +46,7 @@ class FamilyStoriesApp extends StatelessWidget {
       ),
       home: HomeScreen(
         authService: authService,
+        profileService: profileService,
         familyMemberStorage: familyMemberStorage,
         familyStoryStorage: familyStoryStorage,
       ),
