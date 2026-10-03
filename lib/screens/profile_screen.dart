@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({this.authService, this.profileService, super.key});
@@ -139,6 +140,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _editProfile() async {
+    final user = _user;
+    final profile = _profile;
+    if (user == null || profile == null) {
+      return;
+    }
+
+    final updatedProfile = await Navigator.of(context).push<UserProfile>(
+      MaterialPageRoute(
+        builder: (context) => EditProfileScreen(
+          userId: user.id,
+          profile: profile,
+          profileService: _profileService,
+        ),
+      ),
+    );
+
+    if (updatedProfile != null && mounted && _user?.id == user.id) {
+      setState(() => _profile = updatedProfile);
+    }
+  }
+
   Widget _buildAvatar(ThemeData theme, UserProfile? profile) {
     final photoUrl = profile?.avatarUrl;
 
@@ -225,7 +248,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             : 'Continuar con Google',
                       ),
                     )
-                  else
+                  else ...[
+                    if (profile != null) ...[
+                      FilledButton.icon(
+                        onPressed: _isWorking ? null : _editProfile,
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Editar perfil'),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     OutlinedButton.icon(
                       onPressed: _isWorking ? null : _signOut,
                       icon: const Icon(Icons.logout),
@@ -233,6 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _isWorking ? 'Cerrando sesión...' : 'Cerrar sesión',
                       ),
                     ),
+                  ],
                 ],
               ),
             ),

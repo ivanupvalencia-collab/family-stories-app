@@ -118,6 +118,77 @@ void main() {
     ]);
   });
 
+  testWidgets('edita el nombre del perfil autenticado', (tester) async {
+    final profileService = FakeProfileService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editar perfil'), findsOneWidget);
+    expect(find.text('Ana García'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField), '  María López  ');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(profileService.updatedUserIds, ['google-user-id']);
+    expect(profileService.updatedNames, ['María López']);
+    expect(find.text('María López'), findsOneWidget);
+    expect(find.text('Ana García'), findsNothing);
+  });
+
+  testWidgets('valida el nombre y conserva el texto si falla el guardado', (
+    tester,
+  ) async {
+    final profileService = FakeProfileService(
+      updateError: Exception('fallo al guardar'),
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar perfil'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField), '   ');
+    await tester.tap(find.text('Guardar'));
+    await tester.pump();
+
+    expect(find.text('Introduce un nombre'), findsOneWidget);
+    expect(profileService.updatedNames, isEmpty);
+
+    await tester.enterText(find.byType(TextFormField), 'Nombre conservado');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No se pudo guardar el nombre. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+    expect(find.text('Editar perfil'), findsOneWidget);
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).controller!.text,
+      'Nombre conservado',
+    );
+  });
+
   testWidgets('permite añadir un familiar', (tester) async {
     final storage = MemoryFamilyMemberStorage();
     await tester.pumpWidget(testApp(storage));
@@ -485,11 +556,18 @@ FamilyStoriesApp testApp(
 }
 
 class FakeProfileService implements ProfileService {
-  FakeProfileService({this.profile = testUserProfile, this.error});
+  FakeProfileService({
+    this.profile = testUserProfile,
+    this.error,
+    this.updateError,
+  });
 
-  final UserProfile profile;
+  UserProfile profile;
   final Object? error;
+  final Object? updateError;
   final List<String> requestedUserIds = [];
+  final List<String> updatedUserIds = [];
+  final List<String> updatedNames = [];
 
   @override
   Future<UserProfile> loadForUser(String userId) async {
@@ -497,6 +575,20 @@ class FakeProfileService implements ProfileService {
     if (error != null) {
       throw error!;
     }
+    return profile;
+  }
+
+  @override
+  Future<UserProfile> updateName({
+    required String userId,
+    required String name,
+  }) async {
+    updatedUserIds.add(userId);
+    updatedNames.add(name);
+    if (updateError != null) {
+      throw updateError!;
+    }
+    profile = profile.copyWith(name: name);
     return profile;
   }
 }

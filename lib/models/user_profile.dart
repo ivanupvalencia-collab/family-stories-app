@@ -24,4 +24,14 @@ class UserProfile {
       createdAt: createdAt is String ? DateTime.tryParse(createdAt) : null,
     );
   }
+
+  UserProfile copyWith({String? name}) {
+    return UserProfile(
+      id: id,
+      name: name ?? this.name,
+      avatarKey: avatarKey,
+      avatarUrl: avatarUrl,
+      createdAt: createdAt,
+    );
+  }
 }
