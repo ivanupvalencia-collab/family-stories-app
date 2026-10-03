@@ -1,17 +1,108 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+import '../services/auth_service.dart';
 
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Inicio de sesión próximamente')),
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({this.authService, super.key});
+
+  final AuthService? authService;
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  late final AuthService _authService;
+  late final StreamSubscription<AuthUser?> _authSubscription;
+  AuthUser? _user;
+  bool _isWorking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authService = widget.authService ?? SupabaseGoogleAuthService();
+    _user = _authService.currentUser;
+    _authSubscription = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        setState(() => _user = user);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isWorking = true);
+    try {
+      final user = await _authService.signInWithGoogle();
+      if (mounted) {
+        setState(() => _user = user);
+      }
+    } on GoogleSignInCancelledException {
+      if (mounted) {
+        _showMessage('Inicio de sesión cancelado.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo iniciar sesión. Inténtalo de nuevo.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isWorking = false);
+      }
+    }
+  }
+
+  Future<void> _signOut() async {
+    setState(() => _isWorking = true);
+    try {
+      await _authService.signOut();
+      if (mounted) {
+        setState(() => _user = null);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo cerrar sesión. Inténtalo de nuevo.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isWorking = false);
+      }
+    }
+  }
+
+  Widget _buildAvatar(ThemeData theme, AuthUser? user) {
+    final photoUrl = user?.photoUrl;
+
+    return CircleAvatar(
+      radius: 44,
+      backgroundColor: theme.colorScheme.primaryContainer,
+      foregroundImage: photoUrl == null ? null : NetworkImage(photoUrl),
+      onForegroundImageError: photoUrl == null ? null : (_, _) {},
+      child: Icon(
+        user == null ? Icons.person_outline : Icons.person,
+        size: 48,
+        color: theme.colorScheme.onPrimaryContainer,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = _user;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Perfil')),
@@ -25,18 +116,13 @@ class ProfileScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  CircleAvatar(
-                    radius: 44,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Icon(
-                      Icons.person_outline,
-                      size: 48,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
+                  _buildAvatar(theme, user),
                   const SizedBox(height: 24),
                   Text(
-                    'Aún no has iniciado sesión',
+                    user?.name ??
+                        (user == null
+                            ? 'Aún no has iniciado sesión'
+                            : 'Usuario'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
@@ -44,18 +130,31 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Próximamente podrás usar tu cuenta para guardar tus historias y acceder a ellas desde otros dispositivos.',
+                    user?.email ?? 'Inicia sesión para guardar tus historias y acceder a ellas desde otros dispositivos.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 32),
-                  OutlinedButton.icon(
-                    onPressed: () => _showComingSoon(context),
-                    icon: const Icon(Icons.account_circle_outlined),
-                    label: const Text('Continuar con Google'),
-                  ),
+                  if (user == null)
+                    OutlinedButton.icon(
+                      onPressed: _isWorking ? null : _signInWithGoogle,
+                      icon: const Icon(Icons.account_circle_outlined),
+                      label: Text(
+                        _isWorking
+                            ? 'Iniciando sesión...'
+                            : 'Continuar con Google',
+                      ),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: _isWorking ? null : _signOut,
+                      icon: const Icon(Icons.logout),
+                      label: Text(
+                        _isWorking ? 'Cerrando sesión...' : 'Cerrar sesión',
+                      ),
+                    ),
                 ],
               ),
             ),

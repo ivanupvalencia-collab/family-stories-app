@@ -5,6 +5,7 @@ import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/models/question.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
+import 'package:family_stories_app/services/auth_service.dart';
 import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
@@ -30,10 +31,11 @@ void main() {
     expect(find.byTooltip('Perfil'), findsOneWidget);
   });
 
-  testWidgets('abre el perfil y muestra el acceso futuro con Google', (
-    tester,
-  ) async {
-    await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
+  testWidgets('inicia sesión con Google desde el perfil', (tester) async {
+    final authService = FakeAuthService();
+    await tester.pumpWidget(
+      testApp(MemoryFamilyMemberStorage(), authService: authService),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Perfil'));
@@ -46,7 +48,31 @@ void main() {
     await tester.tap(find.text('Continuar con Google'));
     await tester.pump();
 
-    expect(find.text('Inicio de sesión próximamente'), findsOneWidget);
+    expect(authService.signInCalls, 1);
+    expect(find.text('Ana García'), findsOneWidget);
+    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('Cerrar sesión'), findsOneWidget);
+  });
+
+  testWidgets('restaura la sesión y permite cerrarla', (tester) async {
+    final authService = FakeAuthService(testAuthUser);
+    await tester.pumpWidget(
+      testApp(MemoryFamilyMemberStorage(), authService: authService),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ana García'), findsOneWidget);
+    expect(find.text('ana@example.com'), findsOneWidget);
+
+    await tester.tap(find.text('Cerrar sesión'));
+    await tester.pump();
+
+    expect(authService.signOutCalls, 1);
+    expect(find.text('Aún no has iniciado sesión'), findsOneWidget);
+    expect(find.text('Continuar con Google'), findsOneWidget);
   });
 
   testWidgets('permite añadir un familiar', (tester) async {
@@ -398,11 +424,52 @@ void main() {
   });
 }
 
-FamilyStoriesApp testApp(FamilyMemberStorage familyMemberStorage) {
+const testAuthUser = AuthUser(
+  id: 'google-user-id',
+  email: 'ana@example.com',
+  name: 'Ana García',
+);
+
+FamilyStoriesApp testApp(
+  FamilyMemberStorage familyMemberStorage, {
+  AuthService? authService,
+}) {
   return FamilyStoriesApp(
+    authService: authService ?? FakeAuthService(),
     familyMemberStorage: familyMemberStorage,
     familyStoryStorage: MemoryFamilyStoryStorage(),
   );
+}
+
+class FakeAuthService implements AuthService {
+  FakeAuthService([this._user]);
+
+  final StreamController<AuthUser?> _authController =
+      StreamController<AuthUser?>.broadcast();
+  AuthUser? _user;
+  int signInCalls = 0;
+  int signOutCalls = 0;
+
+  @override
+  AuthUser? get currentUser => _user;
+
+  @override
+  Stream<AuthUser?> get authStateChanges => _authController.stream;
+
+  @override
+  Future<AuthUser> signInWithGoogle() async {
+    signInCalls++;
+    _user = testAuthUser;
+    _authController.add(_user);
+    return _user!;
+  }
+
+  @override
+  Future<void> signOut() async {
+    signOutCalls++;
+    _user = null;
+    _authController.add(null);
+  }
 }
 
 class MemoryFamilyMemberStorage implements FamilyMemberStorage {

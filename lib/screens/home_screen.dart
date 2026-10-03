@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
+import '../services/auth_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
 import 'add_family_member_screen.dart';
@@ -9,11 +10,13 @@ import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
+    this.authService,
     this.familyMemberStorage,
     this.familyStoryStorage,
     super.key,
   });
 
+  final AuthService? authService;
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyStoryStorage? familyStoryStorage;
 
@@ -101,8 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openProfile() {
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(authService: widget.authService),
+      ),
+    );
   }
 
   @override
