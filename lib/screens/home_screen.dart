@@ -9,6 +9,7 @@ import '../services/avatar_storage_service.dart';
 import '../services/family_member_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
+import '../services/family_story_service.dart';
 import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
 import '../services/profile_image_picker.dart';
@@ -28,6 +29,7 @@ class HomeScreen extends StatefulWidget {
     this.familyMemberStorage,
     this.familyMemberService,
     this.familyStoryStorage,
+    this.familyStoryService,
     this.invitationService,
     this.invitationShareService,
     this.questionRequestService,
@@ -41,6 +43,7 @@ class HomeScreen extends StatefulWidget {
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyMemberService? familyMemberService;
   final FamilyStoryStorage? familyStoryStorage;
+  final FamilyStoryService? familyStoryService;
   final InvitationService? invitationService;
   final InvitationShareService? invitationShareService;
   final QuestionRequestService? questionRequestService;
@@ -56,8 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
   late final InvitationService _invitationService;
   late final InvitationShareService _invitationShareService;
   late final QuestionRequestService _questionRequestService;
+  late final FamilyStoryService _familyStoryService;
   late final ProfileService _profileService;
   late final StreamSubscription<AuthUser?> _authSubscription;
+  StreamSubscription<void>? _questionRealtimeSubscription;
+  String? _questionRealtimeUserId;
+  int _questionRealtimeGeneration = 0;
+  Timer? _questionRealtimeDebounce;
   final List<FamilyMember> _familyMembers = [];
   final List<QuestionRequest> _questionRequests = [];
   AuthUser? _user;
@@ -83,16 +91,22 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.invitationShareService ?? PlatformInvitationShareService();
     _questionRequestService =
         widget.questionRequestService ?? SupabaseQuestionRequestService();
+    _familyStoryService =
+        widget.familyStoryService ?? SupabaseFamilyStoryService();
     _profileService = widget.profileService ?? SupabaseProfileService();
     _user = _authService.currentUser;
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
     _loadFamilyMembers();
     _loadQuestionRequests();
+    _replaceQuestionRealtimeSubscription(_user);
     unawaited(_preloadProfile(_user));
   }
 
   @override
   void dispose() {
+    _questionRealtimeGeneration++;
+    _questionRealtimeDebounce?.cancel();
+    unawaited(_questionRealtimeSubscription?.cancel());
     _authSubscription.cancel();
     super.dispose();
   }
@@ -105,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_user != null) {
       _profileService.clearCache();
     }
+    unawaited(_familyStoryService.clearAudioCache());
     setState(() {
       _user = user;
       _familyMembers.clear();
@@ -112,7 +127,66 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _loadFamilyMembers();
     _loadQuestionRequests();
+    _replaceQuestionRealtimeSubscription(user);
     unawaited(_preloadProfile(user));
+  }
+
+  void _replaceQuestionRealtimeSubscription(AuthUser? user) {
+    if (user != null &&
+        _questionRealtimeUserId == user.id &&
+        _questionRealtimeSubscription != null) {
+      return;
+    }
+
+    final generation = ++_questionRealtimeGeneration;
+    _questionRealtimeDebounce?.cancel();
+    final previousSubscription = _questionRealtimeSubscription;
+    _questionRealtimeSubscription = null;
+    _questionRealtimeUserId = null;
+    unawaited(previousSubscription?.cancel());
+
+    if (!mounted ||
+        generation != _questionRealtimeGeneration ||
+        user == null ||
+        _user?.id != user.id) {
+      return;
+    }
+
+    try {
+      _questionRealtimeUserId = user.id;
+      _questionRealtimeSubscription = _questionRequestService
+          .watchChangesForRecipient(user.id)
+          .listen(
+            (_) => _scheduleQuestionRequestsRefresh(user.id, generation),
+            onError: (_) {
+              // Normal loads and pull-to-refresh remain available.
+            },
+          );
+    } catch (_) {
+      _questionRealtimeUserId = null;
+      _questionRealtimeSubscription = null;
+    }
+  }
+
+  void _scheduleQuestionRequestsRefresh(String userId, int generation) {
+    if (!mounted ||
+        generation != _questionRealtimeGeneration ||
+        _user?.id != userId) {
+      return;
+    }
+    _questionRealtimeDebounce?.cancel();
+    _questionRealtimeDebounce = Timer(const Duration(milliseconds: 150), () {
+      if (mounted &&
+          generation == _questionRealtimeGeneration &&
+          _user?.id == userId) {
+        unawaited(_loadQuestionRequests());
+      }
+    });
+  }
+
+  Future<void> _refreshHome() async {
+    _questionRealtimeDebounce?.cancel();
+    await Future.wait([_loadFamilyMembers(), _loadQuestionRequests()]);
   }
 
   Future<void> _preloadProfile(AuthUser? user) async {
@@ -263,6 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
           questionRequestService: _questionRequestService,
           isRemoteFamilyMember: _user != null,
           familyStoryStorage: widget.familyStoryStorage,
+          familyStoryService: _familyStoryService,
         ),
       ),
     );
@@ -285,13 +360,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openQuestionRequest(QuestionRequest questionRequest) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) =>
-            QuestionRequestScreen(questionRequest: questionRequest),
+  Future<void> _openQuestionRequest(QuestionRequest questionRequest) async {
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (context) => QuestionRequestScreen(
+          questionRequest: questionRequest,
+          questionRequestService: _questionRequestService,
+        ),
       ),
     );
+    if (sent == true && mounted) {
+      _showMessage('Respuesta enviada');
+      await _loadQuestionRequests();
+    }
   }
 
   @override
@@ -343,93 +424,97 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 32),
                   Expanded(
-                    child: ListView(
-                      children: [
-                        if (_user != null &&
-                            (_questionsLoading ||
-                                _questionsLoadFailed ||
-                                _questionRequests.isNotEmpty)) ...[
+                    child: RefreshIndicator(
+                      onRefresh: _refreshHome,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          if (_user != null &&
+                              (_questionsLoading ||
+                                  _questionsLoadFailed ||
+                                  _questionRequests.isNotEmpty)) ...[
+                            Text(
+                              'Preguntas para ti',
+                              style: textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            if (_questionsLoading)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            else if (_questionsLoadFailed)
+                              _QuestionRequestsLoadError(
+                                onRetry: _loadQuestionRequests,
+                              )
+                            else
+                              ..._questionRequests.map(
+                                (questionRequest) => Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading: const CircleAvatar(
+                                      child: Icon(Icons.markunread_outlined),
+                                    ),
+                                    title: Text(questionRequest.questionText),
+                                    subtitle: const Text(
+                                      'Enviada por otro familiar · Pendiente',
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () =>
+                                        _openQuestionRequest(questionRequest),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 32),
+                          ],
                           Text(
-                            'Preguntas para ti',
+                            'Tus familiares',
                             style: textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          if (_questionsLoading)
+                          if (_isLoading)
                             const Center(
                               child: Padding(
-                                padding: EdgeInsets.all(16),
+                                padding: EdgeInsets.all(32),
                                 child: CircularProgressIndicator(),
                               ),
                             )
-                          else if (_questionsLoadFailed)
-                            _QuestionRequestsLoadError(
-                              onRetry: _loadQuestionRequests,
+                          else if (_loadFailed)
+                            _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
+                          else if (_familyMembers.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 32),
+                              child: Text(
+                                'Todavía no has añadido ningún familiar.',
+                                textAlign: TextAlign.center,
+                                style: textTheme.bodyLarge?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             )
                           else
-                            ..._questionRequests.map(
-                              (questionRequest) => Card(
+                            ..._familyMembers.map(
+                              (familyMember) => Card(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 child: ListTile(
                                   leading: const CircleAvatar(
-                                    child: Icon(Icons.markunread_outlined),
+                                    child: Icon(Icons.person_outline),
                                   ),
-                                  title: Text(questionRequest.questionText),
-                                  subtitle: const Text(
-                                    'Enviada por otro familiar · Pendiente',
-                                  ),
+                                  title: Text(familyMember.name),
+                                  subtitle: Text(familyMember.relationship),
                                   trailing: const Icon(Icons.chevron_right),
-                                  onTap: () =>
-                                      _openQuestionRequest(questionRequest),
+                                  onTap: () => _openFamilyMember(familyMember),
                                 ),
                               ),
                             ),
-                          const SizedBox(height: 32),
                         ],
-                        Text(
-                          'Tus familiares',
-                          style: textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_isLoading)
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(32),
-                              child: CircularProgressIndicator(),
-                            ),
-                          )
-                        else if (_loadFailed)
-                          _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
-                        else if (_familyMembers.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 32),
-                            child: Text(
-                              'Todavía no has añadido ningún familiar.',
-                              textAlign: TextAlign.center,
-                              style: textTheme.bodyLarge?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          )
-                        else
-                          ..._familyMembers.map(
-                            (familyMember) => Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: const CircleAvatar(
-                                  child: Icon(Icons.person_outline),
-                                ),
-                                title: Text(familyMember.name),
-                                subtitle: Text(familyMember.relationship),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _openFamilyMember(familyMember),
-                              ),
-                            ),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
                 ],

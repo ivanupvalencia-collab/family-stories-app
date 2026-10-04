@@ -9,6 +9,8 @@ import 'package:family_stories_app/models/question.dart';
 import 'package:family_stories_app/models/question_request.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
+import 'package:family_stories_app/screens/question_request_screen.dart';
+import 'package:family_stories_app/screens/story_screen.dart';
 import 'package:family_stories_app/screens/accept_invitation_screen.dart';
 import 'package:family_stories_app/screens/answer_options_screen.dart';
 import 'package:family_stories_app/services/auth_service.dart';
@@ -17,6 +19,7 @@ import 'package:family_stories_app/services/avatar_storage_service.dart';
 import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
+import 'package:family_stories_app/services/family_story_service.dart';
 import 'package:family_stories_app/services/incoming_link_service.dart';
 import 'package:family_stories_app/services/invitation_link.dart';
 import 'package:family_stories_app/services/invitation_service.dart';
@@ -144,12 +147,6 @@ void main() {
 
     expect(find.text('Pregunta para ti'), findsOneWidget);
     expect(find.text('Responder'), findsOneWidget);
-    await tester.tap(find.text('Responder'));
-    await tester.pump();
-    expect(
-      find.text('Podrás responder esta pregunta próximamente.'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('oculta la sección si no hay preguntas pendientes', (
@@ -172,6 +169,7 @@ void main() {
   testWidgets('sin sesión no carga ni muestra preguntas recibidas', (
     tester,
   ) async {
+    final localStorage = MemoryFamilyMemberStorage();
     final questionRequestService = FakeQuestionRequestService(
       pendingByRecipient: {
         testAuthUser.id: [
@@ -184,17 +182,172 @@ void main() {
       },
     );
     await tester.pumpWidget(
+      testApp(localStorage, questionRequestService: questionRequestService),
+    );
+    await tester.pumpAndSettle();
+
+    expect(questionRequestService.requestedRecipientIds, isEmpty);
+    expect(questionRequestService.watchedRecipientIds, isEmpty);
+    expect(find.text('Preguntas para ti'), findsNothing);
+    expect(find.text('Pregunta privada'), findsNothing);
+
+    localStorage.members = const [
+      FamilyMember(
+        id: 'local-member',
+        name: 'Carmen',
+        relationship: 'Abuelo/a',
+      ),
+    ];
+    await tester.drag(find.byType(ListView), const Offset(0, 350));
+    await tester.pumpAndSettle();
+    expect(find.text('Carmen'), findsOneWidget);
+    expect(questionRequestService.requestedRecipientIds, isEmpty);
+  });
+
+  testWidgets('pull-to-refresh actualiza familiares y preguntas', (
+    tester,
+  ) async {
+    final familyMemberService = FakeFamilyMemberService();
+    final questionRequestService = FakeQuestionRequestService();
+    await tester.pumpWidget(
       testApp(
         MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        familyMemberService: familyMemberService,
         questionRequestService: questionRequestService,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(questionRequestService.requestedRecipientIds, isEmpty);
-    expect(find.text('Preguntas para ti'), findsNothing);
-    expect(find.text('Pregunta privada'), findsNothing);
+    questionRequestService.pendingByRecipient[testAuthUser.id] = [
+      testQuestionRequest(
+        id: 'request-refresh',
+        recipientId: testAuthUser.id,
+        questionText: 'Pregunta actualizada manualmente',
+      ),
+    ];
+    await tester.drag(find.byType(ListView), const Offset(0, 350));
+    await tester.pumpAndSettle();
+
+    expect(familyMemberService.requestedOwnerIds, [
+      testAuthUser.id,
+      testAuthUser.id,
+    ]);
+    expect(questionRequestService.requestedRecipientIds, [
+      testAuthUser.id,
+      testAuthUser.id,
+    ]);
+    expect(find.text('Pregunta actualizada manualmente'), findsOneWidget);
   });
+
+  testWidgets('un evento Realtime relevante refresca las preguntas', (
+    tester,
+  ) async {
+    final service = FakeQuestionRequestService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    service.pendingByRecipient[testAuthUser.id] = [
+      testQuestionRequest(
+        id: 'request-realtime',
+        recipientId: testAuthUser.id,
+        questionText: 'Pregunta recibida en tiempo real',
+      ),
+    ];
+    service.emitRealtimeChange(testAuthUser.id);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    expect(service.requestedRecipientIds, [testAuthUser.id, testAuthUser.id]);
+    expect(find.text('Pregunta recibida en tiempo real'), findsOneWidget);
+
+    service.pendingByRecipient[testAuthUser.id]!.clear();
+    service.emitRealtimeChange(testAuthUser.id);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(find.text('Pregunta recibida en tiempo real'), findsNothing);
+  });
+
+  testWidgets('un evento Realtime no relevante no refresca las preguntas', (
+    tester,
+  ) async {
+    final service = FakeQuestionRequestService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    service.emitRealtimeChange('another-user-id');
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    expect(service.requestedRecipientIds, [testAuthUser.id]);
+  });
+
+  testWidgets('Realtime sustituye y cancela la suscripción al cambiar sesión', (
+    tester,
+  ) async {
+    const secondUser = AuthUser(
+      id: 'second-user-id',
+      email: 'bruno@example.com',
+    );
+    final authService = FakeAuthService(testAuthUser);
+    final service = FakeQuestionRequestService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: authService,
+        questionRequestService: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(service.watchedRecipientIds, [testAuthUser.id]);
+
+    authService.setUser(secondUser);
+    await tester.pumpAndSettle();
+    expect(service.cancelledRecipientIds, [testAuthUser.id]);
+    expect(service.watchedRecipientIds, [testAuthUser.id, secondUser.id]);
+
+    authService.setUser(null);
+    await tester.pumpAndSettle();
+    expect(service.cancelledRecipientIds, [testAuthUser.id, secondUser.id]);
+  });
+
+  testWidgets(
+    'no crea suscripciones Realtime duplicadas para la misma sesión',
+    (tester) async {
+      final authService = FakeAuthService(testAuthUser);
+      final service = FakeQuestionRequestService();
+      await tester.pumpWidget(
+        testApp(
+          MemoryFamilyMemberStorage(),
+          authService: authService,
+          questionRequestService: service,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      authService.setUser(testAuthUser);
+      await tester.pumpAndSettle();
+      service.emitRealtimeChange(testAuthUser.id);
+      service.emitRealtimeChange(testAuthUser.id);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      expect(service.watchedRecipientIds, [testAuthUser.id]);
+      expect(service.requestedRecipientIds, [testAuthUser.id, testAuthUser.id]);
+    },
+  );
 
   testWidgets('muestra un error recuperable si fallan las preguntas', (
     tester,
@@ -226,6 +379,7 @@ void main() {
     );
     final firstLoad = Completer<List<QuestionRequest>>();
     final authService = FakeAuthService(testAuthUser);
+    final storyService = FakeFamilyStoryService();
     final questionRequestService = FakeQuestionRequestService(
       pendingByRecipient: {
         secondUser.id: [
@@ -242,6 +396,7 @@ void main() {
       testApp(
         MemoryFamilyMemberStorage(),
         authService: authService,
+        familyStoryService: storyService,
         questionRequestService: questionRequestService,
       ),
     );
@@ -266,6 +421,169 @@ void main() {
     ]);
     expect(find.text('Pregunta para Bruno'), findsOneWidget);
     expect(find.text('Pregunta antigua de Ana'), findsNothing);
+    expect(storyService.clearAudioCacheCalls, 1);
+  });
+
+  testWidgets('abre el grabador desde una pregunta recibida', (tester) async {
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      questionRequestAnswerApp(
+        questionRequestService: FakeQuestionRequestService(),
+        audioService: audioService,
+      ),
+    );
+
+    await tester.tap(find.text('Abrir pregunta recibida'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Responder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tu respuesta'), findsOneWidget);
+    expect(find.text('¿Qué recuerdo guardas de tu infancia?'), findsOneWidget);
+    expect(find.text('Grabar respuesta'), findsOneWidget);
+  });
+
+  testWidgets('sube el audio, completa la solicitud y vuelve al terminar', (
+    tester,
+  ) async {
+    final service = FakeQuestionRequestService();
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      questionRequestAnswerApp(
+        questionRequestService: service,
+        audioService: audioService,
+      ),
+    );
+    await openAndRecordQuestionRequest(tester, seconds: 2);
+
+    await tester.tap(find.text('Enviar respuesta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Abrir pregunta recibida'), findsOneWidget);
+    expect(service.uploadedLocalPaths, ['/temporary/answer.m4a']);
+    expect(service.uploadedObjectPaths, hasLength(1));
+    expect(
+      service.uploadedObjectPaths.single,
+      matches(RegExp(r'^request-1/[0-9a-f]{32}\.m4a$')),
+    );
+    expect(service.completedQuestionRequestIds, ['request-1']);
+    expect(service.completedAudioPaths, service.uploadedObjectPaths);
+    expect(service.completedDurations, [2]);
+    expect(service.deletedObjectPaths, isEmpty);
+    expect(audioService.discardedPaths, ['/temporary/answer.m4a']);
+  });
+
+  testWidgets('bloquea dobles pulsaciones mientras envía la respuesta', (
+    tester,
+  ) async {
+    final completion = Completer<String>();
+    final service = FakeQuestionRequestService(completionCompleter: completion);
+    await tester.pumpWidget(
+      questionRequestAnswerApp(
+        questionRequestService: service,
+        audioService: FakeAudioAnswerService(),
+      ),
+    );
+    await openAndRecordQuestionRequest(tester);
+
+    await tester.tap(find.text('Enviar respuesta'));
+    await tester.pump();
+    expect(find.text('Enviando respuesta...'), findsOneWidget);
+
+    await tester.tap(find.text('Enviando respuesta...'));
+    await tester.pump();
+    expect(service.completedQuestionRequestIds, hasLength(1));
+
+    completion.complete('story-id');
+    await tester.pumpAndSettle();
+    expect(find.text('Abrir pregunta recibida'), findsOneWidget);
+  });
+
+  testWidgets('conserva el audio si falla la subida', (tester) async {
+    final service = FakeQuestionRequestService(
+      uploadError: Exception('storage failure'),
+    );
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      questionRequestAnswerApp(
+        questionRequestService: service,
+        audioService: audioService,
+      ),
+    );
+    await openAndRecordQuestionRequest(tester);
+
+    await tester.tap(find.text('Enviar respuesta'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No se pudo enviar la respuesta. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+    expect(find.text('Enviar respuesta'), findsOneWidget);
+    expect(service.completedQuestionRequestIds, isEmpty);
+    expect(service.deletedObjectPaths, isEmpty);
+    expect(audioService.discardedPaths, isEmpty);
+    expect(find.textContaining('storage failure'), findsNothing);
+  });
+
+  testWidgets('limpia el objeto subido y conserva el audio si falla la RPC', (
+    tester,
+  ) async {
+    final service = FakeQuestionRequestService(
+      completionError: Exception('database failure'),
+    );
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      questionRequestAnswerApp(
+        questionRequestService: service,
+        audioService: audioService,
+      ),
+    );
+    await openAndRecordQuestionRequest(tester);
+
+    await tester.tap(find.text('Enviar respuesta'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No se pudo enviar la respuesta. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+    expect(service.completedQuestionRequestIds, ['request-1']);
+    expect(service.deletedObjectPaths, service.uploadedObjectPaths);
+    expect(audioService.discardedPaths, isEmpty);
+    expect(find.text('Enviar respuesta'), findsOneWidget);
+    expect(find.textContaining('database failure'), findsNothing);
+  });
+
+  testWidgets('refresca Home cuando una respuesta se completa', (tester) async {
+    final request = testQuestionRequest(
+      id: 'request-1',
+      recipientId: testAuthUser.id,
+      questionText: 'Pregunta pendiente',
+    );
+    final service = FakeQuestionRequestService(
+      pendingByRecipient: {
+        testAuthUser.id: [request],
+      },
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: service,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pregunta pendiente'));
+    await tester.pumpAndSettle();
+
+    service.pendingByRecipient[testAuthUser.id]!.clear();
+    Navigator.of(tester.element(find.text('Pregunta para ti'))).pop(true);
+    await tester.pumpAndSettle();
+
+    expect(service.requestedRecipientIds, [testAuthUser.id, testAuthUser.id]);
+    expect(find.text('Pregunta pendiente'), findsNothing);
+    expect(find.text('Respuesta enviada'), findsOneWidget);
   });
 
   testWidgets('inicia sesión con Google desde el perfil', (tester) async {
@@ -1582,6 +1900,7 @@ void main() {
         familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
         familyMemberService: FakeFamilyMemberService(),
         familyStoryStorage: storyStorage,
+        familyStoryService: FakeFamilyStoryService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -1590,6 +1909,155 @@ void main() {
 
     expect(find.text('¿Cuál es tu primer recuerdo?'), findsOneWidget);
     expect(find.text('22/09/2026 · 00:42'), findsOneWidget);
+  });
+
+  testWidgets('carga, filtra y ordena las historias remotas del familiar', (
+    tester,
+  ) async {
+    const familyMember = FamilyMember(
+      id: 'remote-family-id',
+      name: 'Pepe',
+      relationship: 'Padre/Madre',
+    );
+    final storyService = FakeFamilyStoryService(
+      stories: [
+        FamilyStory(
+          id: 'older-story',
+          familyMemberId: familyMember.id,
+          question: 'Pregunta anterior',
+          audioPath: 'request-old/audio.m4a',
+          duration: const Duration(seconds: 20),
+          createdAt: DateTime.utc(2026, 10, 1),
+        ),
+        FamilyStory(
+          id: 'other-story',
+          familyMemberId: 'another-family-id',
+          question: 'Historia de otro familiar',
+          audioPath: 'request-other/audio.m4a',
+          duration: const Duration(seconds: 30),
+          createdAt: DateTime.utc(2026, 10, 4),
+        ),
+        FamilyStory(
+          id: 'newer-story',
+          familyMemberId: familyMember.id,
+          question: 'Pregunta reciente',
+          audioPath: 'request-new/audio.m4a',
+          duration: const Duration(seconds: 40),
+          createdAt: DateTime.utc(2026, 10, 3),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        familyMemberService: FakeFamilyMemberService(members: [familyMember]),
+        familyStoryService: storyService,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(storyService.requestedFamilyMemberIds, [familyMember.id]);
+    expect(find.text('Historia de otro familiar'), findsNothing);
+    expect(find.text('Pregunta reciente'), findsOneWidget);
+    expect(find.text('Pregunta anterior'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Pregunta reciente')).dy,
+      lessThan(tester.getTopLeft(find.text('Pregunta anterior')).dy),
+    );
+  });
+
+  testWidgets('descarga y reproduce el audio privado de una historia remota', (
+    tester,
+  ) async {
+    final story = FamilyStory(
+      id: 'remote-story',
+      familyMemberId: 'remote-family-id',
+      question: '¿Qué recuerdas de tu infancia?',
+      audioPath: 'request-1/private-audio.m4a',
+      duration: const Duration(seconds: 12),
+      createdAt: DateTime.utc(2026, 10, 4),
+    );
+    final storyService = FakeFamilyStoryService();
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StoryScreen(
+          story: story,
+          remoteStoryService: storyService,
+          audioService: audioService,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Reproducir historia'));
+    await tester.pumpAndSettle();
+
+    expect(storyService.requestedAudioStoryIds, [story.id]);
+    expect(audioService.playedPaths, [storyService.resolvedAudioPath]);
+    expect(find.text('Pausar'), findsOneWidget);
+  });
+
+  testWidgets('muestra un error recuperable al cargar historias remotas', (
+    tester,
+  ) async {
+    const familyMember = FamilyMember(
+      id: 'remote-family-id',
+      name: 'Pepe',
+      relationship: 'Padre/Madre',
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        familyMemberService: FakeFamilyMemberService(members: [familyMember]),
+        familyStoryService: FakeFamilyStoryService(
+          loadError: Exception('database details'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pudieron cargar sus historias.'), findsOneWidget);
+    expect(find.text('Reintentar'), findsOneWidget);
+    expect(find.textContaining('database details'), findsNothing);
+  });
+
+  testWidgets('muestra un error comprensible si falla el audio privado', (
+    tester,
+  ) async {
+    final story = FamilyStory(
+      id: 'remote-story',
+      familyMemberId: 'remote-family-id',
+      question: 'Pregunta remota',
+      audioPath: 'request-1/private-audio.m4a',
+      duration: const Duration(seconds: 12),
+      createdAt: DateTime.utc(2026, 10, 4),
+    );
+    final audioService = FakeAudioAnswerService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StoryScreen(
+          story: story,
+          remoteStoryService: FakeFamilyStoryService(
+            audioError: Exception('storage details'),
+          ),
+          audioService: audioService,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Reproducir historia'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pudo reproducir esta historia.'), findsOneWidget);
+    expect(find.text('Reproducir historia'), findsOneWidget);
+    expect(audioService.playedPaths, isEmpty);
+    expect(find.textContaining('storage details'), findsNothing);
   });
 
   testWidgets('informa cuando se rechaza el permiso del micrófono', (
@@ -1658,6 +2126,53 @@ QuestionRequest testQuestionRequest({
   );
 }
 
+Widget questionRequestAnswerApp({
+  required QuestionRequestService questionRequestService,
+  required AudioAnswerService audioService,
+}) {
+  final request = testQuestionRequest(
+    id: 'request-1',
+    recipientId: testAuthUser.id,
+    questionText: '¿Qué recuerdo guardas de tu infancia?',
+  );
+
+  return MaterialApp(
+    home: Builder(
+      builder: (context) => Scaffold(
+        body: FilledButton(
+          onPressed: () {
+            Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (context) => QuestionRequestScreen(
+                  questionRequest: request,
+                  questionRequestService: questionRequestService,
+                  audioService: audioService,
+                ),
+              ),
+            );
+          },
+          child: const Text('Abrir pregunta recibida'),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> openAndRecordQuestionRequest(
+  WidgetTester tester, {
+  int seconds = 1,
+}) async {
+  await tester.tap(find.text('Abrir pregunta recibida'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Responder'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Grabar respuesta'));
+  await tester.pump();
+  await tester.pump(Duration(seconds: seconds));
+  await tester.tap(find.text('Detener grabación'));
+  await tester.pump();
+}
+
 Widget invitationOptionsApp({
   required FamilyMember familyMember,
   required AuthService authService,
@@ -1692,6 +2207,7 @@ FamilyStoriesApp testApp(
   ProfileImagePicker? profileImagePicker,
   AvatarStorageService? avatarStorageService,
   FamilyMemberService? familyMemberService,
+  FamilyStoryService? familyStoryService,
   InvitationService? invitationService,
   InvitationShareService? invitationShareService,
   IncomingLinkService? incomingLinkService,
@@ -1705,6 +2221,7 @@ FamilyStoriesApp testApp(
     familyMemberStorage: familyMemberStorage,
     familyMemberService: familyMemberService ?? FakeFamilyMemberService(),
     familyStoryStorage: MemoryFamilyStoryStorage(),
+    familyStoryService: familyStoryService ?? FakeFamilyStoryService(),
     invitationService: invitationService ?? FakeInvitationService(),
     invitationShareService:
         invitationShareService ?? FakeInvitationShareService(),
@@ -2030,19 +2547,58 @@ class FakeQuestionRequestService implements QuestionRequestService {
     this.error,
     this.completer,
     this.loadError,
+    this.uploadError,
+    this.completionError,
+    this.deleteError,
+    this.completionCompleter,
     Map<String, List<QuestionRequest>> pendingByRecipient = const {},
     Map<String, Completer<List<QuestionRequest>>> loadCompleters = const {},
-  }) : pendingByRecipient = Map.of(pendingByRecipient),
+  }) : pendingByRecipient = pendingByRecipient.map(
+         (key, value) => MapEntry(key, List.of(value)),
+       ),
        loadCompleters = Map.of(loadCompleters);
 
   final Object? error;
   final Completer<String>? completer;
   final Object? loadError;
+  final Object? uploadError;
+  final Object? completionError;
+  final Object? deleteError;
+  final Completer<String>? completionCompleter;
   final Map<String, List<QuestionRequest>> pendingByRecipient;
   final Map<String, Completer<List<QuestionRequest>>> loadCompleters;
   final List<String> familyMemberIds = [];
   final List<String> questionTexts = [];
   final List<String> requestedRecipientIds = [];
+  final List<String> uploadedLocalPaths = [];
+  final List<String> uploadedObjectPaths = [];
+  final List<String> completedQuestionRequestIds = [];
+  final List<String> completedAudioPaths = [];
+  final List<int> completedDurations = [];
+  final List<String> deletedObjectPaths = [];
+  final List<String> watchedRecipientIds = [];
+  final List<String> cancelledRecipientIds = [];
+  final Map<String, StreamController<void>> _realtimeControllers = {};
+
+  @override
+  Stream<void> watchChangesForRecipient(String recipientId) {
+    watchedRecipientIds.add(recipientId);
+    late final StreamController<void> controller;
+    controller = StreamController<void>.broadcast(
+      onCancel: () {
+        cancelledRecipientIds.add(recipientId);
+        if (identical(_realtimeControllers[recipientId], controller)) {
+          _realtimeControllers.remove(recipientId);
+        }
+      },
+    );
+    _realtimeControllers[recipientId] = controller;
+    return controller.stream;
+  }
+
+  void emitRealtimeChange(String recipientId) {
+    _realtimeControllers[recipientId]?.add(null);
+  }
 
   @override
   Future<List<QuestionRequest>> loadPendingForRecipient(
@@ -2070,6 +2626,47 @@ class FakeQuestionRequestService implements QuestionRequestService {
       throw error!;
     }
     return completer?.future ?? '55555555-5555-4555-8555-555555555555';
+  }
+
+  @override
+  Future<void> uploadAnswerAudio({
+    required String localAudioPath,
+    required String objectPath,
+  }) async {
+    uploadedLocalPaths.add(localAudioPath);
+    uploadedObjectPaths.add(objectPath);
+    if (uploadError != null) {
+      throw uploadError!;
+    }
+  }
+
+  @override
+  Future<String> completeQuestionRequest({
+    required String questionRequestId,
+    required String audioPath,
+    required int durationSeconds,
+  }) async {
+    completedQuestionRequestIds.add(questionRequestId);
+    completedAudioPaths.add(audioPath);
+    completedDurations.add(durationSeconds);
+    if (completionError != null) {
+      throw completionError!;
+    }
+    final result =
+        await (completionCompleter?.future ??
+            Future.value('story-from-question-request'));
+    for (final requests in pendingByRecipient.values) {
+      requests.removeWhere((request) => request.id == questionRequestId);
+    }
+    return result;
+  }
+
+  @override
+  Future<void> deleteAnswerAudio(String objectPath) async {
+    deletedObjectPaths.add(objectPath);
+    if (deleteError != null) {
+      throw deleteError!;
+    }
   }
 }
 
@@ -2127,11 +2724,55 @@ class MemoryFamilyStoryStorage implements FamilyStoryStorage {
   }
 }
 
+class FakeFamilyStoryService implements FamilyStoryService {
+  FakeFamilyStoryService({
+    List<FamilyStory> stories = const [],
+    this.loadError,
+    this.audioError,
+    this.resolvedAudioPath = '/temporary/remote-story.m4a',
+  }) : stories = List.of(stories);
+
+  final List<FamilyStory> stories;
+  final Object? loadError;
+  final Object? audioError;
+  final String resolvedAudioPath;
+  final List<String> requestedFamilyMemberIds = [];
+  final List<String> requestedAudioStoryIds = [];
+  int clearAudioCacheCalls = 0;
+
+  @override
+  Future<void> clearAudioCache() async {
+    clearAudioCacheCalls++;
+  }
+
+  @override
+  Future<List<FamilyStory>> loadForFamily(String familyMemberId) async {
+    requestedFamilyMemberIds.add(familyMemberId);
+    if (loadError != null) {
+      throw loadError!;
+    }
+    return stories
+        .where((story) => story.familyMemberId == familyMemberId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<String> localAudioPathFor(FamilyStory story) async {
+    requestedAudioStoryIds.add(story.id);
+    if (audioError != null) {
+      throw audioError!;
+    }
+    return resolvedAudioPath;
+  }
+}
+
 class FakeAudioAnswerService implements AudioAnswerService {
   FakeAudioAnswerService({this.hasPermission = true});
 
   final bool hasPermission;
   final List<String> discardedPaths = [];
+  final List<String> playedPaths = [];
   final StreamController<void> _playbackCompleteController =
       StreamController<void>.broadcast();
 
@@ -2148,7 +2789,9 @@ class FakeAudioAnswerService implements AudioAnswerService {
   Future<String?> stopRecording() async => '/temporary/answer.m4a';
 
   @override
-  Future<void> play(String path) async {}
+  Future<void> play(String path) async {
+    playedPaths.add(path);
+  }
 
   @override
   Future<void> pause() async {}

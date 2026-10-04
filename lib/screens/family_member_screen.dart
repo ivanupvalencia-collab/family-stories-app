@@ -7,6 +7,7 @@ import '../models/family_story.dart';
 import '../services/auth_service.dart';
 import '../services/family_member_service.dart';
 import '../services/family_story_storage.dart';
+import '../services/family_story_service.dart';
 import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
 import '../services/question_request_service.dart';
@@ -23,6 +24,7 @@ class FamilyMemberScreen extends StatefulWidget {
     required this.questionRequestService,
     required this.isRemoteFamilyMember,
     this.familyStoryStorage,
+    this.familyStoryService,
     super.key,
   });
 
@@ -34,6 +36,7 @@ class FamilyMemberScreen extends StatefulWidget {
   final QuestionRequestService questionRequestService;
   final bool isRemoteFamilyMember;
   final FamilyStoryStorage? familyStoryStorage;
+  final FamilyStoryService? familyStoryService;
 
   @override
   State<FamilyMemberScreen> createState() => _FamilyMemberScreenState();
@@ -41,24 +44,37 @@ class FamilyMemberScreen extends StatefulWidget {
 
 class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
   late final FamilyStoryStorage _storyStorage;
+  late final FamilyStoryService? _remoteStoryService;
   late FamilyMember _familyMember;
   final List<FamilyStory> _stories = [];
   bool _isLoading = true;
+  bool _storiesLoadFailed = false;
   bool _isRefreshingMember = false;
+  int _storiesLoadRequest = 0;
 
   @override
   void initState() {
     super.initState();
     _familyMember = widget.familyMember;
     _storyStorage = widget.familyStoryStorage ?? LocalFamilyStoryStorage();
+    _remoteStoryService = widget.isRemoteFamilyMember
+        ? widget.familyStoryService ?? SupabaseFamilyStoryService()
+        : null;
     _loadStories();
     unawaited(_refreshRemoteFamilyMember());
   }
 
   Future<void> _loadStories() async {
+    final request = ++_storiesLoadRequest;
+    setState(() {
+      _isLoading = true;
+      _storiesLoadFailed = false;
+    });
     try {
-      final stories = await _storyStorage.loadForFamily(widget.familyMember.id);
-      if (!mounted) {
+      final stories =
+          await (_remoteStoryService?.loadForFamily(widget.familyMember.id) ??
+              _storyStorage.loadForFamily(widget.familyMember.id));
+      if (!mounted || request != _storiesLoadRequest) {
         return;
       }
       setState(() {
@@ -68,13 +84,14 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
         _isLoading = false;
       });
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || request != _storiesLoadRequest) {
         return;
       }
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudieron cargar sus historias.')),
-      );
+      setState(() {
+        _stories.clear();
+        _isLoading = false;
+        _storiesLoadFailed = true;
+      });
     }
   }
 
@@ -97,8 +114,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
         ),
       ),
     );
-    if (storySaved == true && mounted) {
-      setState(() => _isLoading = true);
+    if (mounted && (storySaved == true || widget.isRemoteFamilyMember)) {
       await _loadStories();
     }
     await _refreshRemoteFamilyMember();
@@ -138,10 +154,23 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
     }
   }
 
-  void _openStory(FamilyStory story) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => StoryScreen(story: story)));
+  Future<void> _openStory(FamilyStory story) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            StoryScreen(story: story, remoteStoryService: _remoteStoryService),
+      ),
+    );
+    if (mounted && widget.isRemoteFamilyMember) {
+      await _loadStories();
+    }
+  }
+
+  Future<void> _refreshRemoteData() async {
+    await Future.wait([
+      _refreshRemoteFamilyMember(showError: true),
+      _loadStories(),
+    ]);
   }
 
   String _formatDuration(Duration duration) {
@@ -167,9 +196,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
         actions: [
           if (widget.isRemoteFamilyMember)
             IconButton(
-              onPressed: _isRefreshingMember
-                  ? null
-                  : () => _refreshRemoteFamilyMember(showError: true),
+              onPressed: _isRefreshingMember ? null : _refreshRemoteData,
               tooltip: 'Actualizar familiar',
               icon: const Icon(Icons.refresh),
             ),
@@ -230,6 +257,29 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
                 const SizedBox(height: 24),
                 if (_isLoading)
                   const Center(child: CircularProgressIndicator())
+                else if (_storiesLoadFailed)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Text(
+                            'No se pudieron cargar sus historias.',
+                            textAlign: TextAlign.center,
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: _loadStories,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Reintentar'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                 else if (_stories.isEmpty)
                   Card(
                     child: Padding(

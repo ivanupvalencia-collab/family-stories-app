@@ -11,6 +11,7 @@ import 'services/avatar_storage_service.dart';
 import 'services/family_member_storage.dart';
 import 'services/family_member_service.dart';
 import 'services/family_story_storage.dart';
+import 'services/family_story_service.dart';
 import 'services/incoming_link_service.dart';
 import 'services/invitation_link.dart';
 import 'services/invitation_service.dart';
@@ -42,6 +43,7 @@ class FamilyStoriesApp extends StatefulWidget {
     this.familyMemberStorage,
     this.familyMemberService,
     this.familyStoryStorage,
+    this.familyStoryService,
     this.invitationService,
     this.invitationShareService,
     this.incomingLinkService,
@@ -56,6 +58,7 @@ class FamilyStoriesApp extends StatefulWidget {
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyMemberService? familyMemberService;
   final FamilyStoryStorage? familyStoryStorage;
+  final FamilyStoryService? familyStoryService;
   final InvitationService? invitationService;
   final InvitationShareService? invitationShareService;
   final IncomingLinkService? incomingLinkService;
@@ -226,6 +229,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
         familyMemberStorage: widget.familyMemberStorage,
         familyMemberService: widget.familyMemberService,
         familyStoryStorage: widget.familyStoryStorage,
+        familyStoryService: widget.familyStoryService,
         invitationService: _invitationService,
         invitationShareService: widget.invitationShareService,
         questionRequestService: _questionRequestService,

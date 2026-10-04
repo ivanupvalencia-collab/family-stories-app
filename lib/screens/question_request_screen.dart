@@ -1,11 +1,75 @@
 import 'package:flutter/material.dart';
 
+import '../models/question.dart';
 import '../models/question_request.dart';
+import '../services/audio_answer_service.dart';
+import '../services/question_request_service.dart';
+import 'question_screen.dart';
 
-class QuestionRequestScreen extends StatelessWidget {
-  const QuestionRequestScreen({required this.questionRequest, super.key});
+class QuestionRequestScreen extends StatefulWidget {
+  const QuestionRequestScreen({
+    required this.questionRequest,
+    required this.questionRequestService,
+    this.audioService,
+    super.key,
+  });
 
   final QuestionRequest questionRequest;
+  final QuestionRequestService questionRequestService;
+  final AudioAnswerService? audioService;
+
+  @override
+  State<QuestionRequestScreen> createState() => _QuestionRequestScreenState();
+}
+
+class _QuestionRequestScreenState extends State<QuestionRequestScreen> {
+  Future<void> _submitAnswer({
+    required String audioPath,
+    required Duration duration,
+  }) async {
+    final objectPath = createQuestionAnswerObjectPath(
+      widget.questionRequest.id,
+    );
+    var uploaded = false;
+
+    try {
+      await widget.questionRequestService.uploadAnswerAudio(
+        localAudioPath: audioPath,
+        objectPath: objectPath,
+      );
+      uploaded = true;
+      await widget.questionRequestService.completeQuestionRequest(
+        questionRequestId: widget.questionRequest.id,
+        audioPath: objectPath,
+        durationSeconds: duration.inSeconds,
+      );
+    } catch (_) {
+      if (uploaded) {
+        try {
+          await widget.questionRequestService.deleteAnswerAudio(objectPath);
+        } catch (_) {
+          // Storage cleanup depends on the authenticated user's DELETE policy.
+        }
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _openRecorder() async {
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => QuestionScreen.forQuestionRequest(
+          question: Question(widget.questionRequest.questionText),
+          onSubmit: _submitAnswer,
+          audioService: widget.audioService,
+        ),
+      ),
+    );
+
+    if (sent == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +87,7 @@ class QuestionRequestScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    questionRequest.questionText,
+                    widget.questionRequest.questionText,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -37,15 +101,7 @@ class QuestionRequestScreen extends StatelessWidget {
                   ),
                   const Spacer(),
                   FilledButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Podrás responder esta pregunta próximamente.',
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: _openRecorder,
                     icon: const Icon(Icons.mic_outlined),
                     label: const Text('Responder'),
                   ),

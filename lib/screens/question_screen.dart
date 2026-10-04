@@ -9,6 +9,11 @@ import '../services/family_story_storage.dart';
 
 enum _RecordingStatus { ready, recording, recorded }
 
+typedef RecordingSubmission = Future<void> Function({
+  required String audioPath,
+  required Duration duration,
+});
+
 class QuestionScreen extends StatefulWidget {
   const QuestionScreen({
     required this.familyMember,
@@ -16,12 +21,38 @@ class QuestionScreen extends StatefulWidget {
     this.audioService,
     this.familyStoryStorage,
     super.key,
-  });
+  }) : onSubmit = null,
+       contextLabel = null,
+       submitLabel = 'Guardar historia',
+       submittingLabel = 'Guardando historia...',
+       submitErrorMessage =
+           'No se pudo guardar la historia. Inténtalo de nuevo.',
+       submitIcon = Icons.save_outlined;
 
-  final FamilyMember familyMember;
+  const QuestionScreen.forQuestionRequest({
+    required this.question,
+    required this.onSubmit,
+    this.audioService,
+    super.key,
+  }) : familyMember = null,
+       familyStoryStorage = null,
+       contextLabel = 'Tu respuesta',
+       submitLabel = 'Enviar respuesta',
+       submittingLabel = 'Enviando respuesta...',
+       submitErrorMessage =
+           'No se pudo enviar la respuesta. Inténtalo de nuevo.',
+       submitIcon = Icons.send_outlined;
+
+  final FamilyMember? familyMember;
   final Question question;
   final AudioAnswerService? audioService;
   final FamilyStoryStorage? familyStoryStorage;
+  final RecordingSubmission? onSubmit;
+  final String? contextLabel;
+  final String submitLabel;
+  final String submittingLabel;
+  final String submitErrorMessage;
+  final IconData submitIcon;
 
   @override
   State<QuestionScreen> createState() => _QuestionScreenState();
@@ -29,7 +60,7 @@ class QuestionScreen extends StatefulWidget {
 
 class _QuestionScreenState extends State<QuestionScreen> {
   late final AudioAnswerService _audioService;
-  late final FamilyStoryStorage _familyStoryStorage;
+  late final FamilyStoryStorage? _familyStoryStorage;
   late final StreamSubscription<void> _playbackCompleteSubscription;
 
   _RecordingStatus _status = _RecordingStatus.ready;
@@ -39,13 +70,15 @@ class _QuestionScreenState extends State<QuestionScreen> {
   bool _isPlaying = false;
   bool _isPlaybackPaused = false;
   bool _isBusy = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
     _audioService = widget.audioService ?? DeviceAudioAnswerService();
-    _familyStoryStorage =
-        widget.familyStoryStorage ?? LocalFamilyStoryStorage();
+    _familyStoryStorage = widget.onSubmit == null
+        ? widget.familyStoryStorage ?? LocalFamilyStoryStorage()
+        : widget.familyStoryStorage;
     _playbackCompleteSubscription = _audioService.onPlaybackComplete.listen((
       _,
     ) {
@@ -207,28 +240,44 @@ class _QuestionScreenState extends State<QuestionScreen> {
     }
   }
 
-  Future<void> _saveStory() async {
+  Future<void> _submitRecording() async {
     if (_isBusy || _recordingPath == null) {
       return;
     }
 
-    setState(() => _isBusy = true);
+    setState(() {
+      _isBusy = true;
+      _isSubmitting = true;
+    });
     try {
       if (_isPlaying) {
         await _audioService.pause();
       }
-      await _familyStoryStorage.saveRecording(
-        familyMemberId: widget.familyMember.id,
-        question: widget.question.text,
-        temporaryAudioPath: _recordingPath!,
-        duration: _recordingDuration,
-      );
+      final customSubmission = widget.onSubmit;
+      if (customSubmission == null) {
+        await _familyStoryStorage!.saveRecording(
+          familyMemberId: widget.familyMember!.id,
+          question: widget.question.text,
+          temporaryAudioPath: _recordingPath!,
+          duration: _recordingDuration,
+        );
+      } else {
+        await customSubmission(
+          audioPath: _recordingPath!,
+          duration: _recordingDuration,
+        );
+        try {
+          await _audioService.discard(_recordingPath!);
+        } catch (_) {
+          // The remote answer is complete; temporary cleanup is best effort.
+        }
+      }
       _recordingPath = null;
       if (mounted) {
         Navigator.of(context).pop(true);
       }
     } catch (_) {
-      _showMessage('No se pudo guardar la historia. Inténtalo de nuevo.');
+      _showMessage(widget.submitErrorMessage);
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -237,7 +286,10 @@ class _QuestionScreenState extends State<QuestionScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isBusy = false);
+        setState(() {
+          _isBusy = false;
+          _isSubmitting = false;
+        });
       }
     }
   }
@@ -304,9 +356,16 @@ class _QuestionScreenState extends State<QuestionScreen> {
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: _isBusy ? null : _saveStory,
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Guardar historia'),
+              onPressed: _isBusy ? null : _submitRecording,
+              icon: _isSubmitting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(widget.submitIcon),
+              label: Text(
+                _isSubmitting ? widget.submittingLabel : widget.submitLabel,
+              ),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -342,7 +401,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Para ${widget.familyMember.name}',
+                    widget.contextLabel ?? 'Para ${widget.familyMember!.name}',
                     style: textTheme.titleMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
