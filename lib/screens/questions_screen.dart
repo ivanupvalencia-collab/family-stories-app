@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import '../data/predefined_questions.dart';
 import '../models/family_member.dart';
 import '../models/question.dart';
+import '../services/auth_service.dart';
 import '../services/family_story_storage.dart';
+import '../services/family_member_service.dart';
+import '../services/invitation_service.dart';
+import '../services/invitation_share_service.dart';
 import 'category_questions_screen.dart';
 import 'custom_question_screen.dart';
 
@@ -11,11 +15,21 @@ class QuestionsScreen extends StatelessWidget {
   const QuestionsScreen({
     required this.familyMember,
     required this.familyStoryStorage,
+    required this.authService,
+    required this.invitationService,
+    required this.invitationShareService,
+    required this.familyMemberService,
+    required this.isRemoteFamilyMember,
     super.key,
   });
 
   final FamilyMember familyMember;
   final FamilyStoryStorage familyStoryStorage;
+  final AuthService authService;
+  final InvitationService invitationService;
+  final InvitationShareService invitationShareService;
+  final FamilyMemberService familyMemberService;
+  final bool isRemoteFamilyMember;
 
   Future<void> _openCategory(
     BuildContext context,
@@ -27,6 +41,11 @@ class QuestionsScreen extends StatelessWidget {
           familyMember: familyMember,
           category: category,
           familyStoryStorage: familyStoryStorage,
+          authService: authService,
+          invitationService: invitationService,
+          invitationShareService: invitationShareService,
+          familyMemberService: familyMemberService,
+          isRemoteFamilyMember: isRemoteFamilyMember,
         ),
       ),
     );
@@ -41,6 +60,11 @@ class QuestionsScreen extends StatelessWidget {
         builder: (context) => CustomQuestionScreen(
           familyMember: familyMember,
           familyStoryStorage: familyStoryStorage,
+          authService: authService,
+          invitationService: invitationService,
+          invitationShareService: invitationShareService,
+          familyMemberService: familyMemberService,
+          isRemoteFamilyMember: isRemoteFamilyMember,
         ),
       ),
     );

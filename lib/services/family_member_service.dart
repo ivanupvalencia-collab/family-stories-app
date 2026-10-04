@@ -5,6 +5,11 @@ import '../models/family_member.dart';
 abstract class FamilyMemberService {
   Future<List<FamilyMember>> loadForOwner(String ownerId);
 
+  Future<FamilyMember?> loadMemberForOwner({
+    required String ownerId,
+    required String familyMemberId,
+  });
+
   Future<FamilyMember> create({
     required String ownerId,
     required String name,
@@ -27,6 +32,21 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
         .order('created_at');
 
     return data.map(FamilyMember.fromSupabaseJson).toList();
+  }
+
+  @override
+  Future<FamilyMember?> loadMemberForOwner({
+    required String ownerId,
+    required String familyMemberId,
+  }) async {
+    final data = await _client
+        .from('family_members')
+        .select('id, name, relationship, linked_account_id')
+        .eq('owner_id', ownerId)
+        .eq('id', familyMemberId)
+        .maybeSingle();
+
+    return data == null ? null : FamilyMember.fromSupabaseJson(data);
   }
 
   @override

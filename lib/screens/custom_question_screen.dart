@@ -2,18 +2,32 @@ import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
 import '../models/question.dart';
+import '../services/auth_service.dart';
 import '../services/family_story_storage.dart';
+import '../services/family_member_service.dart';
+import '../services/invitation_service.dart';
+import '../services/invitation_share_service.dart';
 import 'answer_options_screen.dart';
 
 class CustomQuestionScreen extends StatefulWidget {
   const CustomQuestionScreen({
     required this.familyMember,
     required this.familyStoryStorage,
+    required this.authService,
+    required this.invitationService,
+    required this.invitationShareService,
+    required this.familyMemberService,
+    required this.isRemoteFamilyMember,
     super.key,
   });
 
   final FamilyMember familyMember;
   final FamilyStoryStorage familyStoryStorage;
+  final AuthService authService;
+  final InvitationService invitationService;
+  final InvitationShareService invitationShareService;
+  final FamilyMemberService familyMemberService;
+  final bool isRemoteFamilyMember;
 
   @override
   State<CustomQuestionScreen> createState() => _CustomQuestionScreenState();
@@ -40,6 +54,11 @@ class _CustomQuestionScreenState extends State<CustomQuestionScreen> {
           familyMember: widget.familyMember,
           question: Question(_questionController.text.trim()),
           familyStoryStorage: widget.familyStoryStorage,
+          authService: widget.authService,
+          invitationService: widget.invitationService,
+          invitationShareService: widget.invitationShareService,
+          familyMemberService: widget.familyMemberService,
+          isRemoteFamilyMember: widget.isRemoteFamilyMember,
         ),
       ),
     );

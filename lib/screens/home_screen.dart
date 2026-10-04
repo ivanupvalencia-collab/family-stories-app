@@ -8,6 +8,8 @@ import '../services/avatar_storage_service.dart';
 import '../services/family_member_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
+import '../services/invitation_service.dart';
+import '../services/invitation_share_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import 'add_family_member_screen.dart';
@@ -23,6 +25,8 @@ class HomeScreen extends StatefulWidget {
     this.familyMemberStorage,
     this.familyMemberService,
     this.familyStoryStorage,
+    this.invitationService,
+    this.invitationShareService,
     super.key,
   });
 
@@ -33,6 +37,8 @@ class HomeScreen extends StatefulWidget {
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyMemberService? familyMemberService;
   final FamilyStoryStorage? familyStoryStorage;
+  final InvitationService? invitationService;
+  final InvitationShareService? invitationShareService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -42,6 +48,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late final AuthService _authService;
   late final FamilyMemberStorage _familyMemberStorage;
   late final FamilyMemberService _familyMemberService;
+  late final InvitationService _invitationService;
+  late final InvitationShareService _invitationShareService;
   late final ProfileService _profileService;
   late final StreamSubscription<AuthUser?> _authSubscription;
   final List<FamilyMember> _familyMembers = [];
@@ -59,6 +67,10 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.familyMemberStorage ?? SharedPreferencesFamilyMemberStorage();
     _familyMemberService =
         widget.familyMemberService ?? SupabaseFamilyMemberService();
+    _invitationService =
+        widget.invitationService ?? SupabaseInvitationService();
+    _invitationShareService =
+        widget.invitationShareService ?? PlatformInvitationShareService();
     _profileService = widget.profileService ?? SupabaseProfileService();
     _user = _authService.currentUser;
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
@@ -180,15 +192,23 @@ class _HomeScreenState extends State<HomeScreen> {
     return familyMember;
   }
 
-  void _openFamilyMember(FamilyMember familyMember) {
-    Navigator.of(context).push(
+  Future<void> _openFamilyMember(FamilyMember familyMember) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FamilyMemberScreen(
           familyMember: familyMember,
+          authService: _authService,
+          familyMemberService: _familyMemberService,
+          invitationService: _invitationService,
+          invitationShareService: _invitationShareService,
+          isRemoteFamilyMember: _user != null,
           familyStoryStorage: widget.familyStoryStorage,
         ),
       ),
     );
+    if (mounted && _user != null) {
+      await _loadFamilyMembers();
+    }
   }
 
   void _openProfile() {
@@ -199,6 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
           profileService: _profileService,
           profileImagePicker: widget.profileImagePicker,
           avatarStorageService: widget.avatarStorageService,
+          invitationService: _invitationService,
         ),
       ),
     );

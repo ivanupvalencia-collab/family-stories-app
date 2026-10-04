@@ -7,6 +7,8 @@ import 'services/avatar_storage_service.dart';
 import 'services/family_member_storage.dart';
 import 'services/family_member_service.dart';
 import 'services/family_story_storage.dart';
+import 'services/invitation_service.dart';
+import 'services/invitation_share_service.dart';
 import 'services/profile_image_picker.dart';
 import 'services/profile_service.dart';
 
@@ -33,6 +35,8 @@ class FamilyStoriesApp extends StatelessWidget {
     this.familyMemberStorage,
     this.familyMemberService,
     this.familyStoryStorage,
+    this.invitationService,
+    this.invitationShareService,
     super.key,
   });
 
@@ -43,6 +47,8 @@ class FamilyStoriesApp extends StatelessWidget {
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyMemberService? familyMemberService;
   final FamilyStoryStorage? familyStoryStorage;
+  final InvitationService? invitationService;
+  final InvitationShareService? invitationShareService;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +67,8 @@ class FamilyStoriesApp extends StatelessWidget {
         familyMemberStorage: familyMemberStorage,
         familyMemberService: familyMemberService,
         familyStoryStorage: familyStoryStorage,
+        invitationService: invitationService,
+        invitationShareService: invitationShareService,
       ),
     );
   }

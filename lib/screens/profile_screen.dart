@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_storage_service.dart';
+import '../services/invitation_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../widgets/profile_avatar_view.dart';
+import 'accept_invitation_screen.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
     this.profileService,
     this.profileImagePicker,
     this.avatarStorageService,
+    this.invitationService,
     super.key,
   });
 
@@ -23,6 +26,7 @@ class ProfileScreen extends StatefulWidget {
   final ProfileService? profileService;
   final ProfileImagePicker? profileImagePicker;
   final AvatarStorageService? avatarStorageService;
+  final InvitationService? invitationService;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -31,6 +35,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late final AuthService _authService;
   late final ProfileService _profileService;
+  late final InvitationService _invitationService;
   late final StreamSubscription<AuthUser?> _authSubscription;
   AuthUser? _user;
   UserProfile? _profile;
@@ -43,6 +48,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _authService = widget.authService ?? SupabaseGoogleAuthService();
     _profileService = widget.profileService ?? SupabaseProfileService();
+    _invitationService =
+        widget.invitationService ?? SupabaseInvitationService();
     _user = _authService.currentUser;
     final user = _user;
     _profile = user == null ? null : _profileService.cachedForUser(user.id);
@@ -200,6 +207,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _openInvitationCode() async {
+    if (_user == null) {
+      _showMessage('Necesitas iniciar sesión para aceptar una invitación.');
+      return;
+    }
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) =>
+            AcceptInvitationScreen(invitationService: _invitationService),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -292,6 +313,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: _isWorking ? null : _openInvitationCode,
+                    icon: const Icon(Icons.password_outlined),
+                    label: const Text('Introducir código de invitación'),
+                  ),
                 ],
               ),
             ),

@@ -3,16 +3,21 @@ import 'dart:convert';
 
 import 'package:family_stories_app/main.dart';
 import 'package:family_stories_app/models/family_member.dart';
+import 'package:family_stories_app/models/family_invitation.dart';
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/models/question.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
+import 'package:family_stories_app/screens/accept_invitation_screen.dart';
+import 'package:family_stories_app/screens/answer_options_screen.dart';
 import 'package:family_stories_app/services/auth_service.dart';
 import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:family_stories_app/services/avatar_storage_service.dart';
 import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
+import 'package:family_stories_app/services/invitation_service.dart';
+import 'package:family_stories_app/services/invitation_share_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/profile_service.dart';
 import 'package:family_stories_app/widgets/profile_avatar_view.dart';
@@ -748,18 +753,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Para enviar preguntas a Ana, primero tendrás que invitarle a Family Stories.',
+        'Inicia sesión para invitar y conectar con otras personas en Family Stories.',
       ),
       findsOneWidget,
     );
-    expect(find.text('Invitar a Ana'), findsOneWidget);
-
-    await tester.tap(find.text('Invitar a Ana'));
+    await tester.tap(find.text('Entendido'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Las invitaciones estarán disponibles próximamente.'),
-      findsOneWidget,
-    );
 
     await tester.tap(find.text('Responder ahora'));
     await tester.pumpAndSettle();
@@ -768,6 +767,213 @@ void main() {
     expect(find.text('Grabar respuesta'), findsOneWidget);
 
     expect(find.text('Preparado para grabar'), findsOneWidget);
+  });
+
+  testWidgets('crea una invitación para un familiar remoto no vinculado', (
+    tester,
+  ) async {
+    const familyMember = FamilyMember(
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Pepe',
+      relationship: 'Padre/Madre',
+    );
+    final invitationService = FakeInvitationService();
+    final shareService = FakeInvitationShareService();
+    await tester.pumpWidget(
+      invitationOptionsApp(
+        familyMember: familyMember,
+        authService: FakeAuthService(testAuthUser),
+        invitationService: invitationService,
+        shareService: shareService,
+        isRemoteFamilyMember: true,
+      ),
+    );
+
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invitar a Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(invitationService.createdFamilyMemberIds, [familyMember.id]);
+    expect(find.text('Invitación creada'), findsOneWidget);
+    expect(find.text(testInvitationToken), findsOneWidget);
+    expect(familyMember.linkedAccountId, isNull);
+
+    await tester.tap(find.text('Compartir invitación'));
+    await tester.pump();
+    expect(shareService.sharedTokens, [testInvitationToken]);
+  });
+
+  testWidgets('no crea otra invitación si el familiar está vinculado', (
+    tester,
+  ) async {
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      invitationOptionsApp(
+        familyMember: const FamilyMember(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Pepe',
+          relationship: 'Padre/Madre',
+          linkedAccountId: 'second-user-id',
+        ),
+        authService: FakeAuthService(testAuthUser),
+        invitationService: invitationService,
+        isRemoteFamilyMember: true,
+      ),
+    );
+
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Familiar vinculado'), findsOneWidget);
+    expect(invitationService.createdFamilyMemberIds, isEmpty);
+  });
+
+  testWidgets('actualiza el familiar remoto antes de crear una invitación', (
+    tester,
+  ) async {
+    const staleFamilyMember = FamilyMember(
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Pepe',
+      relationship: 'Padre/Madre',
+    );
+    final familyMemberService = FakeFamilyMemberService(
+      members: const [
+        FamilyMember(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Pepe',
+          relationship: 'Padre/Madre',
+          linkedAccountId: 'second-user-id',
+        ),
+      ],
+    );
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      invitationOptionsApp(
+        familyMember: staleFamilyMember,
+        authService: FakeAuthService(testAuthUser),
+        invitationService: invitationService,
+        familyMemberService: familyMemberService,
+        isRemoteFamilyMember: true,
+      ),
+    );
+
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(familyMemberService.requestedOwnerIds, [testAuthUser.id]);
+    expect(find.text('Familiar vinculado'), findsOneWidget);
+    expect(invitationService.createdFamilyMemberIds, isEmpty);
+  });
+
+  testWidgets('un familiar local requiere iniciar sesión para invitar', (
+    tester,
+  ) async {
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      invitationOptionsApp(
+        familyMember: const FamilyMember(
+          id: 'local-id',
+          name: 'Pepe',
+          relationship: 'Padre/Madre',
+        ),
+        authService: FakeAuthService(),
+        invitationService: invitationService,
+        isRemoteFamilyMember: false,
+      ),
+    );
+
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Necesitas iniciar sesión'), findsOneWidget);
+    expect(invitationService.createdFamilyMemberIds, isEmpty);
+  });
+
+  testWidgets('previsualiza una invitación válida', (tester) async {
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AcceptInvitationScreen(invitationService: invitationService),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextFormField), testInvitationToken);
+    await tester.tap(find.text('Comprobar código'));
+    await tester.pumpAndSettle();
+
+    expect(invitationService.previewedTokens, [testInvitationToken]);
+    expect(
+      find.text('Ana García te invita a conectarte como Pepe.'),
+      findsOneWidget,
+    );
+    expect(find.text('Aceptar'), findsOneWidget);
+  });
+
+  testWidgets('informa de forma genérica si el token no es válido', (
+    tester,
+  ) async {
+    final invitationService = FakeInvitationService(hasPreview: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AcceptInvitationScreen(invitationService: invitationService),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextFormField), 'codigo-no-valido');
+    await tester.tap(find.text('Comprobar código'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('El código no es válido o ya no está disponible.'),
+      findsOneWidget,
+    );
+    expect(find.text('Pepe'), findsNothing);
+  });
+
+  testWidgets('acepta correctamente una invitación', (tester) async {
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AcceptInvitationScreen(invitationService: invitationService),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextFormField), testInvitationToken);
+    await tester.tap(find.text('Comprobar código'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aceptar'));
+    await tester.pumpAndSettle();
+
+    expect(invitationService.acceptedTokens, [testInvitationToken]);
+    expect(find.text('Invitación aceptada'), findsOneWidget);
+    expect(find.text('Ya estás conectado con este familiar.'), findsOneWidget);
+  });
+
+  testWidgets('mantiene el flujo disponible si falla la aceptación', (
+    tester,
+  ) async {
+    final invitationService = FakeInvitationService(
+      acceptError: Exception('fallo'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AcceptInvitationScreen(invitationService: invitationService),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextFormField), testInvitationToken);
+    await tester.tap(find.text('Comprobar código'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aceptar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No se pudo aceptar la invitación. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+    expect(find.text('Aceptar'), findsOneWidget);
+    expect(find.text('Invitación aceptada'), findsNothing);
   });
 
   testWidgets('permite escribir y continuar con una pregunta personalizada', (
@@ -965,6 +1171,8 @@ void main() {
       FamilyStoriesApp(
         authService: FakeAuthService(),
         profileService: FakeProfileService(),
+        invitationService: FakeInvitationService(),
+        invitationShareService: FakeInvitationShareService(),
         familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
         familyMemberService: FakeFamilyMemberService(),
         familyStoryStorage: storyStorage,
@@ -1012,6 +1220,45 @@ const testAuthUser = AuthUser(id: 'google-user-id', email: 'ana@example.com');
 
 const testUserProfile = UserProfile(id: 'google-user-id', name: 'Ana García');
 
+const testInvitationToken =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+final testFamilyInvitation = FamilyInvitation(
+  id: '44444444-4444-4444-8444-444444444444',
+  token: testInvitationToken,
+  expiresAt: DateTime.utc(2026, 10, 11),
+);
+
+final testInvitationPreview = InvitationPreview(
+  familyMemberName: 'Pepe',
+  inviterName: 'Ana García',
+  expiresAt: DateTime.utc(2026, 10, 11),
+);
+
+Widget invitationOptionsApp({
+  required FamilyMember familyMember,
+  required AuthService authService,
+  required InvitationService invitationService,
+  required bool isRemoteFamilyMember,
+  InvitationShareService? shareService,
+  FamilyMemberService? familyMemberService,
+}) {
+  return MaterialApp(
+    home: AnswerOptionsScreen(
+      familyMember: familyMember,
+      question: const Question('¿Cuál es tu primer recuerdo?'),
+      familyStoryStorage: MemoryFamilyStoryStorage(),
+      authService: authService,
+      invitationService: invitationService,
+      invitationShareService: shareService ?? FakeInvitationShareService(),
+      familyMemberService:
+          familyMemberService ??
+          FakeFamilyMemberService(members: [familyMember]),
+      isRemoteFamilyMember: isRemoteFamilyMember,
+    ),
+  );
+}
+
 FamilyStoriesApp testApp(
   FamilyMemberStorage familyMemberStorage, {
   AuthService? authService,
@@ -1019,6 +1266,8 @@ FamilyStoriesApp testApp(
   ProfileImagePicker? profileImagePicker,
   AvatarStorageService? avatarStorageService,
   FamilyMemberService? familyMemberService,
+  InvitationService? invitationService,
+  InvitationShareService? invitationShareService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
@@ -1028,6 +1277,9 @@ FamilyStoriesApp testApp(
     familyMemberStorage: familyMemberStorage,
     familyMemberService: familyMemberService ?? FakeFamilyMemberService(),
     familyStoryStorage: MemoryFamilyStoryStorage(),
+    invitationService: invitationService ?? FakeInvitationService(),
+    invitationShareService:
+        invitationShareService ?? FakeInvitationShareService(),
   );
 }
 
@@ -1218,6 +1470,23 @@ class FakeFamilyMemberService implements FamilyMemberService {
   }
 
   @override
+  Future<FamilyMember?> loadMemberForOwner({
+    required String ownerId,
+    required String familyMemberId,
+  }) async {
+    requestedOwnerIds.add(ownerId);
+    if (loadError != null) {
+      throw loadError!;
+    }
+    for (final member in members) {
+      if (member.id == familyMemberId) {
+        return member;
+      }
+    }
+    return null;
+  }
+
+  @override
   Future<FamilyMember> create({
     required String ownerId,
     required String name,
@@ -1237,6 +1506,80 @@ class FakeFamilyMemberService implements FamilyMemberService {
     );
     members.add(member);
     return member;
+  }
+}
+
+class FakeInvitationService implements InvitationService {
+  FakeInvitationService({
+    FamilyInvitation? invitation,
+    InvitationPreview? preview,
+    this.hasPreview = true,
+    this.acceptResult = true,
+    this.cancelResult = true,
+    this.createError,
+    this.previewError,
+    this.acceptError,
+    this.cancelError,
+  }) : invitation = invitation ?? testFamilyInvitation,
+       preview = hasPreview ? (preview ?? testInvitationPreview) : null;
+
+  final FamilyInvitation invitation;
+  final InvitationPreview? preview;
+  final bool hasPreview;
+  final bool acceptResult;
+  final bool cancelResult;
+  final Object? createError;
+  final Object? previewError;
+  final Object? acceptError;
+  final Object? cancelError;
+  final List<String> createdFamilyMemberIds = [];
+  final List<String> previewedTokens = [];
+  final List<String> acceptedTokens = [];
+  final List<String> cancelledInvitationIds = [];
+
+  @override
+  Future<FamilyInvitation> createInvitation(String familyMemberId) async {
+    createdFamilyMemberIds.add(familyMemberId);
+    if (createError != null) {
+      throw createError!;
+    }
+    return invitation;
+  }
+
+  @override
+  Future<InvitationPreview?> getInvitationPreview(String token) async {
+    previewedTokens.add(token);
+    if (previewError != null) {
+      throw previewError!;
+    }
+    return preview;
+  }
+
+  @override
+  Future<bool> acceptInvitation(String token) async {
+    acceptedTokens.add(token);
+    if (acceptError != null) {
+      throw acceptError!;
+    }
+    return acceptResult;
+  }
+
+  @override
+  Future<bool> cancelInvitation(String invitationId) async {
+    cancelledInvitationIds.add(invitationId);
+    if (cancelError != null) {
+      throw cancelError!;
+    }
+    return cancelResult;
+  }
+}
+
+class FakeInvitationShareService implements InvitationShareService {
+  final List<String> sharedTokens = [];
+
+  @override
+  Future<void> shareInvitation(String token) async {
+    sharedTokens.add(token);
   }
 }
 
