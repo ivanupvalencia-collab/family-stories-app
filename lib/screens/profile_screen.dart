@@ -44,12 +44,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _authService = widget.authService ?? SupabaseGoogleAuthService();
     _profileService = widget.profileService ?? SupabaseProfileService();
     _user = _authService.currentUser;
-    _isProfileLoading = _user != null;
+    final user = _user;
+    _profile = user == null ? null : _profileService.cachedForUser(user.id);
+    _isProfileLoading = user != null && _profile == null;
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
 
-    final user = _user;
     if (user != null) {
-      unawaited(_loadProfile(user.id, showLoading: false));
+      unawaited(
+        _loadProfile(
+          user.id,
+          showLoading: false,
+          forceRefresh: _profile != null,
+        ),
+      );
     }
   }
 
@@ -71,21 +78,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final userChanged = _user?.id != user?.id;
+    final cachedProfile = user == null
+        ? null
+        : _profileService.cachedForUser(user.id);
     setState(() {
       _user = user;
       if (user == null || userChanged) {
-        _profile = null;
+        _profile = cachedProfile;
         _profileLoadFailed = false;
-        _isProfileLoading = user != null;
+        _isProfileLoading = user != null && cachedProfile == null;
       }
     });
 
     if (user != null && userChanged) {
-      unawaited(_loadProfile(user.id, showLoading: false));
+      unawaited(
+        _loadProfile(
+          user.id,
+          showLoading: false,
+          forceRefresh: cachedProfile != null,
+        ),
+      );
     }
   }
 
-  Future<void> _loadProfile(String userId, {bool showLoading = true}) async {
+  Future<void> _loadProfile(
+    String userId, {
+    bool showLoading = true,
+    bool forceRefresh = false,
+  }) async {
     if (showLoading && mounted) {
       setState(() {
         _isProfileLoading = true;
@@ -94,7 +114,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      final profile = await _profileService.loadForUser(userId);
+      final profile = await _profileService.loadForUser(
+        userId,
+        forceRefresh: forceRefresh,
+      );
       if (!mounted || _user?.id != userId) {
         return;
       }
@@ -108,7 +131,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
       setState(() {
-        _profile = null;
         _isProfileLoading = false;
         _profileLoadFailed = true;
       });
@@ -139,6 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isWorking = true);
     try {
       await _authService.signOut();
+      _profileService.clearCache();
       _applyAuthUser(null);
     } catch (_) {
       if (mounted) {
@@ -236,7 +259,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => _loadProfile(user.id),
+                      onPressed: () =>
+                          _loadProfile(user.id, forceRefresh: true),
                       child: const Text('Reintentar'),
                     ),
                   ],

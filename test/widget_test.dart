@@ -10,6 +10,7 @@ import 'package:family_stories_app/screens/question_screen.dart';
 import 'package:family_stories_app/services/auth_service.dart';
 import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:family_stories_app/services/avatar_storage_service.dart';
+import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
@@ -19,6 +20,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('mapea FamilyMember entre Supabase y el formato local', () {
+    const memberId = '11111111-1111-4111-8111-111111111111';
+    const ownerId = '22222222-2222-4222-8222-222222222222';
+    const linkedAccountId = '33333333-3333-4333-8333-333333333333';
+    final member = FamilyMember.fromSupabaseJson(const {
+      'id': memberId,
+      'name': 'Ana',
+      'relationship': 'Abuelo/a',
+      'linked_account_id': linkedAccountId,
+    });
+
+    expect(member.id, memberId);
+    expect(member.linkedAccountId, linkedAccountId);
+    expect(member.toSupabaseInsert(ownerId: ownerId), const {
+      'owner_id': ownerId,
+      'name': 'Ana',
+      'relationship': 'Abuelo/a',
+      'linked_account_id': linkedAccountId,
+    });
+
+    final localCopy = FamilyMember.fromJson(member.toJson());
+    expect(localCopy.id, memberId);
+    expect(localCopy.linkedAccountId, linkedAccountId);
+  });
+
   testWidgets('Home muestra el contenido inicial', (tester) async {
     await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
     await tester.pumpAndSettle();
@@ -66,7 +92,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authService.signInCalls, 1);
-    expect(profileService.requestedUserIds, ['google-user-id']);
+    expect(profileService.requestedUserIds, isNotEmpty);
+    expect(profileService.requestedUserIds, everyElement('google-user-id'));
     expect(find.text('Ana García'), findsOneWidget);
     expect(find.text('ana@example.com'), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsOneWidget);
@@ -93,6 +120,80 @@ void main() {
     expect(find.text('Continuar con Google'), findsOneWidget);
   });
 
+  testWidgets(
+    'muestra el perfil cacheado durante la actualización silenciosa',
+    (tester) async {
+      final refreshCompleter = Completer<UserProfile>();
+      final profileService = FakeProfileService(
+        refreshCompleter: refreshCompleter,
+      );
+      await tester.pumpWidget(
+        testApp(
+          MemoryFamilyMemberStorage(),
+          authService: FakeAuthService(testAuthUser),
+          profileService: profileService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        profileService.cachedForUser('google-user-id')?.name,
+        'Ana García',
+      );
+
+      await tester.tap(find.byTooltip('Perfil'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ana García'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      refreshCompleter.complete(
+        const UserProfile(id: 'google-user-id', name: 'Ana actualizada'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ana actualizada'), findsOneWidget);
+    },
+  );
+
+  testWidgets('limpia la caché y no reutiliza datos entre sesiones', (
+    tester,
+  ) async {
+    final authService = FakeAuthService(testAuthUser);
+    final profileService = FakeProfileService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: authService,
+        profileService: profileService,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ana García'), findsOneWidget);
+
+    await tester.tap(find.text('Cerrar sesión'));
+    await tester.pumpAndSettle();
+
+    expect(profileService.cachedForUser('google-user-id'), isNull);
+    expect(profileService.clearCacheCalls, greaterThan(0));
+
+    profileService.profile = const UserProfile(
+      id: 'second-user-id',
+      name: 'Bruno Pérez',
+    );
+    authService.setUser(
+      const AuthUser(id: 'second-user-id', email: 'bruno@example.com'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bruno Pérez'), findsOneWidget);
+    expect(find.text('bruno@example.com'), findsOneWidget);
+    expect(find.text('Ana García'), findsNothing);
+  });
+
   testWidgets('mantiene disponible el perfil si falla su carga', (
     tester,
   ) async {
@@ -116,10 +217,8 @@ void main() {
     await tester.tap(find.text('Reintentar'));
     await tester.pumpAndSettle();
 
-    expect(profileService.requestedUserIds, [
-      'google-user-id',
-      'google-user-id',
-    ]);
+    expect(profileService.requestedUserIds, hasLength(3));
+    expect(profileService.requestedUserIds, everyElement('google-user-id'));
   });
 
   testWidgets('edita el nombre del perfil autenticado', (tester) async {
@@ -149,6 +248,7 @@ void main() {
     expect(profileService.updatedNames, ['María López']);
     expect(profileService.updatedAvatarKeys, [null]);
     expect(profileService.updatedAvatarUrls, [null]);
+    expect(profileService.cachedForUser('google-user-id')?.name, 'María López');
     expect(find.text('María López'), findsOneWidget);
     expect(find.text('Ana García'), findsNothing);
   });
@@ -437,6 +537,151 @@ void main() {
     expect(storage.saveCalls, 1);
   });
 
+  testWidgets('sin sesión carga únicamente los familiares locales', (
+    tester,
+  ) async {
+    final storage = MemoryFamilyMemberStorage(
+      members: const [
+        FamilyMember(
+          id: 'local-id',
+          name: 'Familiar local',
+          relationship: 'Otro',
+        ),
+      ],
+    );
+    final remoteService = FakeFamilyMemberService(
+      members: const [
+        FamilyMember(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Familiar remoto',
+          relationship: 'Otro',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      testApp(storage, familyMemberService: remoteService),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Familiar local'), findsOneWidget);
+    expect(find.text('Familiar remoto'), findsNothing);
+    expect(storage.loadCalls, 1);
+    expect(remoteService.requestedOwnerIds, isEmpty);
+  });
+
+  testWidgets('con sesión carga únicamente los familiares remotos', (
+    tester,
+  ) async {
+    final storage = MemoryFamilyMemberStorage(
+      members: const [
+        FamilyMember(
+          id: 'local-id',
+          name: 'Familiar local',
+          relationship: 'Otro',
+        ),
+      ],
+    );
+    final remoteService = FakeFamilyMemberService(
+      members: const [
+        FamilyMember(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Familiar remoto',
+          relationship: 'Padre/Madre',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      testApp(
+        storage,
+        authService: FakeAuthService(testAuthUser),
+        familyMemberService: remoteService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Familiar remoto'), findsOneWidget);
+    expect(find.text('Familiar local'), findsNothing);
+    expect(remoteService.requestedOwnerIds, ['google-user-id']);
+    expect(storage.loadCalls, 0);
+  });
+
+  testWidgets('con sesión crea el familiar mediante el servicio remoto', (
+    tester,
+  ) async {
+    final storage = MemoryFamilyMemberStorage();
+    final remoteService = FakeFamilyMemberService();
+    await tester.pumpWidget(
+      testApp(
+        storage,
+        authService: FakeAuthService(testAuthUser),
+        familyMemberService: remoteService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Añadir familiar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText), 'Elena');
+    await tester.tap(find.text('Relación contigo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hermano/a').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Elena'), findsOneWidget);
+    expect(remoteService.createdOwnerIds, ['google-user-id']);
+    expect(remoteService.createdNames, ['Elena']);
+    expect(remoteService.createdRelationships, ['Hermano/a']);
+    expect(storage.saveCalls, 0);
+  });
+
+  testWidgets(
+    'un error remoto conserva los datos locales y permite reintentar',
+    (tester) async {
+      final storage = MemoryFamilyMemberStorage(
+        members: const [
+          FamilyMember(
+            id: 'local-id',
+            name: 'Familiar local',
+            relationship: 'Otro',
+          ),
+        ],
+      );
+      final remoteService = FakeFamilyMemberService(
+        loadError: Exception('fallo remoto'),
+      );
+      await tester.pumpWidget(
+        testApp(
+          storage,
+          authService: FakeAuthService(testAuthUser),
+          familyMemberService: remoteService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('No se pudieron cargar los familiares.'),
+        findsOneWidget,
+      );
+      expect(find.text('Reintentar'), findsOneWidget);
+      expect(find.text('Familiar local'), findsNothing);
+      expect(storage.members.single.name, 'Familiar local');
+      expect(storage.loadCalls, 0);
+      expect(storage.saveCalls, 0);
+
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(remoteService.requestedOwnerIds, [
+        'google-user-id',
+        'google-user-id',
+      ]);
+      expect(storage.members.single.name, 'Familiar local');
+    },
+  );
+
   testWidgets('valida los campos obligatorios', (tester) async {
     await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
     await tester.pumpAndSettle();
@@ -718,7 +963,10 @@ void main() {
 
     await tester.pumpWidget(
       FamilyStoriesApp(
+        authService: FakeAuthService(),
+        profileService: FakeProfileService(),
         familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
+        familyMemberService: FakeFamilyMemberService(),
         familyStoryStorage: storyStorage,
       ),
     );
@@ -770,6 +1018,7 @@ FamilyStoriesApp testApp(
   ProfileService? profileService,
   ProfileImagePicker? profileImagePicker,
   AvatarStorageService? avatarStorageService,
+  FamilyMemberService? familyMemberService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
@@ -777,6 +1026,7 @@ FamilyStoriesApp testApp(
     profileImagePicker: profileImagePicker ?? FakeProfileImagePicker(),
     avatarStorageService: avatarStorageService ?? FakeAvatarStorageService(),
     familyMemberStorage: familyMemberStorage,
+    familyMemberService: familyMemberService ?? FakeFamilyMemberService(),
     familyStoryStorage: MemoryFamilyStoryStorage(),
   );
 }
@@ -786,23 +1036,44 @@ class FakeProfileService implements ProfileService {
     this.profile = testUserProfile,
     this.error,
     this.updateError,
+    this.refreshCompleter,
   });
 
   UserProfile profile;
   final Object? error;
   final Object? updateError;
+  final Completer<UserProfile>? refreshCompleter;
   final List<String> requestedUserIds = [];
   final List<String> updatedUserIds = [];
   final List<String> updatedNames = [];
   final List<String?> updatedAvatarKeys = [];
   final List<String?> updatedAvatarUrls = [];
+  UserProfile? _cachedProfile;
+  int clearCacheCalls = 0;
 
   @override
-  Future<UserProfile> loadForUser(String userId) async {
+  UserProfile? cachedForUser(String userId) {
+    final cachedProfile = _cachedProfile;
+    return cachedProfile?.id == userId ? cachedProfile : null;
+  }
+
+  @override
+  Future<UserProfile> loadForUser(
+    String userId, {
+    bool forceRefresh = false,
+  }) async {
+    final cachedProfile = cachedForUser(userId);
+    if (!forceRefresh && cachedProfile != null) {
+      return cachedProfile;
+    }
     requestedUserIds.add(userId);
     if (error != null) {
       throw error!;
     }
+    if (forceRefresh && refreshCompleter != null) {
+      profile = await refreshCompleter!.future;
+    }
+    _cachedProfile = profile;
     return profile;
   }
 
@@ -827,7 +1098,14 @@ class FakeProfileService implements ProfileService {
       avatarUrl: avatarUrl,
       createdAt: profile.createdAt,
     );
+    _cachedProfile = profile;
     return profile;
+  }
+
+  @override
+  void clearCache() {
+    clearCacheCalls++;
+    _cachedProfile = null;
   }
 }
 
@@ -906,8 +1184,59 @@ class FakeAuthService implements AuthService {
   @override
   Future<void> signOut() async {
     signOutCalls++;
-    _user = null;
-    _authController.add(null);
+    setUser(null);
+  }
+
+  void setUser(AuthUser? user) {
+    _user = user;
+    _authController.add(user);
+  }
+}
+
+class FakeFamilyMemberService implements FamilyMemberService {
+  FakeFamilyMemberService({
+    List<FamilyMember> members = const [],
+    this.loadError,
+    this.createError,
+  }) : members = List.of(members);
+
+  List<FamilyMember> members;
+  final Object? loadError;
+  final Object? createError;
+  final List<String> requestedOwnerIds = [];
+  final List<String> createdOwnerIds = [];
+  final List<String> createdNames = [];
+  final List<String> createdRelationships = [];
+
+  @override
+  Future<List<FamilyMember>> loadForOwner(String ownerId) async {
+    requestedOwnerIds.add(ownerId);
+    if (loadError != null) {
+      throw loadError!;
+    }
+    return List.of(members);
+  }
+
+  @override
+  Future<FamilyMember> create({
+    required String ownerId,
+    required String name,
+    required String relationship,
+  }) async {
+    createdOwnerIds.add(ownerId);
+    createdNames.add(name);
+    createdRelationships.add(relationship);
+    if (createError != null) {
+      throw createError!;
+    }
+
+    final member = FamilyMember(
+      id: '00000000-0000-4000-8000-${(members.length + 1).toString().padLeft(12, '0')}',
+      name: name,
+      relationship: relationship,
+    );
+    members.add(member);
+    return member;
   }
 }
 
@@ -916,10 +1245,14 @@ class MemoryFamilyMemberStorage implements FamilyMemberStorage {
     : members = List.of(members);
 
   List<FamilyMember> members;
+  int loadCalls = 0;
   int saveCalls = 0;
 
   @override
-  Future<List<FamilyMember>> load() async => List.of(members);
+  Future<List<FamilyMember>> load() async {
+    loadCalls++;
+    return List.of(members);
+  }
 
   @override
   Future<void> save(List<FamilyMember> familyMembers) async {

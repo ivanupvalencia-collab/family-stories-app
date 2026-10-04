@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_storage_service.dart';
+import '../services/family_member_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
 import '../services/profile_image_picker.dart';
@@ -18,6 +21,7 @@ class HomeScreen extends StatefulWidget {
     this.profileImagePicker,
     this.avatarStorageService,
     this.familyMemberStorage,
+    this.familyMemberService,
     this.familyStoryStorage,
     super.key,
   });
@@ -27,6 +31,7 @@ class HomeScreen extends StatefulWidget {
   final ProfileImagePicker? profileImagePicker;
   final AvatarStorageService? avatarStorageService;
   final FamilyMemberStorage? familyMemberStorage;
+  final FamilyMemberService? familyMemberService;
   final FamilyStoryStorage? familyStoryStorage;
 
   @override
@@ -34,35 +39,97 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late final AuthService _authService;
   late final FamilyMemberStorage _familyMemberStorage;
+  late final FamilyMemberService _familyMemberService;
+  late final ProfileService _profileService;
+  late final StreamSubscription<AuthUser?> _authSubscription;
   final List<FamilyMember> _familyMembers = [];
+  AuthUser? _user;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _loadFailed = false;
+  int _loadRequest = 0;
 
   @override
   void initState() {
     super.initState();
+    _authService = widget.authService ?? SupabaseGoogleAuthService();
     _familyMemberStorage =
         widget.familyMemberStorage ?? SharedPreferencesFamilyMemberStorage();
+    _familyMemberService =
+        widget.familyMemberService ?? SupabaseFamilyMemberService();
+    _profileService = widget.profileService ?? SupabaseProfileService();
+    _user = _authService.currentUser;
+    _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
     _loadFamilyMembers();
+    unawaited(_preloadProfile(_user));
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
+  void _applyAuthUser(AuthUser? user) {
+    if (!mounted || _user?.id == user?.id) {
+      return;
+    }
+
+    if (_user != null) {
+      _profileService.clearCache();
+    }
+    setState(() {
+      _user = user;
+      _familyMembers.clear();
+    });
+    _loadFamilyMembers();
+    unawaited(_preloadProfile(user));
+  }
+
+  Future<void> _preloadProfile(AuthUser? user) async {
+    if (user == null) {
+      return;
+    }
+
+    try {
+      await _profileService.loadForUser(user.id);
+    } catch (_) {
+      // ProfileScreen keeps its own retryable error state when opened.
+    }
   }
 
   Future<void> _loadFamilyMembers() async {
+    final request = ++_loadRequest;
+    final user = _user;
+    setState(() {
+      _isLoading = true;
+      _loadFailed = false;
+    });
+
     try {
-      final familyMembers = await _familyMemberStorage.load();
-      if (!mounted) {
+      final familyMembers = user == null
+          ? await _familyMemberStorage.load()
+          : await _familyMemberService.loadForOwner(user.id);
+      if (!mounted || request != _loadRequest) {
         return;
       }
       setState(() {
-        _familyMembers.addAll(familyMembers);
+        _familyMembers
+          ..clear()
+          ..addAll(familyMembers);
         _isLoading = false;
       });
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || request != _loadRequest) {
         return;
       }
-      setState(() => _isLoading = false);
-      _showMessage('No se pudieron cargar los familiares guardados.');
+      setState(() {
+        _familyMembers.clear();
+        _isLoading = false;
+        _loadFailed = true;
+      });
     }
   }
 
@@ -81,14 +148,21 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    final user = _user;
     setState(() => _isSaving = true);
     try {
-      await _familyMemberStorage.save([..._familyMembers, familyMember]);
-      if (!mounted) {
+      final savedMember = user == null
+          ? await _saveLocalFamilyMember(familyMember)
+          : await _familyMemberService.create(
+              ownerId: user.id,
+              name: familyMember.name,
+              relationship: familyMember.relationship,
+            );
+      if (!mounted || _user?.id != user?.id) {
         return;
       }
       setState(() {
-        _familyMembers.add(familyMember);
+        _familyMembers.add(savedMember);
       });
     } catch (_) {
       if (mounted) {
@@ -99,6 +173,11 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  Future<FamilyMember> _saveLocalFamilyMember(FamilyMember familyMember) async {
+    await _familyMemberStorage.save([..._familyMembers, familyMember]);
+    return familyMember;
   }
 
   void _openFamilyMember(FamilyMember familyMember) {
@@ -116,8 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ProfileScreen(
-          authService: widget.authService,
-          profileService: widget.profileService,
+          authService: _authService,
+          profileService: _profileService,
           profileImagePicker: widget.profileImagePicker,
           avatarStorageService: widget.avatarStorageService,
         ),
@@ -183,6 +262,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: _isLoading
                         ? const Center(child: CircularProgressIndicator())
+                        : _loadFailed
+                        ? _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
                         : _familyMembers.isEmpty
                         ? Center(
                             child: Text(
@@ -219,6 +300,38 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FamilyMembersLoadError extends StatelessWidget {
+  const _FamilyMembersLoadError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'No se pudieron cargar los familiares.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ],
       ),
     );
   }

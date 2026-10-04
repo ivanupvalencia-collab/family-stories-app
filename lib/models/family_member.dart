@@ -28,6 +28,15 @@ class FamilyMember {
     );
   }
 
+  factory FamilyMember.fromSupabaseJson(Map<String, dynamic> json) {
+    return FamilyMember(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      relationship: json['relationship'] as String,
+      linkedAccountId: json['linked_account_id'] as String?,
+    );
+  }
+
   final String id;
   final String name;
   final String relationship;
@@ -39,6 +48,15 @@ class FamilyMember {
       'name': name,
       'relationship': relationship,
       'linkedAccountId': linkedAccountId,
+    };
+  }
+
+  Map<String, dynamic> toSupabaseInsert({required String ownerId}) {
+    return {
+      'owner_id': ownerId,
+      'name': name,
+      'relationship': relationship,
+      'linked_account_id': linkedAccountId,
     };
   }
 }

@@ -27,6 +27,12 @@ class ProfileAvatarView extends StatelessWidget {
               ? Image.network(
                   normalizedUrl,
                   fit: BoxFit.cover,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) {
+                      return child;
+                    }
+                    return _GenericAvatarIcon(radius: radius);
+                  },
                   errorBuilder: (context, error, stackTrace) =>
                       _GenericAvatarIcon(radius: radius),
                 )
