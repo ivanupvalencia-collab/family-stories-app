@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/family_invitation.dart';
+import '../services/invitation_link.dart';
 import '../services/invitation_share_service.dart';
 
 class InvitationDetailsScreen extends StatefulWidget {
@@ -32,16 +33,16 @@ class _InvitationDetailsScreenState extends State<InvitationDetailsScreen> {
     return '$day/$month/${localDate.year}';
   }
 
-  Future<void> _copyToken() async {
+  Future<void> _copyText(String text, String successMessage) async {
     if (_isCopying) {
       return;
     }
     setState(() => _isCopying = true);
     try {
-      await Clipboard.setData(ClipboardData(text: widget.invitation.token));
+      await Clipboard.setData(ClipboardData(text: text));
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Código copiado.')));
+            .showSnackBar(SnackBar(content: Text(successMessage)));
       }
     } catch (_) {
       if (mounted) {
@@ -137,9 +138,15 @@ class _InvitationDetailsScreenState extends State<InvitationDetailsScreen> {
                 ),
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
-                  onPressed: _isCopying || _isSharing ? null : _copyToken,
-                  icon: const Icon(Icons.copy_outlined),
-                  label: Text(_isCopying ? 'Copiando...' : 'Copiar código'),
+                  onPressed: _isCopying || _isSharing
+                      ? null
+                      : () => _copyText(
+                          InvitationLink.build(widget.invitation.token)
+                              .toString(),
+                          'Enlace copiado.',
+                        ),
+                  icon: const Icon(Icons.link_outlined),
+                  label: Text(_isCopying ? 'Copiando...' : 'Copiar enlace'),
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
@@ -148,6 +155,17 @@ class _InvitationDetailsScreenState extends State<InvitationDetailsScreen> {
                   label: Text(
                     _isSharing ? 'Compartiendo...' : 'Compartir invitación',
                   ),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _isCopying || _isSharing
+                      ? null
+                      : () => _copyText(
+                          widget.invitation.token,
+                          'Código copiado.',
+                        ),
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Copiar código'),
                 ),
               ],
             ),

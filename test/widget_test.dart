@@ -16,6 +16,8 @@ import 'package:family_stories_app/services/avatar_storage_service.dart';
 import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
+import 'package:family_stories_app/services/incoming_link_service.dart';
+import 'package:family_stories_app/services/invitation_link.dart';
 import 'package:family_stories_app/services/invitation_service.dart';
 import 'package:family_stories_app/services/invitation_share_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
@@ -25,6 +27,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('construye y parsea un enlace de invitación válido', () {
+    final link = InvitationLink.build(testInvitationToken);
+
+    expect(
+      link.toString(),
+      'https://familystories.app/invite/$testInvitationToken',
+    );
+    expect(InvitationLink.tokenFrom(link), testInvitationToken);
+  });
+
+  test('rechaza enlaces de invitación inválidos', () {
+    expect(
+      InvitationLink.tokenFrom(
+        Uri.parse('http://familystories.app/invite/$testInvitationToken'),
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFrom(
+        Uri.parse('https://example.com/invite/$testInvitationToken'),
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFrom(
+        Uri.parse(
+          'https://familystories.app/invite/$testInvitationToken/extra',
+        ),
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFrom(
+        Uri.parse('https://familystories.app/invite/short'),
+      ),
+      isNull,
+    );
+  });
+
   test('mapea FamilyMember entre Supabase y el formato local', () {
     const memberId = '11111111-1111-4111-8111-111111111111';
     const ownerId = '22222222-2222-4222-8222-222222222222';
@@ -976,6 +1017,132 @@ void main() {
     expect(find.text('Invitación aceptada'), findsNothing);
   });
 
+  testWidgets(
+    'informa cuando el usuario intenta aceptar su propia invitación',
+    (tester) async {
+      final invitationService = FakeInvitationService(
+        acceptError: const CannotAcceptOwnInvitationException(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AcceptInvitationScreen(invitationService: invitationService),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextFormField), testInvitationToken);
+      await tester.tap(find.text('Comprobar código'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aceptar'));
+      await tester.pumpAndSettle();
+
+      expect(invitationService.acceptedTokens, [testInvitationToken]);
+      expect(
+        find.text('No puedes aceptar una invitación creada por ti mismo.'),
+        findsOneWidget,
+      );
+      expect(find.text('Invitación aceptada'), findsNothing);
+    },
+  );
+
+  testWidgets('un enlace con sesión abre la previsualización', (tester) async {
+    final incomingLinks = FakeIncomingLinkService();
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        invitationService: invitationService,
+        incomingLinkService: incomingLinks,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    incomingLinks.emit(InvitationLink.build(testInvitationToken));
+    await tester.pumpAndSettle();
+
+    expect(invitationService.previewedTokens, [testInvitationToken]);
+    expect(
+      find.text('Ana García te invita a conectarte como Pepe.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('sin sesión conserva el token y continúa después del login', (
+    tester,
+  ) async {
+    final authService = FakeAuthService();
+    final incomingLinks = FakeIncomingLinkService();
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: authService,
+        invitationService: invitationService,
+        incomingLinkService: incomingLinks,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    incomingLinks.emit(InvitationLink.build(testInvitationToken));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aún no has iniciado sesión'), findsOneWidget);
+    expect(invitationService.previewedTokens, isEmpty);
+
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pumpAndSettle();
+
+    expect(authService.signInCalls, 1);
+    expect(invitationService.previewedTokens, [testInvitationToken]);
+    expect(find.text('Aceptar'), findsOneWidget);
+  });
+
+  testWidgets('no procesa dos veces el mismo enlace entrante', (tester) async {
+    final incomingLinks = FakeIncomingLinkService();
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        invitationService: invitationService,
+        incomingLinkService: incomingLinks,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final link = InvitationLink.build(testInvitationToken);
+    incomingLinks.emit(link);
+    incomingLinks.emit(link);
+    await tester.pumpAndSettle();
+
+    expect(invitationService.previewedTokens, [testInvitationToken]);
+    expect(find.text('Código de invitación'), findsNWidgets(2));
+  });
+
+  testWidgets('aceptar desde enlace usa el mismo InvitationService', (
+    tester,
+  ) async {
+    final incomingLinks = FakeIncomingLinkService();
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        invitationService: invitationService,
+        incomingLinkService: incomingLinks,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    incomingLinks.emit(InvitationLink.build(testInvitationToken));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aceptar'));
+    await tester.pumpAndSettle();
+
+    expect(invitationService.acceptedTokens, [testInvitationToken]);
+    expect(find.text('Invitación aceptada'), findsOneWidget);
+  });
+
   testWidgets('permite escribir y continuar con una pregunta personalizada', (
     tester,
   ) async {
@@ -1173,6 +1340,7 @@ void main() {
         profileService: FakeProfileService(),
         invitationService: FakeInvitationService(),
         invitationShareService: FakeInvitationShareService(),
+        incomingLinkService: FakeIncomingLinkService(),
         familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
         familyMemberService: FakeFamilyMemberService(),
         familyStoryStorage: storyStorage,
@@ -1268,6 +1436,7 @@ FamilyStoriesApp testApp(
   FamilyMemberService? familyMemberService,
   InvitationService? invitationService,
   InvitationShareService? invitationShareService,
+  IncomingLinkService? incomingLinkService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
@@ -1280,6 +1449,7 @@ FamilyStoriesApp testApp(
     invitationService: invitationService ?? FakeInvitationService(),
     invitationShareService:
         invitationShareService ?? FakeInvitationShareService(),
+    incomingLinkService: incomingLinkService ?? FakeIncomingLinkService(),
   );
 }
 
@@ -1580,6 +1750,17 @@ class FakeInvitationShareService implements InvitationShareService {
   @override
   Future<void> shareInvitation(String token) async {
     sharedTokens.add(token);
+  }
+}
+
+class FakeIncomingLinkService implements IncomingLinkService {
+  final StreamController<Uri> _controller = StreamController<Uri>.broadcast();
+
+  @override
+  Stream<Uri> get uriLinks => _controller.stream;
+
+  void emit(Uri uri) {
+    _controller.add(uri);
   }
 }
 

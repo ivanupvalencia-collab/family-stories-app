@@ -4,9 +4,14 @@ import '../models/family_invitation.dart';
 import '../services/invitation_service.dart';
 
 class AcceptInvitationScreen extends StatefulWidget {
-  const AcceptInvitationScreen({required this.invitationService, super.key});
+  const AcceptInvitationScreen({
+    required this.invitationService,
+    this.initialToken,
+    super.key,
+  });
 
   final InvitationService invitationService;
+  final String? initialToken;
 
   @override
   State<AcceptInvitationScreen> createState() => _AcceptInvitationScreenState();
@@ -14,13 +19,26 @@ class AcceptInvitationScreen extends StatefulWidget {
 
 class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _tokenController = TextEditingController();
+  late final TextEditingController _tokenController;
   InvitationPreview? _preview;
   String? _verifiedToken;
   String? _errorMessage;
   bool _isChecking = false;
   bool _isAccepting = false;
   bool _accepted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tokenController = TextEditingController(text: widget.initialToken);
+    if (widget.initialToken != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _checkToken();
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -100,6 +118,13 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
           _preview = null;
           _verifiedToken = null;
           _errorMessage = 'La invitación ya no es válida o no está disponible.';
+        });
+      }
+    } on CannotAcceptOwnInvitationException {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              'No puedes aceptar una invitación creada por ti mismo.';
         });
       }
     } catch (_) {

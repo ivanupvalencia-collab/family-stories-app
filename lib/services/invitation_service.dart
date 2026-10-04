@@ -2,6 +2,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_invitation.dart';
 
+class CannotAcceptOwnInvitationException implements Exception {
+  const CannotAcceptOwnInvitationException();
+}
+
 abstract class InvitationService {
   Future<FamilyInvitation> createInvitation(String familyMemberId);
 
@@ -43,11 +47,18 @@ class SupabaseInvitationService implements InvitationService {
 
   @override
   Future<bool> acceptInvitation(String token) async {
-    final data = await _client.rpc(
-      'accept_family_invitation',
-      params: {'p_token': token},
-    );
-    return data == true;
+    try {
+      final data = await _client.rpc(
+        'accept_family_invitation',
+        params: {'p_token': token},
+      );
+      return data == true;
+    } on PostgrestException catch (error) {
+      if (error.message == 'cannot_accept_own_invitation') {
+        throw const CannotAcceptOwnInvitationException();
+      }
+      rethrow;
+    }
   }
 
   @override
