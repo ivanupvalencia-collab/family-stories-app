@@ -8,6 +8,7 @@ import '../services/family_story_storage.dart';
 import '../services/family_member_service.dart';
 import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
+import '../services/question_request_service.dart';
 import 'category_questions_screen.dart';
 import 'custom_question_screen.dart';
 
@@ -19,6 +20,7 @@ class QuestionsScreen extends StatelessWidget {
     required this.invitationService,
     required this.invitationShareService,
     required this.familyMemberService,
+    required this.questionRequestService,
     required this.isRemoteFamilyMember,
     super.key,
   });
@@ -29,6 +31,7 @@ class QuestionsScreen extends StatelessWidget {
   final InvitationService invitationService;
   final InvitationShareService invitationShareService;
   final FamilyMemberService familyMemberService;
+  final QuestionRequestService questionRequestService;
   final bool isRemoteFamilyMember;
 
   Future<void> _openCategory(
@@ -45,6 +48,7 @@ class QuestionsScreen extends StatelessWidget {
           invitationService: invitationService,
           invitationShareService: invitationShareService,
           familyMemberService: familyMemberService,
+          questionRequestService: questionRequestService,
           isRemoteFamilyMember: isRemoteFamilyMember,
         ),
       ),
@@ -64,6 +68,7 @@ class QuestionsScreen extends StatelessWidget {
           invitationService: invitationService,
           invitationShareService: invitationShareService,
           familyMemberService: familyMemberService,
+          questionRequestService: questionRequestService,
           isRemoteFamilyMember: isRemoteFamilyMember,
         ),
       ),

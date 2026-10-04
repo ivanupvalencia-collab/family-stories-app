@@ -6,6 +6,7 @@ import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/family_invitation.dart';
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/models/question.dart';
+import 'package:family_stories_app/models/question_request.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
 import 'package:family_stories_app/screens/accept_invitation_screen.dart';
@@ -22,6 +23,7 @@ import 'package:family_stories_app/services/invitation_service.dart';
 import 'package:family_stories_app/services/invitation_share_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/profile_service.dart';
+import 'package:family_stories_app/services/question_request_service.dart';
 import 'package:family_stories_app/widgets/profile_avatar_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -107,6 +109,163 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Perfil'), findsOneWidget);
+  });
+
+  testWidgets('muestra las preguntas pendientes del usuario autenticado', (
+    tester,
+  ) async {
+    final questionRequestService = FakeQuestionRequestService(
+      pendingByRecipient: {
+        testAuthUser.id: [
+          testQuestionRequest(
+            id: 'request-1',
+            recipientId: testAuthUser.id,
+            questionText: '¿Qué recuerdo guardas de tu infancia?',
+          ),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: questionRequestService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(questionRequestService.requestedRecipientIds, [testAuthUser.id]);
+    expect(find.text('Preguntas para ti'), findsOneWidget);
+    expect(find.text('¿Qué recuerdo guardas de tu infancia?'), findsOneWidget);
+    expect(find.text('Enviada por otro familiar · Pendiente'), findsOneWidget);
+
+    await tester.tap(find.text('¿Qué recuerdo guardas de tu infancia?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pregunta para ti'), findsOneWidget);
+    expect(find.text('Responder'), findsOneWidget);
+    await tester.tap(find.text('Responder'));
+    await tester.pump();
+    expect(
+      find.text('Podrás responder esta pregunta próximamente.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('oculta la sección si no hay preguntas pendientes', (
+    tester,
+  ) async {
+    final questionRequestService = FakeQuestionRequestService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: questionRequestService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(questionRequestService.requestedRecipientIds, [testAuthUser.id]);
+    expect(find.text('Preguntas para ti'), findsNothing);
+  });
+
+  testWidgets('sin sesión no carga ni muestra preguntas recibidas', (
+    tester,
+  ) async {
+    final questionRequestService = FakeQuestionRequestService(
+      pendingByRecipient: {
+        testAuthUser.id: [
+          testQuestionRequest(
+            id: 'request-1',
+            recipientId: testAuthUser.id,
+            questionText: 'Pregunta privada',
+          ),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        questionRequestService: questionRequestService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(questionRequestService.requestedRecipientIds, isEmpty);
+    expect(find.text('Preguntas para ti'), findsNothing);
+    expect(find.text('Pregunta privada'), findsNothing);
+  });
+
+  testWidgets('muestra un error recuperable si fallan las preguntas', (
+    tester,
+  ) async {
+    final questionRequestService = FakeQuestionRequestService(
+      loadError: Exception('network failure'),
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: questionRequestService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Preguntas para ti'), findsOneWidget);
+    expect(find.text('No se pudieron cargar tus preguntas.'), findsOneWidget);
+    expect(find.text('Reintentar'), findsOneWidget);
+    expect(find.textContaining('network failure'), findsNothing);
+  });
+
+  testWidgets('un cambio de sesión no muestra preguntas del usuario anterior', (
+    tester,
+  ) async {
+    const secondUser = AuthUser(
+      id: 'second-user-id',
+      email: 'bruno@example.com',
+    );
+    final firstLoad = Completer<List<QuestionRequest>>();
+    final authService = FakeAuthService(testAuthUser);
+    final questionRequestService = FakeQuestionRequestService(
+      pendingByRecipient: {
+        secondUser.id: [
+          testQuestionRequest(
+            id: 'request-b',
+            recipientId: secondUser.id,
+            questionText: 'Pregunta para Bruno',
+          ),
+        ],
+      },
+      loadCompleters: {testAuthUser.id: firstLoad},
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: authService,
+        questionRequestService: questionRequestService,
+      ),
+    );
+    await tester.pump();
+
+    authService.setUser(secondUser);
+    await tester.pumpAndSettle();
+    expect(find.text('Pregunta para Bruno'), findsOneWidget);
+
+    firstLoad.complete([
+      testQuestionRequest(
+        id: 'request-a',
+        recipientId: testAuthUser.id,
+        questionText: 'Pregunta antigua de Ana',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(questionRequestService.requestedRecipientIds, [
+      testAuthUser.id,
+      secondUser.id,
+    ]);
+    expect(find.text('Pregunta para Bruno'), findsOneWidget);
+    expect(find.text('Pregunta antigua de Ana'), findsNothing);
   });
 
   testWidgets('inicia sesión con Google desde el perfil', (tester) async {
@@ -820,12 +979,14 @@ void main() {
     );
     final invitationService = FakeInvitationService();
     final shareService = FakeInvitationShareService();
+    final questionRequestService = FakeQuestionRequestService();
     await tester.pumpWidget(
       invitationOptionsApp(
         familyMember: familyMember,
         authService: FakeAuthService(testAuthUser),
         invitationService: invitationService,
         shareService: shareService,
+        questionRequestService: questionRequestService,
         isRemoteFamilyMember: true,
       ),
     );
@@ -839,16 +1000,16 @@ void main() {
     expect(find.text('Invitación creada'), findsOneWidget);
     expect(find.text(testInvitationToken), findsOneWidget);
     expect(familyMember.linkedAccountId, isNull);
+    expect(questionRequestService.familyMemberIds, isEmpty);
 
     await tester.tap(find.text('Compartir invitación'));
     await tester.pump();
     expect(shareService.sharedTokens, [testInvitationToken]);
   });
 
-  testWidgets('no crea otra invitación si el familiar está vinculado', (
-    tester,
-  ) async {
+  testWidgets('envía una pregunta a un familiar vinculado', (tester) async {
     final invitationService = FakeInvitationService();
+    final questionRequestService = FakeQuestionRequestService();
     await tester.pumpWidget(
       invitationOptionsApp(
         familyMember: const FamilyMember(
@@ -859,6 +1020,7 @@ void main() {
         ),
         authService: FakeAuthService(testAuthUser),
         invitationService: invitationService,
+        questionRequestService: questionRequestService,
         isRemoteFamilyMember: true,
       ),
     );
@@ -866,11 +1028,17 @@ void main() {
     await tester.tap(find.text('Enviar a Pepe'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Familiar vinculado'), findsOneWidget);
+    expect(questionRequestService.familyMemberIds, [
+      '11111111-1111-4111-8111-111111111111',
+    ]);
+    expect(questionRequestService.questionTexts, [
+      '¿Cuál es tu primer recuerdo?',
+    ]);
+    expect(find.text('Pregunta enviada a Pepe'), findsOneWidget);
     expect(invitationService.createdFamilyMemberIds, isEmpty);
   });
 
-  testWidgets('actualiza el familiar remoto antes de crear una invitación', (
+  testWidgets('actualiza el familiar remoto antes de enviar la pregunta', (
     tester,
   ) async {
     const staleFamilyMember = FamilyMember(
@@ -889,12 +1057,14 @@ void main() {
       ],
     );
     final invitationService = FakeInvitationService();
+    final questionRequestService = FakeQuestionRequestService();
     await tester.pumpWidget(
       invitationOptionsApp(
         familyMember: staleFamilyMember,
         authService: FakeAuthService(testAuthUser),
         invitationService: invitationService,
         familyMemberService: familyMemberService,
+        questionRequestService: questionRequestService,
         isRemoteFamilyMember: true,
       ),
     );
@@ -903,8 +1073,75 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(familyMemberService.requestedOwnerIds, [testAuthUser.id]);
-    expect(find.text('Familiar vinculado'), findsOneWidget);
+    expect(questionRequestService.familyMemberIds, [staleFamilyMember.id]);
     expect(invitationService.createdFamilyMemberIds, isEmpty);
+  });
+
+  testWidgets('bloquea dobles pulsaciones mientras envía la pregunta', (
+    tester,
+  ) async {
+    final completer = Completer<String>();
+    final questionRequestService = FakeQuestionRequestService(
+      completer: completer,
+    );
+    await tester.pumpWidget(
+      invitationOptionsApp(
+        familyMember: const FamilyMember(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Pepe',
+          relationship: 'Padre/Madre',
+          linkedAccountId: 'second-user-id',
+        ),
+        authService: FakeAuthService(testAuthUser),
+        invitationService: FakeInvitationService(),
+        questionRequestService: questionRequestService,
+        isRemoteFamilyMember: true,
+      ),
+    );
+
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Enviando pregunta...'), findsOneWidget);
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pump();
+    expect(questionRequestService.familyMemberIds, hasLength(1));
+
+    completer.complete('55555555-5555-4555-8555-555555555555');
+    await tester.pumpAndSettle();
+    expect(find.text('Pregunta enviada a Pepe'), findsOneWidget);
+  });
+
+  testWidgets('muestra un error comprensible si falla el envío', (
+    tester,
+  ) async {
+    final questionRequestService = FakeQuestionRequestService(
+      error: Exception('internal database error'),
+    );
+    await tester.pumpWidget(
+      invitationOptionsApp(
+        familyMember: const FamilyMember(
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Pepe',
+          relationship: 'Padre/Madre',
+          linkedAccountId: 'second-user-id',
+        ),
+        authService: FakeAuthService(testAuthUser),
+        invitationService: FakeInvitationService(),
+        questionRequestService: questionRequestService,
+        isRemoteFamilyMember: true,
+      ),
+    );
+
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No se pudo enviar la pregunta. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('internal database error'), findsNothing);
   });
 
   testWidgets('un familiar local requiere iniciar sesión para invitar', (
@@ -1340,6 +1577,7 @@ void main() {
         profileService: FakeProfileService(),
         invitationService: FakeInvitationService(),
         invitationShareService: FakeInvitationShareService(),
+        questionRequestService: FakeQuestionRequestService(),
         incomingLinkService: FakeIncomingLinkService(),
         familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
         familyMemberService: FakeFamilyMemberService(),
@@ -1403,6 +1641,23 @@ final testInvitationPreview = InvitationPreview(
   expiresAt: DateTime.utc(2026, 10, 11),
 );
 
+QuestionRequest testQuestionRequest({
+  required String id,
+  required String recipientId,
+  required String questionText,
+  DateTime? createdAt,
+}) {
+  return QuestionRequest(
+    id: id,
+    senderId: 'sender-user-id',
+    recipientId: recipientId,
+    familyMemberId: '11111111-1111-4111-8111-111111111111',
+    questionText: questionText,
+    status: QuestionRequestStatus.pending,
+    createdAt: createdAt ?? DateTime.utc(2026, 10, 4),
+  );
+}
+
 Widget invitationOptionsApp({
   required FamilyMember familyMember,
   required AuthService authService,
@@ -1410,6 +1665,7 @@ Widget invitationOptionsApp({
   required bool isRemoteFamilyMember,
   InvitationShareService? shareService,
   FamilyMemberService? familyMemberService,
+  QuestionRequestService? questionRequestService,
 }) {
   return MaterialApp(
     home: AnswerOptionsScreen(
@@ -1422,6 +1678,8 @@ Widget invitationOptionsApp({
       familyMemberService:
           familyMemberService ??
           FakeFamilyMemberService(members: [familyMember]),
+      questionRequestService:
+          questionRequestService ?? FakeQuestionRequestService(),
       isRemoteFamilyMember: isRemoteFamilyMember,
     ),
   );
@@ -1437,6 +1695,7 @@ FamilyStoriesApp testApp(
   InvitationService? invitationService,
   InvitationShareService? invitationShareService,
   IncomingLinkService? incomingLinkService,
+  QuestionRequestService? questionRequestService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
@@ -1450,6 +1709,8 @@ FamilyStoriesApp testApp(
     invitationShareService:
         invitationShareService ?? FakeInvitationShareService(),
     incomingLinkService: incomingLinkService ?? FakeIncomingLinkService(),
+    questionRequestService:
+        questionRequestService ?? FakeQuestionRequestService(),
   );
 }
 
@@ -1761,6 +2022,54 @@ class FakeIncomingLinkService implements IncomingLinkService {
 
   void emit(Uri uri) {
     _controller.add(uri);
+  }
+}
+
+class FakeQuestionRequestService implements QuestionRequestService {
+  FakeQuestionRequestService({
+    this.error,
+    this.completer,
+    this.loadError,
+    Map<String, List<QuestionRequest>> pendingByRecipient = const {},
+    Map<String, Completer<List<QuestionRequest>>> loadCompleters = const {},
+  }) : pendingByRecipient = Map.of(pendingByRecipient),
+       loadCompleters = Map.of(loadCompleters);
+
+  final Object? error;
+  final Completer<String>? completer;
+  final Object? loadError;
+  final Map<String, List<QuestionRequest>> pendingByRecipient;
+  final Map<String, Completer<List<QuestionRequest>>> loadCompleters;
+  final List<String> familyMemberIds = [];
+  final List<String> questionTexts = [];
+  final List<String> requestedRecipientIds = [];
+
+  @override
+  Future<List<QuestionRequest>> loadPendingForRecipient(
+    String recipientId,
+  ) async {
+    requestedRecipientIds.add(recipientId);
+    if (loadError != null) {
+      throw loadError!;
+    }
+    final pendingLoad = loadCompleters[recipientId];
+    if (pendingLoad != null) {
+      return pendingLoad.future;
+    }
+    return List.of(pendingByRecipient[recipientId] ?? const []);
+  }
+
+  @override
+  Future<String> sendQuestion({
+    required String familyMemberId,
+    required String questionText,
+  }) async {
+    familyMemberIds.add(familyMemberId);
+    questionTexts.add(questionText);
+    if (error != null) {
+      throw error!;
+    }
+    return completer?.future ?? '55555555-5555-4555-8555-555555555555';
   }
 }
 

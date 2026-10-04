@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
+import '../models/question_request.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_storage_service.dart';
 import '../services/family_member_service.dart';
@@ -12,9 +13,11 @@ import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
+import '../services/question_request_service.dart';
 import 'add_family_member_screen.dart';
 import 'family_member_screen.dart';
 import 'profile_screen.dart';
+import 'question_request_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -27,6 +30,7 @@ class HomeScreen extends StatefulWidget {
     this.familyStoryStorage,
     this.invitationService,
     this.invitationShareService,
+    this.questionRequestService,
     super.key,
   });
 
@@ -39,6 +43,7 @@ class HomeScreen extends StatefulWidget {
   final FamilyStoryStorage? familyStoryStorage;
   final InvitationService? invitationService;
   final InvitationShareService? invitationShareService;
+  final QuestionRequestService? questionRequestService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -50,14 +55,19 @@ class _HomeScreenState extends State<HomeScreen> {
   late final FamilyMemberService _familyMemberService;
   late final InvitationService _invitationService;
   late final InvitationShareService _invitationShareService;
+  late final QuestionRequestService _questionRequestService;
   late final ProfileService _profileService;
   late final StreamSubscription<AuthUser?> _authSubscription;
   final List<FamilyMember> _familyMembers = [];
+  final List<QuestionRequest> _questionRequests = [];
   AuthUser? _user;
   bool _isLoading = true;
   bool _isSaving = false;
   bool _loadFailed = false;
   int _loadRequest = 0;
+  bool _questionsLoading = false;
+  bool _questionsLoadFailed = false;
+  int _questionsLoadRequest = 0;
 
   @override
   void initState() {
@@ -71,10 +81,13 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.invitationService ?? SupabaseInvitationService();
     _invitationShareService =
         widget.invitationShareService ?? PlatformInvitationShareService();
+    _questionRequestService =
+        widget.questionRequestService ?? SupabaseQuestionRequestService();
     _profileService = widget.profileService ?? SupabaseProfileService();
     _user = _authService.currentUser;
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
     _loadFamilyMembers();
+    _loadQuestionRequests();
     unawaited(_preloadProfile(_user));
   }
 
@@ -95,8 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _user = user;
       _familyMembers.clear();
+      _questionRequests.clear();
     });
     _loadFamilyMembers();
+    _loadQuestionRequests();
     unawaited(_preloadProfile(user));
   }
 
@@ -141,6 +156,50 @@ class _HomeScreenState extends State<HomeScreen> {
         _familyMembers.clear();
         _isLoading = false;
         _loadFailed = true;
+      });
+    }
+  }
+
+  Future<void> _loadQuestionRequests() async {
+    final request = ++_questionsLoadRequest;
+    final user = _user;
+    if (user == null) {
+      setState(() {
+        _questionRequests.clear();
+        _questionsLoading = false;
+        _questionsLoadFailed = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _questionRequests.clear();
+      _questionsLoading = true;
+      _questionsLoadFailed = false;
+    });
+
+    try {
+      final questionRequests = await _questionRequestService
+          .loadPendingForRecipient(user.id);
+      if (!mounted ||
+          request != _questionsLoadRequest ||
+          _user?.id != user.id) {
+        return;
+      }
+      setState(() {
+        _questionRequests.addAll(questionRequests);
+        _questionsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted ||
+          request != _questionsLoadRequest ||
+          _user?.id != user.id) {
+        return;
+      }
+      setState(() {
+        _questionRequests.clear();
+        _questionsLoading = false;
+        _questionsLoadFailed = true;
       });
     }
   }
@@ -201,6 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
           familyMemberService: _familyMemberService,
           invitationService: _invitationService,
           invitationShareService: _invitationShareService,
+          questionRequestService: _questionRequestService,
           isRemoteFamilyMember: _user != null,
           familyStoryStorage: widget.familyStoryStorage,
         ),
@@ -221,6 +281,15 @@ class _HomeScreenState extends State<HomeScreen> {
           avatarStorageService: widget.avatarStorageService,
           invitationService: _invitationService,
         ),
+      ),
+    );
+  }
+
+  void _openQuestionRequest(QuestionRequest questionRequest) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            QuestionRequestScreen(questionRequest: questionRequest),
       ),
     );
   }
@@ -272,21 +341,71 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.person_add_alt_1),
                     label: const Text('Añadir familiar'),
                   ),
-                  const SizedBox(height: 48),
-                  Text(
-                    'Tus familiares',
-                    style: textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   Expanded(
-                    child: _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _loadFailed
-                        ? _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
-                        : _familyMembers.isEmpty
-                        ? Center(
+                    child: ListView(
+                      children: [
+                        if (_user != null &&
+                            (_questionsLoading ||
+                                _questionsLoadFailed ||
+                                _questionRequests.isNotEmpty)) ...[
+                          Text(
+                            'Preguntas para ti',
+                            style: textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_questionsLoading)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (_questionsLoadFailed)
+                            _QuestionRequestsLoadError(
+                              onRetry: _loadQuestionRequests,
+                            )
+                          else
+                            ..._questionRequests.map(
+                              (questionRequest) => Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  leading: const CircleAvatar(
+                                    child: Icon(Icons.markunread_outlined),
+                                  ),
+                                  title: Text(questionRequest.questionText),
+                                  subtitle: const Text(
+                                    'Enviada por otro familiar · Pendiente',
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () =>
+                                      _openQuestionRequest(questionRequest),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 32),
+                        ],
+                        Text(
+                          'Tus familiares',
+                          style: textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (_isLoading)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(32),
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        else if (_loadFailed)
+                          _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
+                        else if (_familyMembers.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
                             child: Text(
                               'Todavía no has añadido ningún familiar.',
                               textAlign: TextAlign.center,
@@ -295,26 +414,23 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                           )
-                        : ListView.separated(
-                            itemCount: _familyMembers.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final familyMember = _familyMembers[index];
-
-                              return Card(
-                                child: ListTile(
-                                  leading: const CircleAvatar(
-                                    child: Icon(Icons.person_outline),
-                                  ),
-                                  title: Text(familyMember.name),
-                                  subtitle: Text(familyMember.relationship),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _openFamilyMember(familyMember),
+                        else
+                          ..._familyMembers.map(
+                            (familyMember) => Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: const CircleAvatar(
+                                  child: Icon(Icons.person_outline),
                                 ),
-                              );
-                            },
+                                title: Text(familyMember.name),
+                                subtitle: Text(familyMember.relationship),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => _openFamilyMember(familyMember),
+                              ),
+                            ),
                           ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -353,6 +469,39 @@ class _FamilyMembersLoadError extends StatelessWidget {
             label: const Text('Reintentar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuestionRequestsLoadError extends StatelessWidget {
+  const _QuestionRequestsLoadError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              'No se pudieron cargar tus preguntas.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
       ),
     );
   }

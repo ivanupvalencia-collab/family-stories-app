@@ -7,6 +7,7 @@ import '../services/family_member_service.dart';
 import '../services/family_story_storage.dart';
 import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
+import '../services/question_request_service.dart';
 import 'invitation_details_screen.dart';
 import 'question_screen.dart';
 
@@ -19,6 +20,7 @@ class AnswerOptionsScreen extends StatefulWidget {
     required this.invitationService,
     required this.invitationShareService,
     required this.familyMemberService,
+    required this.questionRequestService,
     required this.isRemoteFamilyMember,
     super.key,
   });
@@ -30,6 +32,7 @@ class AnswerOptionsScreen extends StatefulWidget {
   final InvitationService invitationService;
   final InvitationShareService invitationShareService;
   final FamilyMemberService familyMemberService;
+  final QuestionRequestService questionRequestService;
   final bool isRemoteFamilyMember;
 
   @override
@@ -39,6 +42,7 @@ class AnswerOptionsScreen extends StatefulWidget {
 class _AnswerOptionsScreenState extends State<AnswerOptionsScreen> {
   bool _isCreatingInvitation = false;
   bool _isRefreshingFamilyMember = false;
+  bool _isSendingQuestion = false;
 
   Future<void> _answerNow(BuildContext context) async {
     final storySaved = await Navigator.of(context).push<bool>(
@@ -56,7 +60,9 @@ class _AnswerOptionsScreenState extends State<AnswerOptionsScreen> {
   }
 
   Future<void> _showSendInformation() async {
-    if (_isCreatingInvitation || _isRefreshingFamilyMember) {
+    if (_isCreatingInvitation ||
+        _isRefreshingFamilyMember ||
+        _isSendingQuestion) {
       return;
     }
 
@@ -103,22 +109,7 @@ class _AnswerOptionsScreenState extends State<AnswerOptionsScreen> {
     }
 
     if (familyMember.linkedAccountId != null) {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          icon: const Icon(Icons.link),
-          title: const Text('Familiar vinculado'),
-          content: Text(
-            '${familyMember.name} ya está vinculado a una cuenta de Family Stories.',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
+      await _sendQuestion(familyMember);
       return;
     }
 
@@ -207,6 +198,37 @@ class _AnswerOptionsScreenState extends State<AnswerOptionsScreen> {
     }
   }
 
+  Future<void> _sendQuestion(FamilyMember familyMember) async {
+    if (_isSendingQuestion) {
+      return;
+    }
+
+    setState(() => _isSendingQuestion = true);
+    try {
+      await widget.questionRequestService.sendQuestion(
+        familyMemberId: familyMember.id,
+        questionText: widget.question.text,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pregunta enviada a ${familyMember.name}')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo enviar la pregunta. Inténtalo de nuevo.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingQuestion = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -255,12 +277,17 @@ class _AnswerOptionsScreenState extends State<AnswerOptionsScreen> {
                     subtitle: Text(
                       _isCreatingInvitation
                           ? 'Creando invitación...'
+                          : _isSendingQuestion
+                          ? 'Enviando pregunta...'
                           : _isRefreshingFamilyMember
                           ? 'Actualizando familiar...'
                           : 'Para que responda desde su dispositivo',
                     ),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: _isCreatingInvitation || _isRefreshingFamilyMember
+                    onTap:
+                        _isCreatingInvitation ||
+                            _isRefreshingFamilyMember ||
+                            _isSendingQuestion
                         ? null
                         : _showSendInformation,
                   ),

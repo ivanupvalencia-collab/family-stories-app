@@ -7,6 +7,7 @@ import '../services/family_story_storage.dart';
 import '../services/family_member_service.dart';
 import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
+import '../services/question_request_service.dart';
 import 'answer_options_screen.dart';
 
 class CustomQuestionScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class CustomQuestionScreen extends StatefulWidget {
     required this.invitationService,
     required this.invitationShareService,
     required this.familyMemberService,
+    required this.questionRequestService,
     required this.isRemoteFamilyMember,
     super.key,
   });
@@ -27,6 +29,7 @@ class CustomQuestionScreen extends StatefulWidget {
   final InvitationService invitationService;
   final InvitationShareService invitationShareService;
   final FamilyMemberService familyMemberService;
+  final QuestionRequestService questionRequestService;
   final bool isRemoteFamilyMember;
 
   @override
@@ -58,6 +61,7 @@ class _CustomQuestionScreenState extends State<CustomQuestionScreen> {
           invitationService: widget.invitationService,
           invitationShareService: widget.invitationShareService,
           familyMemberService: widget.familyMemberService,
+          questionRequestService: widget.questionRequestService,
           isRemoteFamilyMember: widget.isRemoteFamilyMember,
         ),
       ),

@@ -9,6 +9,7 @@ import '../services/family_member_service.dart';
 import '../services/family_story_storage.dart';
 import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
+import '../services/question_request_service.dart';
 import 'questions_screen.dart';
 import 'story_screen.dart';
 
@@ -19,6 +20,7 @@ class FamilyMemberScreen extends StatefulWidget {
     required this.familyMemberService,
     required this.invitationService,
     required this.invitationShareService,
+    required this.questionRequestService,
     required this.isRemoteFamilyMember,
     this.familyStoryStorage,
     super.key,
@@ -29,6 +31,7 @@ class FamilyMemberScreen extends StatefulWidget {
   final FamilyMemberService familyMemberService;
   final InvitationService invitationService;
   final InvitationShareService invitationShareService;
+  final QuestionRequestService questionRequestService;
   final bool isRemoteFamilyMember;
   final FamilyStoryStorage? familyStoryStorage;
 
@@ -88,6 +91,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
           authService: widget.authService,
           invitationService: widget.invitationService,
           invitationShareService: widget.invitationShareService,
+          questionRequestService: widget.questionRequestService,
           familyMemberService: widget.familyMemberService,
           isRemoteFamilyMember: widget.isRemoteFamilyMember,
         ),

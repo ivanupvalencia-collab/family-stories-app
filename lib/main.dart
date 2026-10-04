@@ -17,6 +17,7 @@ import 'services/invitation_service.dart';
 import 'services/invitation_share_service.dart';
 import 'services/profile_image_picker.dart';
 import 'services/profile_service.dart';
+import 'services/question_request_service.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
 const _supabasePublishableKey =
@@ -44,6 +45,7 @@ class FamilyStoriesApp extends StatefulWidget {
     this.invitationService,
     this.invitationShareService,
     this.incomingLinkService,
+    this.questionRequestService,
     super.key,
   });
 
@@ -57,6 +59,7 @@ class FamilyStoriesApp extends StatefulWidget {
   final InvitationService? invitationService;
   final InvitationShareService? invitationShareService;
   final IncomingLinkService? incomingLinkService;
+  final QuestionRequestService? questionRequestService;
 
   @override
   State<FamilyStoriesApp> createState() => _FamilyStoriesAppState();
@@ -67,6 +70,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
   late final AuthService _authService;
   late final ProfileService _profileService;
   late final InvitationService _invitationService;
+  late final QuestionRequestService _questionRequestService;
   late final IncomingLinkService _incomingLinkService;
   late final StreamSubscription<Uri> _linkSubscription;
   late final StreamSubscription<AuthUser?> _authSubscription;
@@ -81,6 +85,8 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
     _profileService = widget.profileService ?? SupabaseProfileService();
     _invitationService =
         widget.invitationService ?? SupabaseInvitationService();
+    _questionRequestService =
+        widget.questionRequestService ?? SupabaseQuestionRequestService();
     _incomingLinkService =
         widget.incomingLinkService ?? PlatformIncomingLinkService();
     _linkSubscription = _incomingLinkService.uriLinks.listen(
@@ -222,6 +228,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
         familyStoryStorage: widget.familyStoryStorage,
         invitationService: _invitationService,
         invitationShareService: widget.invitationShareService,
+        questionRequestService: _questionRequestService,
       ),
     );
   }
