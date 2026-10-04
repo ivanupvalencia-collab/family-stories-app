@@ -9,6 +9,7 @@ abstract class ProfileService {
     required String userId,
     required String name,
     required String? avatarKey,
+    required String? avatarUrl,
   });
 }
 
@@ -34,10 +35,15 @@ class SupabaseProfileService implements ProfileService {
     required String userId,
     required String name,
     required String? avatarKey,
+    required String? avatarUrl,
   }) async {
     final data = await _client
         .from('profiles')
-        .update({'name': name, 'avatar_key': avatarKey})
+        .update({
+          'name': name,
+          'avatar_key': avatarKey,
+          'avatar_url': avatarUrl,
+        })
         .eq('id', userId)
         .select('id, name, avatar_key, avatar_url, created_at')
         .single();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:family_stories_app/main.dart';
 import 'package:family_stories_app/models/family_member.dart';
@@ -8,8 +9,10 @@ import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
 import 'package:family_stories_app/services/auth_service.dart';
 import 'package:family_stories_app/services/audio_answer_service.dart';
+import 'package:family_stories_app/services/avatar_storage_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
+import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/profile_service.dart';
 import 'package:family_stories_app/widgets/profile_avatar_view.dart';
 import 'package:flutter/material.dart';
@@ -145,6 +148,7 @@ void main() {
     expect(profileService.updatedUserIds, ['google-user-id']);
     expect(profileService.updatedNames, ['María López']);
     expect(profileService.updatedAvatarKeys, [null]);
+    expect(profileService.updatedAvatarUrls, [null]);
     expect(find.text('María López'), findsOneWidget);
     expect(find.text('Ana García'), findsNothing);
   });
@@ -184,6 +188,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(profileService.updatedAvatarKeys, ['avatar_03']);
+    expect(profileService.updatedAvatarUrls, [null]);
     final avatarView = tester.widget<ProfileAvatarView>(
       find.byKey(const ValueKey('profile_avatar')),
     );
@@ -241,7 +246,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('No se pudo guardar el nombre. Inténtalo de nuevo.'),
+      find.text('No se pudo guardar el perfil. Inténtalo de nuevo.'),
       findsOneWidget,
     );
     expect(find.text('Editar perfil'), findsOneWidget);
@@ -251,6 +256,157 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('selected_avatar_avatar_04')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('avatar_url tiene prioridad sobre el avatar local', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProfileAvatarView(
+            avatarKey: 'avatar_02',
+            avatarUrl: 'https://example.com/custom-avatar.jpg',
+          ),
+        ),
+      ),
+    );
+
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(image.image, isA<NetworkImage>());
+    expect(image.fit, BoxFit.cover);
+    expect(
+      (image.image as NetworkImage).url,
+      'https://example.com/custom-avatar.jpg',
+    );
+  });
+
+  testWidgets('elegir avatar local limpia avatar_url', (tester) async {
+    final profileService = FakeProfileService(
+      profile: const UserProfile(
+        id: 'google-user-id',
+        name: 'Ana García',
+        avatarUrl: 'https://example.com/old-avatar.jpg',
+      ),
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('avatar_option_avatar_01')));
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(profileService.updatedAvatarKeys, ['avatar_01']);
+    expect(profileService.updatedAvatarUrls, [null]);
+  });
+
+  testWidgets('guarda foto personalizada y limpia avatar_key', (tester) async {
+    final profileService = FakeProfileService(
+      profile: const UserProfile(
+        id: 'google-user-id',
+        name: 'Ana García',
+        avatarKey: 'avatar_02',
+      ),
+    );
+    final imagePicker = FakeProfileImagePicker(result: testPickedImage);
+    final storageService = FakeAvatarStorageService(
+      uploadedUrl: 'https://example.com/new-avatar.jpg?v=1',
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+        profileImagePicker: imagePicker,
+        avatarStorageService: storageService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Elegir foto de la galería'));
+    await tester.pump();
+
+    expect(imagePicker.pickCalls, 1);
+    expect(
+      find.byKey(const ValueKey('selected_profile_photo_preview')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(storageService.uploadedUserIds, ['google-user-id']);
+    expect(profileService.updatedAvatarKeys, [null]);
+    expect(profileService.updatedAvatarUrls, [storageService.uploadedUrl]);
+    final avatarView = tester.widget<ProfileAvatarView>(
+      find.byKey(const ValueKey('profile_avatar')),
+    );
+    expect(avatarView.avatarKey, isNull);
+    expect(avatarView.avatarUrl, storageService.uploadedUrl);
+  });
+
+  testWidgets('un error de subida conserva el perfil y la edición', (
+    tester,
+  ) async {
+    const originalProfile = UserProfile(
+      id: 'google-user-id',
+      name: 'Ana García',
+      avatarKey: 'avatar_04',
+    );
+    final profileService = FakeProfileService(profile: originalProfile);
+    final storageService = FakeAvatarStorageService(
+      error: Exception('fallo de subida'),
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+        profileImagePicker: FakeProfileImagePicker(result: testPickedImage),
+        avatarStorageService: storageService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar perfil'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'Nombre pendiente');
+    await tester.tap(find.text('Elegir foto de la galería'));
+    await tester.pump();
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No se pudo guardar el perfil. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+    expect(find.text('Editar perfil'), findsOneWidget);
+    expect(profileService.updatedUserIds, isEmpty);
+    expect(profileService.profile, same(originalProfile));
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).controller!.text,
+      'Nombre pendiente',
+    );
+    expect(
+      find.byKey(const ValueKey('selected_profile_photo_preview')),
       findsOneWidget,
     );
   });
@@ -612,10 +768,14 @@ FamilyStoriesApp testApp(
   FamilyMemberStorage familyMemberStorage, {
   AuthService? authService,
   ProfileService? profileService,
+  ProfileImagePicker? profileImagePicker,
+  AvatarStorageService? avatarStorageService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
     profileService: profileService ?? FakeProfileService(),
+    profileImagePicker: profileImagePicker ?? FakeProfileImagePicker(),
+    avatarStorageService: avatarStorageService ?? FakeAvatarStorageService(),
     familyMemberStorage: familyMemberStorage,
     familyStoryStorage: MemoryFamilyStoryStorage(),
   );
@@ -635,6 +795,7 @@ class FakeProfileService implements ProfileService {
   final List<String> updatedUserIds = [];
   final List<String> updatedNames = [];
   final List<String?> updatedAvatarKeys = [];
+  final List<String?> updatedAvatarUrls = [];
 
   @override
   Future<UserProfile> loadForUser(String userId) async {
@@ -650,15 +811,72 @@ class FakeProfileService implements ProfileService {
     required String userId,
     required String name,
     required String? avatarKey,
+    required String? avatarUrl,
   }) async {
     updatedUserIds.add(userId);
     updatedNames.add(name);
     updatedAvatarKeys.add(avatarKey);
+    updatedAvatarUrls.add(avatarUrl);
     if (updateError != null) {
       throw updateError!;
     }
-    profile = profile.copyWith(name: name, avatarKey: avatarKey);
+    profile = UserProfile(
+      id: profile.id,
+      name: name,
+      avatarKey: avatarKey,
+      avatarUrl: avatarUrl,
+      createdAt: profile.createdAt,
+    );
     return profile;
+  }
+}
+
+final testPickedImage = PickedProfileImage(
+  bytes: base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  ),
+  contentType: 'image/png',
+);
+
+class FakeProfileImagePicker implements ProfileImagePicker {
+  FakeProfileImagePicker({this.result, this.error});
+
+  final PickedProfileImage? result;
+  final Object? error;
+  int pickCalls = 0;
+
+  @override
+  Future<PickedProfileImage?> pickFromGallery() async {
+    pickCalls++;
+    if (error != null) {
+      throw error!;
+    }
+    return result;
+  }
+}
+
+class FakeAvatarStorageService implements AvatarStorageService {
+  FakeAvatarStorageService({
+    this.uploadedUrl = 'https://example.com/avatar.jpg?v=1',
+    this.error,
+  });
+
+  final String uploadedUrl;
+  final Object? error;
+  final List<String> uploadedUserIds = [];
+  final List<PickedProfileImage> uploadedImages = [];
+
+  @override
+  Future<String> uploadAvatar({
+    required String userId,
+    required PickedProfileImage image,
+  }) async {
+    uploadedUserIds.add(userId);
+    uploadedImages.add(image);
+    if (error != null) {
+      throw error!;
+    }
+    return uploadedUrl;
   }
 }
 

@@ -4,15 +4,25 @@ import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/avatar_storage_service.dart';
+import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../widgets/profile_avatar_view.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({this.authService, this.profileService, super.key});
+  const ProfileScreen({
+    this.authService,
+    this.profileService,
+    this.profileImagePicker,
+    this.avatarStorageService,
+    super.key,
+  });
 
   final AuthService? authService;
   final ProfileService? profileService;
+  final ProfileImagePicker? profileImagePicker;
+  final AvatarStorageService? avatarStorageService;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -154,6 +164,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           userId: user.id,
           profile: profile,
           profileService: _profileService,
+          profileImagePicker:
+              widget.profileImagePicker ?? DeviceProfileImagePicker(),
+          avatarStorageService:
+              widget.avatarStorageService ?? SupabaseAvatarStorageService(),
         ),
       ),
     );

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/profile_avatar.dart';
 import '../models/user_profile.dart';
+import '../services/avatar_storage_service.dart';
+import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../widgets/profile_avatar_view.dart';
 
@@ -10,12 +12,16 @@ class EditProfileScreen extends StatefulWidget {
     required this.userId,
     required this.profile,
     required this.profileService,
+    required this.profileImagePicker,
+    required this.avatarStorageService,
     super.key,
   });
 
   final String userId;
   final UserProfile profile;
   final ProfileService profileService;
+  final ProfileImagePicker profileImagePicker;
+  final AvatarStorageService avatarStorageService;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -25,6 +31,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   String? _selectedAvatarKey;
+  String? _avatarUrl;
+  PickedProfileImage? _selectedPhoto;
   bool _isSaving = false;
 
   @override
@@ -32,6 +40,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.profile.name);
     _selectedAvatarKey = widget.profile.avatarKey;
+    _avatarUrl = widget.profile.avatarUrl;
+  }
+
+  Future<void> _pickPhoto() async {
+    try {
+      final photo = await widget.profileImagePicker.pickFromGallery();
+      if (photo == null || !mounted) {
+        return;
+      }
+
+      setState(() {
+        _selectedPhoto = photo;
+        _selectedAvatarKey = null;
+        _avatarUrl = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo elegir la foto. Inténtalo de nuevo.');
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -47,25 +81,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _isSaving = true);
     try {
+      var avatarUrl = _avatarUrl;
+      final selectedPhoto = _selectedPhoto;
+      if (selectedPhoto != null) {
+        avatarUrl = await widget.avatarStorageService.uploadAvatar(
+          userId: widget.userId,
+          image: selectedPhoto,
+        );
+      }
+
       final profile = await widget.profileService.updateProfile(
         userId: widget.userId,
         name: _nameController.text.trim(),
         avatarKey: _selectedAvatarKey,
+        avatarUrl: avatarUrl,
       );
       if (mounted) {
         Navigator.of(context).pop(profile);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No se pudo guardar el nombre. Inténtalo de nuevo.',
-              ),
-            ),
-          );
+        _showMessage('No se pudo guardar el perfil. Inténtalo de nuevo.');
       }
     } finally {
       if (mounted) {
@@ -117,6 +153,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 16),
+                    _AvatarPreview(
+                      photo: _selectedPhoto,
+                      avatarKey: _selectedAvatarKey,
+                      avatarUrl: _avatarUrl,
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      key: const ValueKey('pick_profile_photo'),
+                      onPressed: _isSaving ? null : _pickPhoto,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Elegir foto de la galería'),
+                    ),
+                    const SizedBox(height: 20),
                     GridView.count(
                       crossAxisCount: 4,
                       crossAxisSpacing: 12,
@@ -132,6 +181,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             onSelected: () {
                               setState(() {
                                 _selectedAvatarKey = avatar.key;
+                                _selectedPhoto = null;
+                                _avatarUrl = null;
                               });
                             },
                           ),
@@ -146,6 +197,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AvatarPreview extends StatelessWidget {
+  const _AvatarPreview({
+    required this.photo,
+    required this.avatarKey,
+    required this.avatarUrl,
+  });
+
+  final PickedProfileImage? photo;
+  final String? avatarKey;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedPhoto = photo;
+    if (selectedPhoto == null) {
+      return ProfileAvatarView(
+        key: const ValueKey('edit_profile_avatar_preview'),
+        avatarKey: avatarKey,
+        avatarUrl: avatarUrl,
+        radius: 44,
+      );
+    }
+
+    return Center(
+      child: SizedBox.square(
+        dimension: 88,
+        child: ClipOval(
+          child: Image.memory(
+            selectedPhoto.bytes,
+            key: const ValueKey('selected_profile_photo_preview'),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                const ProfileAvatarView(radius: 44),
           ),
         ),
       ),

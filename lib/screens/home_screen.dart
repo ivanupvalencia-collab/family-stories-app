@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
 import '../services/auth_service.dart';
+import '../services/avatar_storage_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
+import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import 'add_family_member_screen.dart';
 import 'family_member_screen.dart';
@@ -13,6 +15,8 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     this.authService,
     this.profileService,
+    this.profileImagePicker,
+    this.avatarStorageService,
     this.familyMemberStorage,
     this.familyStoryStorage,
     super.key,
@@ -20,6 +24,8 @@ class HomeScreen extends StatefulWidget {
 
   final AuthService? authService;
   final ProfileService? profileService;
+  final ProfileImagePicker? profileImagePicker;
+  final AvatarStorageService? avatarStorageService;
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyStoryStorage? familyStoryStorage;
 
@@ -112,6 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => ProfileScreen(
           authService: widget.authService,
           profileService: widget.profileService,
+          profileImagePicker: widget.profileImagePicker,
+          avatarStorageService: widget.avatarStorageService,
         ),
       ),
     );

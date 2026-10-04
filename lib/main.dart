@@ -3,8 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/home_screen.dart';
 import 'services/auth_service.dart';
+import 'services/avatar_storage_service.dart';
 import 'services/family_member_storage.dart';
 import 'services/family_story_storage.dart';
+import 'services/profile_image_picker.dart';
 import 'services/profile_service.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
@@ -25,6 +27,8 @@ class FamilyStoriesApp extends StatelessWidget {
   const FamilyStoriesApp({
     this.authService,
     this.profileService,
+    this.profileImagePicker,
+    this.avatarStorageService,
     this.familyMemberStorage,
     this.familyStoryStorage,
     super.key,
@@ -32,6 +36,8 @@ class FamilyStoriesApp extends StatelessWidget {
 
   final AuthService? authService;
   final ProfileService? profileService;
+  final ProfileImagePicker? profileImagePicker;
+  final AvatarStorageService? avatarStorageService;
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyStoryStorage? familyStoryStorage;
 
@@ -47,6 +53,8 @@ class FamilyStoriesApp extends StatelessWidget {
       home: HomeScreen(
         authService: authService,
         profileService: profileService,
+        profileImagePicker: profileImagePicker,
+        avatarStorageService: avatarStorageService,
         familyMemberStorage: familyMemberStorage,
         familyStoryStorage: familyStoryStorage,
       ),
