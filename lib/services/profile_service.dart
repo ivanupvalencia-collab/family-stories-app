@@ -5,9 +5,10 @@ import '../models/user_profile.dart';
 abstract class ProfileService {
   Future<UserProfile> loadForUser(String userId);
 
-  Future<UserProfile> updateName({
+  Future<UserProfile> updateProfile({
     required String userId,
     required String name,
+    required String? avatarKey,
   });
 }
 
@@ -29,13 +30,14 @@ class SupabaseProfileService implements ProfileService {
   }
 
   @override
-  Future<UserProfile> updateName({
+  Future<UserProfile> updateProfile({
     required String userId,
     required String name,
+    required String? avatarKey,
   }) async {
     final data = await _client
         .from('profiles')
-        .update({'name': name})
+        .update({'name': name, 'avatar_key': avatarKey})
         .eq('id', userId)
         .select('id, name, avatar_key, avatar_url, created_at')
         .single();

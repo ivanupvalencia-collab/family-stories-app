@@ -11,6 +11,7 @@ import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
 import 'package:family_stories_app/services/profile_service.dart';
+import 'package:family_stories_app/widgets/profile_avatar_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -143,8 +144,68 @@ void main() {
 
     expect(profileService.updatedUserIds, ['google-user-id']);
     expect(profileService.updatedNames, ['María López']);
+    expect(profileService.updatedAvatarKeys, [null]);
     expect(find.text('María López'), findsOneWidget);
     expect(find.text('Ana García'), findsNothing);
+  });
+
+  testWidgets('selecciona, guarda y muestra un avatar predefinido', (
+    tester,
+  ) async {
+    final profileService = FakeProfileService();
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        profileService: profileService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Avatar'), findsOneWidget);
+    final gridImages = tester.widgetList<Image>(find.byType(Image)).toList();
+    expect(gridImages, hasLength(4));
+    expect(gridImages.every((image) => image.fit == BoxFit.contain), isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('avatar_option_avatar_03')));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('selected_avatar_avatar_03')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(profileService.updatedAvatarKeys, ['avatar_03']);
+    final avatarView = tester.widget<ProfileAvatarView>(
+      find.byKey(const ValueKey('profile_avatar')),
+    );
+    expect(avatarView.avatarKey, 'avatar_03');
+
+    final avatarClip = find.descendant(
+      of: find.byKey(const ValueKey('profile_avatar')),
+      matching: find.byType(ClipOval),
+    );
+    expect(tester.getSize(avatarClip), const Size.square(96));
+
+    final avatarImage = tester.widget<Image>(
+      find.descendant(
+        of: find.byKey(const ValueKey('profile_avatar')),
+        matching: find.byType(Image),
+      ),
+    );
+    expect(avatarImage.fit, BoxFit.contain);
+    expect(
+      (avatarImage.image as AssetImage).assetName,
+      'assets/avatars/avatar_03.png',
+    );
   });
 
   testWidgets('valida el nombre y conserva el texto si falla el guardado', (
@@ -175,6 +236,7 @@ void main() {
     expect(profileService.updatedNames, isEmpty);
 
     await tester.enterText(find.byType(TextFormField), 'Nombre conservado');
+    await tester.tap(find.byKey(const ValueKey('avatar_option_avatar_04')));
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 
@@ -186,6 +248,10 @@ void main() {
     expect(
       tester.widget<TextFormField>(find.byType(TextFormField)).controller!.text,
       'Nombre conservado',
+    );
+    expect(
+      find.byKey(const ValueKey('selected_avatar_avatar_04')),
+      findsOneWidget,
     );
   });
 
@@ -568,6 +634,7 @@ class FakeProfileService implements ProfileService {
   final List<String> requestedUserIds = [];
   final List<String> updatedUserIds = [];
   final List<String> updatedNames = [];
+  final List<String?> updatedAvatarKeys = [];
 
   @override
   Future<UserProfile> loadForUser(String userId) async {
@@ -579,16 +646,18 @@ class FakeProfileService implements ProfileService {
   }
 
   @override
-  Future<UserProfile> updateName({
+  Future<UserProfile> updateProfile({
     required String userId,
     required String name,
+    required String? avatarKey,
   }) async {
     updatedUserIds.add(userId);
     updatedNames.add(name);
+    updatedAvatarKeys.add(avatarKey);
     if (updateError != null) {
       throw updateError!;
     }
-    profile = profile.copyWith(name: name);
+    profile = profile.copyWith(name: name, avatarKey: avatarKey);
     return profile;
   }
 }

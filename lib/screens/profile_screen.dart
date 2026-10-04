@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
+import '../widgets/profile_avatar_view.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -162,22 +163,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _buildAvatar(ThemeData theme, UserProfile? profile) {
-    final photoUrl = profile?.avatarUrl;
-
-    return CircleAvatar(
-      radius: 44,
-      backgroundColor: theme.colorScheme.primaryContainer,
-      foregroundImage: photoUrl == null ? null : NetworkImage(photoUrl),
-      onForegroundImageError: photoUrl == null ? null : (_, _) {},
-      child: Icon(
-        profile == null ? Icons.person_outline : Icons.person,
-        size: 48,
-        color: theme.colorScheme.onPrimaryContainer,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -196,7 +181,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildAvatar(theme, profile),
+                  ProfileAvatarView(
+                    key: const ValueKey('profile_avatar'),
+                    avatarKey: profile?.avatarKey,
+                    avatarUrl: profile?.avatarUrl,
+                  ),
                   const SizedBox(height: 24),
                   if (user != null && _isProfileLoading)
                     const Center(

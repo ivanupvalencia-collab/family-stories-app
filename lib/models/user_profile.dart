@@ -25,11 +25,11 @@ class UserProfile {
     );
   }
 
-  UserProfile copyWith({String? name}) {
+  UserProfile copyWith({String? name, String? avatarKey}) {
     return UserProfile(
       id: id,
       name: name ?? this.name,
-      avatarKey: avatarKey,
+      avatarKey: avatarKey ?? this.avatarKey,
       avatarUrl: avatarUrl,
       createdAt: createdAt,
     );
