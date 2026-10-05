@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -61,25 +60,7 @@ class DeviceAudioAnswerService implements AudioAnswerService {
   }
 
   @override
-  Future<void> play(String path) async {
-    if (kDebugMode) {
-      debugPrint(
-        '[FamilyStoriesRemoteAudio][audioplayers] play path=$path',
-      );
-    }
-    try {
-      await _player.play(DeviceFileSource(path));
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        debugPrint(
-          '[FamilyStoriesRemoteAudio][audioplayers] '
-          'Failure type=${error.runtimeType} message=$error',
-        );
-        debugPrintStack(stackTrace: stackTrace);
-      }
-      rethrow;
-    }
-  }
+  Future<void> play(String path) => _player.play(DeviceFileSource(path));
 
   @override
   Future<void> pause() => _player.pause();

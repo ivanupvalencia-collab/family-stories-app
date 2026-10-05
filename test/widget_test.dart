@@ -1998,6 +1998,39 @@ void main() {
     expect(storyService.requestedAudioStoryIds, [story.id]);
     expect(audioService.playedPaths, [storyService.resolvedAudioPath]);
     expect(find.text('Pausar'), findsOneWidget);
+
+    audioService._playbackCompleteController.add(null);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reproducir historia'));
+    await tester.pumpAndSettle();
+    expect(storyService.requestedAudioStoryIds, [story.id, story.id]);
+    expect(audioService.playedPaths, [
+      storyService.resolvedAudioPath,
+      storyService.resolvedAudioPath,
+    ]);
+  });
+
+  testWidgets('reproduce una historia local sin servicio remoto', (
+    tester,
+  ) async {
+    final audioService = FakeAudioAnswerService();
+    final story = FamilyStory(
+      id: 'local-story',
+      familyMemberId: 'local-family',
+      question: 'Pregunta local',
+      audioPath: '/persistent/local-story.m4a',
+      duration: const Duration(seconds: 12),
+      createdAt: DateTime.utc(2026, 10, 4),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StoryScreen(story: story, audioService: audioService),
+      ),
+    );
+    await tester.tap(find.text('Reproducir historia'));
+    await tester.pumpAndSettle();
+    expect(audioService.playedPaths, [story.audioPath]);
+    expect(find.text('Pausar'), findsOneWidget);
   });
 
   testWidgets('muestra un error recuperable al cargar historias remotas', (

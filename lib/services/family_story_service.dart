@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,17 +20,7 @@ class SupabaseFamilyStoryService implements FamilyStoryService {
   static const audioBucketName = 'story-audio';
 
   final SupabaseClient _client;
-  final Map<String, String> _audioCache = {};
-
-  void _debugLog(String phase, String message, [StackTrace? stackTrace]) {
-    if (!kDebugMode) {
-      return;
-    }
-    debugPrint('[FamilyStoriesRemoteAudio][$phase] $message');
-    if (stackTrace != null) {
-      debugPrintStack(stackTrace: stackTrace);
-    }
-  }
+  final Map<String, ({String path, int size})> _audioCache = {};
 
   @override
   Future<List<FamilyStory>> loadForFamily(String familyMemberId) async {
@@ -48,70 +37,47 @@ class SupabaseFamilyStoryService implements FamilyStoryService {
 
   @override
   Future<String> localAudioPathFor(FamilyStory story) async {
-    _debugLog('request', 'audio_path=${story.audioPath}');
-    final cachedPath = _audioCache[story.audioPath];
-    if (cachedPath != null && await File(cachedPath).exists()) {
-      final cachedSize = await File(cachedPath).length();
-      _debugLog(
-        'cache',
-        'Reusing temporary file path=$cachedPath bytes=$cachedSize',
-      );
-      return cachedPath;
+    final cached = _audioCache[story.audioPath];
+    if (cached != null) {
+      try {
+        final file = File(cached.path);
+        final size = await file.exists() ? await file.length() : 0;
+        if (size > 0 && size == cached.size) {
+          return cached.path;
+        }
+      } on FileSystemException {
+        // An unreadable cache entry must be downloaded again.
+      }
+      _audioCache.remove(story.audioPath);
     }
 
-    late final List<int> bytes;
-    _debugLog(
-      'storage_download',
-      'Starting bucket=$audioBucketName path=${story.audioPath}',
+    final bytes = await _client.storage
+        .from(audioBucketName)
+        .download(story.audioPath);
+    if (bytes.isEmpty) {
+      throw StateError('Storage returned an empty audio file.');
+    }
+
+    final temporaryDirectory = await getTemporaryDirectory();
+    final cacheDirectory = Directory(
+      '${temporaryDirectory.path}${Platform.pathSeparator}remote_story_audio',
     );
-    try {
-      bytes = await _client.storage
-          .from(audioBucketName)
-          .download(story.audioPath);
-      _debugLog(
-        'storage_download',
-        'Success path=${story.audioPath} bytes=${bytes.length}',
-      );
-    } catch (error, stackTrace) {
-      _debugLog(
-        'storage_download',
-        'Failure type=${error.runtimeType} message=$error',
-        stackTrace,
-      );
-      rethrow;
+    await cacheDirectory.create(recursive: true);
+    final file = File(
+      '${cacheDirectory.path}${Platform.pathSeparator}${story.id}.m4a',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    final fileSize = await file.length();
+    if (fileSize != bytes.length) {
+      throw StateError('Temporary audio size differs from downloaded bytes.');
     }
-
-    try {
-      final temporaryDirectory = await getTemporaryDirectory();
-      final cacheDirectory = Directory(
-        '${temporaryDirectory.path}${Platform.pathSeparator}remote_story_audio',
-      );
-      await cacheDirectory.create(recursive: true);
-      final file = File(
-        '${cacheDirectory.path}${Platform.pathSeparator}${story.id}.m4a',
-      );
-      _debugLog('temporary_file', 'Writing path=${file.path}');
-      await file.writeAsBytes(bytes, flush: true);
-      final fileSize = await file.length();
-      _debugLog(
-        'temporary_file',
-        'Ready path=${file.path} bytes=$fileSize',
-      );
-      _audioCache[story.audioPath] = file.path;
-      return file.path;
-    } catch (error, stackTrace) {
-      _debugLog(
-        'temporary_file',
-        'Failure type=${error.runtimeType} message=$error',
-        stackTrace,
-      );
-      rethrow;
-    }
+    _audioCache[story.audioPath] = (path: file.path, size: fileSize);
+    return file.path;
   }
 
   @override
   Future<void> clearAudioCache() async {
-    final cachedPaths = _audioCache.values.toSet();
+    final cachedPaths = _audioCache.values.map((entry) => entry.path).toSet();
     _audioCache.clear();
     for (final path in cachedPaths) {
       try {
