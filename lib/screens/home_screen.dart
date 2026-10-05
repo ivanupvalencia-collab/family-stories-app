@@ -16,6 +16,7 @@ import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../services/question_request_service.dart';
 import 'add_family_member_screen.dart';
+import 'answer_screen.dart';
 import 'family_member_screen.dart';
 import 'profile_screen.dart';
 import 'question_request_screen.dart';
@@ -52,7 +53,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final AuthService _authService;
   late final FamilyMemberStorage _familyMemberStorage;
   late final FamilyMemberService _familyMemberService;
@@ -68,6 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _questionRealtimeDebounce;
   final List<FamilyMember> _familyMembers = [];
   final List<QuestionRequest> _questionRequests = [];
+  final List<QuestionRequest> _answeredRequests = [];
+  bool _answersLoading = false;
+  bool _answersLoadFailed = false;
+  int _answersLoadRequest = 0;
   AuthUser? _user;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -80,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _authService = widget.authService ?? SupabaseGoogleAuthService();
     _familyMemberStorage =
         widget.familyMemberStorage ?? SharedPreferencesFamilyMemberStorage();
@@ -97,18 +103,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _user = _authService.currentUser;
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
     _loadFamilyMembers();
-    _loadQuestionRequests();
+    _loadReceivedRequests();
     _replaceQuestionRealtimeSubscription(_user);
     unawaited(_preloadProfile(_user));
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _questionRealtimeGeneration++;
     _questionRealtimeDebounce?.cancel();
     unawaited(_questionRealtimeSubscription?.cancel());
     _authSubscription.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      unawaited(_refreshHome());
+    }
   }
 
   void _applyAuthUser(AuthUser? user) {
@@ -124,9 +138,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _user = user;
       _familyMembers.clear();
       _questionRequests.clear();
+      _answeredRequests.clear();
     });
     _loadFamilyMembers();
-    _loadQuestionRequests();
+    _loadReceivedRequests();
     _replaceQuestionRealtimeSubscription(user);
     unawaited(_preloadProfile(user));
   }
@@ -179,14 +194,14 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted &&
           generation == _questionRealtimeGeneration &&
           _user?.id == userId) {
-        unawaited(_loadQuestionRequests());
+        unawaited(_loadReceivedRequests());
       }
     });
   }
 
   Future<void> _refreshHome() async {
     _questionRealtimeDebounce?.cancel();
-    await Future.wait([_loadFamilyMembers(), _loadQuestionRequests()]);
+    await Future.wait([_loadFamilyMembers(), _loadReceivedRequests()]);
   }
 
   Future<void> _preloadProfile(AuthUser? user) async {
@@ -232,6 +247,60 @@ class _HomeScreenState extends State<HomeScreen> {
         _loadFailed = true;
       });
     }
+  }
+
+  Future<void> _loadReceivedRequests() async {
+    await Future.wait([_loadQuestionRequests(), _loadAnsweredRequests()]);
+  }
+
+  Future<void> _loadAnsweredRequests() async {
+    final request = ++_answersLoadRequest;
+    final user = _user;
+    setState(() {
+      _answeredRequests.clear();
+      _answersLoading = user != null;
+      _answersLoadFailed = false;
+    });
+    if (user == null) return;
+    try {
+      final answers = await _questionRequestService.loadAnsweredForRecipient(
+        user.id,
+      );
+      if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
+        return;
+      }
+      setState(() {
+        _answeredRequests.addAll(answers);
+        _answersLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
+        return;
+      }
+      setState(() {
+        _answersLoading = false;
+        _answersLoadFailed = true;
+      });
+    }
+  }
+
+  void _openAnswer(QuestionRequest request) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AnswerScreen(
+          questionRequest: request,
+          questionRequestService: _questionRequestService,
+          familyStoryService: _familyStoryService,
+          authService: _authService,
+        ),
+      ),
+    );
+  }
+
+  String _answerDate(DateTime date) {
+    final local = date.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/${local.year}';
   }
 
   Future<void> _loadQuestionRequests() async {
@@ -371,7 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (sent == true && mounted) {
       _showMessage('Respuesta enviada');
-      await _loadQuestionRequests();
+      await _loadReceivedRequests();
     }
   }
 
@@ -471,6 +540,47 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             const SizedBox(height: 32),
                           ],
+                          if (_user != null) ...[
+                            Text(
+                              'Tus respuestas',
+                              style: textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            if (_answersLoading)
+                              const Center(child: CircularProgressIndicator())
+                            else if (_answersLoadFailed)
+                              _QuestionRequestsLoadError(
+                                message:
+                                    'No se pudieron cargar tus respuestas.',
+                                onRetry: _loadAnsweredRequests,
+                              )
+                            else if (_answeredRequests.isEmpty)
+                              const Text(
+                                'Todavía no has enviado ninguna respuesta.',
+                              )
+                            else
+                              ..._answeredRequests.map(
+                                (answer) => Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading: const CircleAvatar(
+                                      child: Icon(Icons.headphones_outlined),
+                                    ),
+                                    title: Text(answer.questionText),
+                                    subtitle: answer.answeredAt == null
+                                        ? null
+                                        : Text(
+                                            'Respondida el ${_answerDate(answer.answeredAt!)}',
+                                          ),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => _openAnswer(answer),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 32),
+                          ],
                           Text(
                             'Tus familiares',
                             style: textTheme.headlineSmall?.copyWith(
@@ -560,7 +670,12 @@ class _FamilyMembersLoadError extends StatelessWidget {
 }
 
 class _QuestionRequestsLoadError extends StatelessWidget {
-  const _QuestionRequestsLoadError({required this.onRetry});
+  const _QuestionRequestsLoadError({
+    required this.onRetry,
+    this.message = 'No se pudieron cargar tus preguntas.',
+  });
+
+  final String message;
 
   final VoidCallback onRetry;
 
@@ -574,7 +689,7 @@ class _QuestionRequestsLoadError extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              'No se pudieron cargar tus preguntas.',
+              message,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.error,

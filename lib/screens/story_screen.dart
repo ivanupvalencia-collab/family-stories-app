@@ -75,6 +75,7 @@ class _StoryScreenState extends State<StoryScreen> {
                 : await widget.remoteStoryService!.localAudioPathFor(
                     widget.story,
                   );
+            if (!mounted) return;
             _resolvedAudioPath = audioPath;
           }
           await _audioService.play(audioPath);

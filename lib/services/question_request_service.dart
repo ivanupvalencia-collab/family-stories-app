@@ -4,10 +4,15 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/family_story.dart';
 import '../models/question_request.dart';
 
 abstract class QuestionRequestService {
   Future<List<QuestionRequest>> loadPendingForRecipient(String recipientId);
+
+  Future<List<QuestionRequest>> loadAnsweredForRecipient(String recipientId);
+
+  Future<FamilyStory?> loadAnswerStory(String questionRequestId);
 
   Stream<void> watchChangesForRecipient(String recipientId);
 
@@ -103,6 +108,35 @@ class SupabaseQuestionRequestService implements QuestionRequestService {
         .order('created_at', ascending: false);
 
     return data.map(QuestionRequest.fromJson).toList();
+  }
+
+  @override
+  Future<List<QuestionRequest>> loadAnsweredForRecipient(
+    String recipientId,
+  ) async {
+    final data = await _client
+        .from('question_requests')
+        .select(
+          'id, sender_id, recipient_id, family_member_id, question_text, status, created_at, answered_at',
+        )
+        .eq('recipient_id', recipientId)
+        .eq('status', 'answered')
+        .order('answered_at', ascending: false, nullsFirst: false)
+        .order('created_at', ascending: false);
+    return data.map(QuestionRequest.fromJson).toList();
+  }
+
+  @override
+  Future<FamilyStory?> loadAnswerStory(String questionRequestId) async {
+    // Requires the manually installed get_my_answer_story RPC. Do not query
+    // stories directly: its owner-oriented RLS does not grant recipient access.
+    final data = await _client.rpc(
+      'get_my_answer_story',
+      params: {'p_question_request_id': questionRequestId},
+    );
+    return data == null
+        ? null
+        : FamilyStory.fromSupabaseJson(Map<String, dynamic>.from(data as Map));
   }
 
   @override
