@@ -93,9 +93,9 @@ Widget _profile({
 );
 
 Future<void> _choosePhoto(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('Foto del familiar'));
+  await tester.tap(find.byTooltip('Opciones del ser querido'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Elegir foto de la galería'));
+  await tester.tap(find.text('Cambiar foto'));
   await tester.pumpAndSettle();
 }
 
@@ -305,7 +305,7 @@ void main() {
         expect(view.member.photoPath, 'own/member/1.png');
         expect(view.member.linkedAccountId, 'linked-account');
         expect(photos.loadedPaths.last, 'own/member/1.png');
-        await tester.tap(find.byTooltip('Foto del familiar'));
+        await tester.tap(find.byTooltip('Opciones del ser querido'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Eliminar foto'));
         await tester.pumpAndSettle();
@@ -315,7 +315,7 @@ void main() {
         expect(view.member.photoPath, isNull);
         expect(view.member.linkedAccountId, 'linked-account');
         expect(photos.savedImages.last, isNull);
-        expect(find.byIcon(Icons.person_outline), findsOneWidget);
+        expect(find.text('P'), findsOneWidget);
         expect(
           (remote ? members.members : storage.members).single.photoPath,
           isNull,
@@ -422,7 +422,7 @@ void main() {
     );
     expect(
       tester
-          .widget<PopupMenuButton<bool>>(find.byType(PopupMenuButton<bool>))
+          .widget<PopupMenuButton<String>>(find.byType(PopupMenuButton<String>))
           .enabled,
       isFalse,
     );

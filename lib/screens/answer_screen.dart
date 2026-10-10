@@ -8,6 +8,8 @@ import '../services/audio_answer_service.dart';
 import '../services/auth_service.dart';
 import '../services/family_story_service.dart';
 import '../services/question_request_service.dart';
+import '../services/story_photo_service.dart';
+import '../services/profile_image_picker.dart';
 import 'story_screen.dart';
 
 class AnswerScreen extends StatefulWidget {
@@ -17,6 +19,8 @@ class AnswerScreen extends StatefulWidget {
     required this.familyStoryService,
     required this.authService,
     this.audioService,
+    this.photoService,
+    this.imagePicker,
     super.key,
   });
 
@@ -25,6 +29,8 @@ class AnswerScreen extends StatefulWidget {
   final FamilyStoryService familyStoryService;
   final AuthService authService;
   final AudioAnswerService? audioService;
+  final StoryPhotoService? photoService;
+  final ProfileImagePicker? imagePicker;
 
   @override
   State<AnswerScreen> createState() => _AnswerScreenState();
@@ -91,6 +97,8 @@ class _AnswerScreenState extends State<AnswerScreen> {
         story: story,
         remoteStoryService: widget.familyStoryService,
         audioService: widget.audioService,
+        photoService: widget.photoService,
+        imagePicker: widget.imagePicker,
       );
     }
     return Scaffold(

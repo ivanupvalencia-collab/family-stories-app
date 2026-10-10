@@ -10,34 +10,27 @@ import 'family_member_service.dart';
 import 'family_member_storage.dart';
 import 'profile_image_picker.dart';
 import 'remote_family_photo_disk_cache.dart';
+import 'private_photo_service.dart';
 
-abstract class FamilyMemberPhotoService {
+abstract class FamilyMemberPhotoService
+    extends PrivatePhotoService<FamilyMember> {
+  @override
   Uint8List? cachedPhoto(FamilyMember member) => null;
+  @override
   Listenable? get cacheChanges => null;
   Future<void> warmCachedPhotos(List<FamilyMember> members) async {}
   Future<void> retainPhotos(List<FamilyMember> members) async {}
+  Future<void> forgetPhotos(String account, Iterable<String> paths) async {}
 
+  @override
   Future<Uint8List> load(FamilyMember member);
 
   // null removes the photo. Commit the reference before deleting the old file.
+  @override
   Future<FamilyMember> save(FamilyMember member, PickedProfileImage? image);
 }
 
-String _extension(PickedProfileImage image) {
-  if (image.bytes.isEmpty || image.bytes.length > 10 * 1024 * 1024) {
-    throw const FormatException(
-      'Photo must contain bytes and be at most 10 MB.',
-    );
-  }
-  return switch (image.contentType) {
-    'image/jpeg' => 'jpg',
-    'image/png' => 'png',
-    'image/webp' => 'webp',
-    'image/heic' => 'heic',
-    'image/heif' => 'heif',
-    _ => throw const FormatException('Unsupported image type.'),
-  };
-}
+String _extension(PickedProfileImage image) => privatePhotoExtension(image);
 
 bool _safeSegment(String value) => RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(value);
 
@@ -126,8 +119,8 @@ class _RemotePhotoCache extends ChangeNotifier {
       final next = state.session?.user.id;
       if (next != account || state.event == AuthChangeEvent.signedOut) {
         reset(next);
-        notifyListeners();
       }
+      notifyListeners();
     });
   }
 
@@ -184,6 +177,16 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
 
   @override
   Listenable get cacheChanges => _cache;
+
+  @override
+  Future<void> forgetPhotos(String account, Iterable<String> paths) async {
+    final cache = _cache;
+    for (final path in paths) {
+      if (cache.account == account) cache.entries.remove(path);
+      await _disk.remove(_backend, account, path);
+    }
+    cache.changed();
+  }
 
   @override
   Uint8List? cachedPhoto(FamilyMember member) {
@@ -286,6 +289,8 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
         }
         if (bytes.isEmpty) throw StateError('Empty photo download.');
         entry.bytes = bytes;
+        entry.pending = null;
+        cache.changed();
         return bytes;
       } catch (_) {
         if (cache.entries[path] == entry) cache.entries.remove(path);

@@ -10,6 +10,7 @@ class FamilyStory {
     required this.createdAt,
     this.questionRequestId,
     this.recordedBy,
+    this.photoPath,
   });
 
   factory FamilyStory.fromJson(Map<String, dynamic> json) {
@@ -22,6 +23,7 @@ class FamilyStory {
       createdAt: DateTime.parse(json['createdAt'] as String),
       questionRequestId: json['questionRequestId'] as String?,
       recordedBy: json['recordedBy'] as String?,
+      photoPath: json['photoPath'] as String?,
     );
   }
 
@@ -35,6 +37,7 @@ class FamilyStory {
       createdAt: DateTime.parse(json['created_at'] as String),
       questionRequestId: json['question_request_id'] as String?,
       recordedBy: json['recorded_by'] as String?,
+      photoPath: json['photo_path'] as String?,
     );
   }
 
@@ -46,6 +49,19 @@ class FamilyStory {
   final DateTime createdAt;
   final String? questionRequestId;
   final String? recordedBy;
+  final String? photoPath;
+
+  FamilyStory withPhotoPath(String? path) => FamilyStory(
+    id: id,
+    familyMemberId: familyMemberId,
+    question: question,
+    audioPath: audioPath,
+    duration: duration,
+    createdAt: createdAt,
+    questionRequestId: questionRequestId,
+    recordedBy: recordedBy,
+    photoPath: path,
+  );
 
   static String createId() => generateLocalId();
 
@@ -59,6 +75,7 @@ class FamilyStory {
       'createdAt': createdAt.toIso8601String(),
       'questionRequestId': questionRequestId,
       'recordedBy': recordedBy,
+      'photoPath': photoPath,
     };
   }
 }

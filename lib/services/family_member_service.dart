@@ -3,6 +3,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/family_member.dart';
 import 'remote_family_member_cache.dart';
 
+abstract interface class FamilyMemberInfoEditor {
+  Future<FamilyMember> editInformation({
+    required String ownerId,
+    required String familyMemberId,
+    required String name,
+    required String relationship,
+  });
+}
+
+abstract interface class FamilyMemberCacheRemover {
+  Future<void> forgetMember(String ownerId, String familyMemberId);
+}
+
 abstract class FamilyMemberService {
   Future<List<FamilyMember>> loadForOwner(String ownerId);
 
@@ -26,7 +39,11 @@ abstract class FamilyMemberService {
 }
 
 class SupabaseFamilyMemberService
-    implements FamilyMemberService, CachedFamilyMemberService {
+    implements
+        FamilyMemberService,
+        CachedFamilyMemberService,
+        FamilyMemberInfoEditor,
+        FamilyMemberCacheRemover {
   SupabaseFamilyMemberService({
     SupabaseClient? client,
     RemoteFamilyMemberCache? cache,
@@ -49,6 +66,36 @@ class SupabaseFamilyMemberService
   int _generation = 0;
   int _loadSequence = 0;
   String get _backend => _client.storage.url;
+
+  @override
+  Future<void> forgetMember(String ownerId, String familyMemberId) =>
+      _cache.remove(_backend, ownerId, familyMemberId);
+
+  @override
+  Future<FamilyMember> editInformation({
+    required String ownerId,
+    required String familyMemberId,
+    required String name,
+    required String relationship,
+  }) async {
+    final generation = _generation;
+    _requireOwner(ownerId, generation);
+    final data = await _client.rpc(
+      'edit_family_member_info',
+      params: {
+        'p_family_member_id': familyMemberId,
+        'p_name': name,
+        'p_relationship': relationship,
+      },
+    );
+    _requireOwner(ownerId, generation);
+    final member = FamilyMember.fromSupabaseJson(
+      Map<String, dynamic>.from(data as Map),
+    );
+    await _cache.upsert(_backend, ownerId, member);
+    _requireOwner(ownerId, generation);
+    return member;
+  }
 
   void _requireOwner(String ownerId, int generation) {
     if (_client.auth.currentUser?.id != ownerId || generation != _generation) {
@@ -99,6 +146,7 @@ class SupabaseFamilyMemberService
     required String familyMemberId,
   }) async {
     final generation = _generation;
+    final revision = _cache.revision;
     _requireOwner(ownerId, generation);
     final data = await _client
         .from('family_members')
@@ -108,6 +156,14 @@ class SupabaseFamilyMemberService
         .maybeSingle();
 
     _requireOwner(ownerId, generation);
+    if (revision != _cache.revision) {
+      final latest = await _cache.read(_backend, ownerId);
+      _requireOwner(ownerId, generation);
+      for (final member in latest ?? <FamilyMember>[]) {
+        if (member.id == familyMemberId) return member;
+      }
+      return null;
+    }
     final member = data == null ? null : FamilyMember.fromSupabaseJson(data);
     if (member == null) {
       await _cache.remove(_backend, ownerId, familyMemberId);

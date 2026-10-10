@@ -8,10 +8,15 @@ import 'package:path_provider/path_provider.dart';
 // App-private cache, never the guest's original photos. Object paths are
 // validated by the photo service before reaching this class.
 class RemoteFamilyPhotoDiskCache {
-  RemoteFamilyPhotoDiskCache({Future<Directory> Function()? directoryProvider})
-    : _directoryProvider = directoryProvider ?? getApplicationSupportDirectory;
+  RemoteFamilyPhotoDiskCache({
+    Future<Directory> Function()? directoryProvider,
+    this.directoryName = 'remote_family_photos_v1',
+    this.allowForeignUploader = false,
+  }) : _directoryProvider = directoryProvider ?? getApplicationSupportDirectory;
 
   final Future<Directory> Function() _directoryProvider;
+  final String directoryName;
+  final bool allowForeignUploader;
   Future<void> _writes = Future.value();
 
   Future<Directory> _root(String backend, String owner) async {
@@ -20,7 +25,7 @@ class RemoteFamilyPhotoDiskCache {
     return Directory(
       [
         support.path,
-        'remote_family_photos_v1',
+        directoryName,
         namespace,
         owner,
       ].join(Platform.pathSeparator),
@@ -30,7 +35,8 @@ class RemoteFamilyPhotoDiskCache {
   Future<File> _file(String backend, String owner, String path) async {
     final parts = path.split('/');
     if (parts.length != 3 ||
-        parts.first != owner ||
+        (!allowForeignUploader && parts.first != owner) ||
+        !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(parts.first) ||
         !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(owner) ||
         !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(parts[1]) ||
         !RegExp(r'^[a-zA-Z0-9_-]+\.(jpg|png|webp|heic|heif)$')
@@ -38,7 +44,14 @@ class RemoteFamilyPhotoDiskCache {
       throw const FormatException('Invalid cache path.');
     }
     final root = await _root(backend, owner);
-    return File([root.path, parts[1], parts[2]].join(Platform.pathSeparator));
+    return File(
+      [
+        root.path,
+        if (allowForeignUploader) parts.first,
+        parts[1],
+        parts[2],
+      ].join(Platform.pathSeparator),
+    );
   }
 
   static Future<void> validate(Uint8List bytes) async {

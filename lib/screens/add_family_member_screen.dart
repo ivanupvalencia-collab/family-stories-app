@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
+import '../models/family_relationships.dart';
 import '../services/profile_image_picker.dart';
 import '../services/family_member_photo_service.dart';
 import '../widgets/family_member_photo_view.dart';
@@ -26,15 +27,7 @@ class AddFamilyMemberScreen extends StatefulWidget {
 }
 
 class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
-  static const _relationships = [
-    'Abuelo/a',
-    'Padre/Madre',
-    'Hermano/a',
-    'Pareja',
-    'Hijo/a',
-    'Nieto/a',
-    'Otro',
-  ];
+  static const _relationships = familyRelationships;
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();

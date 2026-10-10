@@ -206,7 +206,7 @@ void main() {
       await tester.tap(find.text('Pepe'));
       await tester.pumpAndSettle();
       expect(find.byType(FamilyMemberScreen), findsOneWidget);
-      await tester.pageBack();
+      await tester.tap(find.byTooltip('Atrás'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Preguntas'));
       await tester.pumpAndSettle();

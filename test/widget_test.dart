@@ -1345,14 +1345,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Conoce su historia'), findsOneWidget);
-    expect(find.text('Responder una pregunta'), findsOneWidget);
+    expect(find.text('Ver todas las preguntas'), findsOneWidget);
     expect(find.text('Sus historias'), findsOneWidget);
     expect(
-      find.text('Aquí aparecerán sus historias cuando guarde sus respuestas.'),
+      find.text(
+        'Cada vida guarda recuerdos que merecen escucharse. Empieza con una pregunta.',
+      ),
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Responder una pregunta'));
+    await tester.tap(find.text('Ver todas las preguntas'));
     await tester.pumpAndSettle();
 
     expect(find.text('Escribir mi propia pregunta'), findsOneWidget);
@@ -1840,7 +1842,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ana'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Responder una pregunta'));
+    await tester.tap(find.text('Ver todas las preguntas'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Escribir mi propia pregunta'));

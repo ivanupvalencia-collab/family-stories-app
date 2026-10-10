@@ -148,6 +148,30 @@ void main() {
     expect(preferences.writes, 1);
   });
 
+  for (final single in [false, true]) {
+    test(
+      'deleted member cannot be restored by a late ${single ? 'profile' : 'list'} response',
+      () async {
+        await service.loadForOwner(owner);
+        gate = Completer<void>();
+        final Future<Object?> pending = single
+            ? service.loadMemberForOwner(
+                ownerId: owner,
+                familyMemberId: 'member-a',
+              )
+            : service.loadForOwner(owner);
+        while (requests < 2) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        await service.forgetMember(owner, 'member-a');
+        gate!.complete();
+        gate = null;
+        expect(await pending, single ? isNull : isEmpty);
+        expect(await service.loadCachedForOwner(owner), isEmpty);
+      },
+    );
+  }
+
   test(
     'creation before the first complete snapshot persists the confirmed member',
     () async {

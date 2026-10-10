@@ -8,12 +8,15 @@ import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/audio_answer_service.dart';
 import '../services/family_story_storage.dart';
+import '../services/story_photo_service.dart';
+import '../services/profile_image_picker.dart';
 
 enum _RecordingStatus { ready, recording, recorded }
 
 typedef RecordingSubmission = Future<void> Function({
   required String audioPath,
   required Duration duration,
+  PickedProfileImage? photo,
 });
 
 class QuestionScreen extends StatefulWidget {
@@ -22,6 +25,8 @@ class QuestionScreen extends StatefulWidget {
     required this.question,
     this.audioService,
     this.familyStoryStorage,
+    this.photoService,
+    this.imagePicker,
     super.key,
   }) : onSubmit = null,
        contextLabel = null,
@@ -35,6 +40,8 @@ class QuestionScreen extends StatefulWidget {
     required this.question,
     required this.onSubmit,
     this.audioService,
+    this.photoService,
+    this.imagePicker,
     super.key,
   }) : familyMember = null,
        familyStoryStorage = null,
@@ -55,6 +62,8 @@ class QuestionScreen extends StatefulWidget {
   final String submittingLabel;
   final String submitErrorMessage;
   final IconData submitIcon;
+  final StoryPhotoService? photoService;
+  final ProfileImagePicker? imagePicker;
 
   @override
   State<QuestionScreen> createState() => _QuestionScreenState();
@@ -73,6 +82,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
   bool _isPlaybackPaused = false;
   bool _isBusy = false;
   bool _isSubmitting = false;
+  PickedProfileImage? _photo;
 
   @override
   void initState() {
@@ -257,16 +267,28 @@ class _QuestionScreenState extends State<QuestionScreen> {
       }
       final customSubmission = widget.onSubmit;
       if (customSubmission == null) {
-        await _familyStoryStorage!.saveRecording(
+        final story = await _familyStoryStorage!.saveRecording(
           familyMemberId: widget.familyMember!.id,
           question: widget.question.text,
           temporaryAudioPath: _recordingPath!,
           duration: _recordingDuration,
         );
+        if (_photo != null) {
+          try {
+            await (widget.photoService ??
+                    LocalStoryPhotoService(storage: _familyStoryStorage))
+                .save(story, _photo);
+          } catch (_) {
+            _showMessage(
+              'La historia se ha guardado sin foto. Puedes añadirla desde la historia.',
+            );
+          }
+        }
       } else {
         await customSubmission(
           audioPath: _recordingPath!,
           duration: _recordingDuration,
+          photo: _photo,
         );
         try {
           await _audioService.discard(_recordingPath!);
@@ -369,6 +391,36 @@ class _QuestionScreenState extends State<QuestionScreen> {
                 _isSubmitting ? widget.submittingLabel : widget.submitLabel,
               ),
             ),
+            TextButton.icon(
+              onPressed: _isBusy
+                  ? null
+                  : () async {
+                      try {
+                        final image =
+                            await (widget.imagePicker ??
+                                    DeviceProfileImagePicker())
+                                .pickFromGallery();
+                        if (mounted && image != null) {
+                          setState(() => _photo = image);
+                        }
+                      } catch (_) {
+                        _showMessage(
+                          'No se pudo seleccionar la foto. Inténtalo de nuevo.',
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: Text(
+                _photo == null
+                    ? 'Añadir una foto (opcional)'
+                    : 'Cambiar foto seleccionada',
+              ),
+            ),
+            if (_photo != null)
+              TextButton(
+                onPressed: _isBusy ? null : () => setState(() => _photo = null),
+                child: const Text('Quitar foto seleccionada'),
+              ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _isBusy ? null : _togglePlayback,
@@ -397,28 +449,36 @@ class _QuestionScreenState extends State<QuestionScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    widget.contextLabel ?? 'Para ${widget.familyMember!.name}',
-                    style: textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+            child: CustomScrollView(
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          widget.contextLabel ??
+                              'Para ${widget.familyMember!.name}',
+                          style: textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        QuestionText(
+                          widget.question.text,
+                          style: textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        _buildRecordingControls(theme),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  QuestionText(
-                    widget.question.text,
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  _buildRecordingControls(theme),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

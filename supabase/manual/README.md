@@ -1,5 +1,47 @@
 # Tus respuestas: instalación manual pendiente
 
+## Espacio del ser querido y fotos de historias
+
+Scripts nuevos preparados, **no ejecutados**. Con las fotos de FamilyMember ya
+instaladas (01 y 02), ejecutar completos en este orden:
+
+1. `03_story_photos.sql`: columna nullable, bucket privado `story-photos`,
+   límite de 10 MB, MIME de imagen y políticas específicas por historia.
+2. `04_story_photo_rpc.sql`: lectura y edición acotadas al propietario del
+   familiar o `recorded_by`; actualiza `get_my_answer_story` para devolver foto.
+   No volver a instalar la versión anterior de esa RPC después de este script.
+3. `05_family_member_edit.sql`: edición de nombre/relación por el propietario,
+   sin modificar vinculación, fotos ni ampliar UPDATE de la tabla.
+4. `06_family_member_delete_audit.sql` es una consulta **de diagnóstico**, no
+   habilita eliminación. Puede ejecutarse después para revisar FKs y políticas.
+
+La app mantiene la eliminación remota bloqueada: el esquema base y las FKs de
+invitaciones no están versionados aquí. Falta revisar esos resultados y diseñar
+el borrado coordinado con la API de Storage. No borrar `storage.objects` por SQL:
+eso no elimina correctamente los archivos físicos. La eliminación local pide
+confirmación, retira las referencias y limpia los archivos de su espacio privado.
+
+Las fotos se suben con nombres únicos `<uploader-id>/<story-id>/<filename>`.
+El propietario y el autor pueden consultar/cambiar la foto de esa historia;
+una cuenta ajena y anon no pueden acceder. Storage exige la relación con la
+historia real. La foto activa no se puede borrar: primero se confirma la nueva
+referencia o NULL por RPC, después se limpia la anterior. No hay URLs públicas,
+UPDATE de objetos ni modificaciones de políticas existentes de audio/perfiles.
+
+La respuesta remota completa primero `complete_question_request`, con su
+contrato actual, y usa el ID devuelto para asociar después la foto. Si la foto
+falla, el audio sigue guardado; se puede añadir desde Historia/Tus respuestas.
+Antes de instalar SQL, las historias antiguas mantienen audio (fallback sólo
+ante columna ausente) y la edición de fotos remotas no está disponible.
+
+Verificar con sesiones reales de propietario, autor y tercero: lectura,
+subida, reemplazo y eliminación; el tercero debe recibir denegación, así como
+las rutas de otra historia o subidas fuera de su namespace. Intentar borrar una
+foto activa debe fallar. Las pruebas Flutter simulan HTTP y no ejecutan ni
+certifican las políticas del proyecto Supabase.
+
+---
+
 Ejecutar `get_my_answer_story.sql` completo en el SQL Editor de Supabase con
 el rol administrativo habitual (`postgres`). **No se ha ejecutado desde este
 repositorio.** El contrato supone identificadores UUID, como las RPC existentes.

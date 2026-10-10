@@ -351,6 +351,23 @@ void main() {
     });
 
     test(
+      'member deletion invalidates shared memory and persistent family photo',
+      () async {
+        final member = FamilyMember.fromSupabaseJson(memberJson);
+        await photos.load(member);
+        final other = SupabaseFamilyMemberPhotoService(
+          ownerId: owner,
+          memberService: members,
+          client: client,
+          diskCache: disk,
+        );
+        expect(other.cachedPhoto(member), isNotNull);
+        await photos.forgetPhotos(owner, [oldPath]);
+        expect(other.cachedPhoto(member), isNull);
+        expect(await disk.read(client.storage.url, owner, oldPath), isNull);
+      },
+    );
+    test(
       'shares cached bytes and concurrent downloads across screen services',
       () async {
         final member = FamilyMember.fromSupabaseJson(memberJson);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,6 +22,7 @@ void main() {
   late List<String?> authorizationHeaders;
   late List<int> responseBytes;
   late int status;
+  Completer<void>? downloadGate;
   const channel = MethodChannel('plugins.flutter.io/path_provider');
   final story = FamilyStory.fromSupabaseJson({
     'id': 'story-id',
@@ -39,6 +41,7 @@ void main() {
     authorizationHeaders = [];
     responseBytes = [0, 0, 0, 16, ...ascii.encode('ftypM4A '), 0, 0, 0, 0];
     status = 200;
+    downloadGate = null;
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       requestedPaths.add(request.uri.path);
@@ -57,6 +60,7 @@ void main() {
           }),
         );
       }
+      await downloadGate?.future;
       await request.response.close();
     });
     client = SupabaseClient(
@@ -82,6 +86,23 @@ void main() {
     );
     service = SupabaseFamilyStoryService(client: client);
   });
+
+  test(
+    'deletion cache cleanup rejects late audio downloads before writing files',
+    () async {
+      downloadGate = Completer<void>();
+      final pending = service.localAudioPathFor(story);
+      final assertion = expectLater(pending, throwsStateError);
+      while (requestedPaths.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      await service.clearAudioCache();
+      downloadGate!.complete();
+      downloadGate = null;
+      await assertion;
+      expect(await temporary.list(recursive: true).toList(), isEmpty);
+    },
+  );
 
   tearDown(() async {
     await service.clearAudioCache();
