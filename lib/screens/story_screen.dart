@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/question_text.dart';
+
 import '../models/family_story.dart';
 import '../services/audio_answer_service.dart';
 import '../services/family_story_service.dart';
@@ -127,7 +129,7 @@ class _StoryScreenState extends State<StoryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
+                  QuestionText(
                     widget.story.question,
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,

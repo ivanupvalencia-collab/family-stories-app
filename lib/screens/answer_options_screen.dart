@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/question_text.dart';
+
 import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/auth_service.dart';
@@ -243,7 +245,7 @@ class _AnswerOptionsScreenState extends State<AnswerOptionsScreen> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                Text(
+                QuestionText(
                   widget.question.text,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,

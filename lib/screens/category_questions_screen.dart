@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/question_text.dart';
+
 import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/auth_service.dart';
@@ -89,7 +91,7 @@ class CategoryQuestionsScreen extends StatelessWidget {
                       horizontal: 20,
                       vertical: 8,
                     ),
-                    title: Text(question.text),
+                    title: QuestionText(question.text),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _openQuestion(context, question),
                   ),

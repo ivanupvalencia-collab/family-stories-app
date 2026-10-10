@@ -32,6 +32,7 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
     'Hermano/a',
     'Pareja',
     'Hijo/a',
+    'Nieto/a',
     'Otro',
   ];
 

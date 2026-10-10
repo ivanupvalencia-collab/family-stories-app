@@ -12,6 +12,11 @@ class FamilyMemberPhotoView extends StatefulWidget {
     required this.photoService,
     this.radius = 40,
     this.previewBytes,
+    this.circular = true,
+    this.width,
+    this.height,
+    this.fallback,
+    this.alignment = Alignment.center,
     super.key,
   });
 
@@ -19,6 +24,11 @@ class FamilyMemberPhotoView extends StatefulWidget {
   final FamilyMemberPhotoService photoService;
   final double radius;
   final Uint8List? previewBytes;
+  final bool circular;
+  final double? width;
+  final double? height;
+  final Widget? fallback;
+  final Alignment alignment;
 
   @override
   State<FamilyMemberPhotoView> createState() => _FamilyMemberPhotoViewState();
@@ -77,35 +87,41 @@ class _FamilyMemberPhotoViewState extends State<FamilyMemberPhotoView> {
     super.dispose();
   }
 
-  Widget _fallback() => ColoredBox(
-    color: Theme.of(context).colorScheme.primaryContainer,
-    child: Center(
-      child: Icon(
-        Icons.person_outline,
-        size: widget.radius * 1.1,
-        color: Theme.of(context).colorScheme.onPrimaryContainer,
-      ),
-    ),
-  );
+  Widget _fallback() =>
+      widget.fallback ??
+      ColoredBox(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        child: Center(
+          child: Icon(
+            Icons.person_outline,
+            size: widget.radius * 1.1,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+        ),
+      );
 
   Widget _image(Uint8List? bytes) => bytes == null || bytes.isEmpty
       ? _fallback()
       : Image.memory(
           bytes,
           fit: BoxFit.cover,
+          alignment: widget.alignment,
           gaplessPlayback: false,
           errorBuilder: (_, _, _) => _fallback(),
         );
 
   @override
   Widget build(BuildContext context) => Center(
+    widthFactor: 1,
+    heightFactor: 1,
     child: Semantics(
       label: 'Foto de ${widget.member.name}',
       image: true,
-      child: SizedBox.square(
-        dimension: widget.radius * 2,
-        child: ClipOval(
-          child: widget.previewBytes != null
+      child: SizedBox(
+        width: widget.width ?? widget.radius * 2,
+        height: widget.height ?? widget.radius * 2,
+        child: _clip(
+          widget.previewBytes != null
               ? _image(widget.previewBytes)
               : FutureBuilder<Uint8List>(
                   future: _photo,
@@ -122,4 +138,7 @@ class _FamilyMemberPhotoViewState extends State<FamilyMemberPhotoView> {
       ),
     ),
   );
+
+  Widget _clip(Widget child) =>
+      widget.circular ? ClipOval(child: child) : ClipRect(child: child);
 }

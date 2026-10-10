@@ -66,8 +66,18 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  fonts:
+    - family: Fraunces
+      fonts:
+        - asset: assets/fonts/Fraunces.ttf
+    - family: Nunito Sans
+      fonts:
+        - asset: assets/fonts/NunitoSans.ttf
+
   assets:
     - assets/avatars/
+    - assets/fonts/fraunces-OFL.txt
+    - assets/fonts/nunitosans-OFL.txt
 
   # To add assets to your application, add an assets section, like this:
   # assets:

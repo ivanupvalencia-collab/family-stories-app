@@ -149,7 +149,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Añadir familiar'));
+      await tester.tap(find.byTooltip('Crear'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Añadir ser querido').last);
       await tester.pumpAndSettle();
       await _fillCreateForm(tester);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
@@ -184,7 +186,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Añadir familiar'));
+    await tester.tap(find.byTooltip('Crear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await _fillCreateForm(tester);
     await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
@@ -213,7 +217,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Añadir familiar'));
+      await tester.tap(find.byTooltip('Crear'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Añadir ser querido').last);
       await tester.pumpAndSettle();
       await _fillCreateForm(tester);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
@@ -246,7 +252,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Añadir familiar'));
+      await tester.tap(find.byTooltip('Crear'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Añadir ser querido').last);
       await tester.pumpAndSettle();
       await _fillCreateForm(tester);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/question_text.dart';
+
 import '../models/family_member.dart';
 import '../models/family_story.dart';
 import '../services/auth_service.dart';
@@ -393,7 +395,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
                         leading: const CircleAvatar(
                           child: Icon(Icons.play_arrow),
                         ),
-                        title: Text(story.question),
+                        title: QuestionText(story.question),
                         subtitle: Text(
                           '${_formatDate(story.createdAt)} · ${_formatDuration(story.duration)}',
                         ),

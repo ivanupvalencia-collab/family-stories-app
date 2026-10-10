@@ -20,6 +20,7 @@ import 'services/invitation_share_service.dart';
 import 'services/profile_image_picker.dart';
 import 'services/profile_service.dart';
 import 'services/question_request_service.dart';
+import 'services/received_request_details_service.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
 const _supabasePublishableKey =
@@ -50,6 +51,7 @@ class FamilyStoriesApp extends StatefulWidget {
     this.invitationShareService,
     this.incomingLinkService,
     this.questionRequestService,
+    this.receivedRequestDetailsService,
     super.key,
   });
 
@@ -66,6 +68,7 @@ class FamilyStoriesApp extends StatefulWidget {
   final InvitationShareService? invitationShareService;
   final IncomingLinkService? incomingLinkService;
   final QuestionRequestService? questionRequestService;
+  final ReceivedRequestDetailsService? receivedRequestDetailsService;
 
   @override
   State<FamilyStoriesApp> createState() => _FamilyStoriesAppState();
@@ -237,6 +240,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
         invitationService: _invitationService,
         invitationShareService: widget.invitationShareService,
         questionRequestService: _questionRequestService,
+        receivedRequestDetailsService: widget.receivedRequestDetailsService,
       ),
     );
   }

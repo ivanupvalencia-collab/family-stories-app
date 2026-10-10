@@ -29,7 +29,9 @@ import 'package:family_stories_app/services/invitation_share_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/profile_service.dart';
 import 'package:family_stories_app/services/question_request_service.dart';
+import 'package:family_stories_app/services/received_request_details_service.dart';
 import 'package:family_stories_app/widgets/profile_avatar_view.dart';
+import 'package:family_stories_app/widgets/question_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -99,18 +101,20 @@ void main() {
   });
 
   testWidgets('Home muestra el contenido inicial', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
     await tester.pumpAndSettle();
 
     expect(find.text('Family Stories'), findsOneWidget);
     expect(
-      find.text('Conserva las historias de las personas que quieres.'),
+      find.text('Las historias de tu familia empiezan aquí'),
       findsOneWidget,
     );
-    expect(find.text('Añadir familiar'), findsOneWidget);
-    expect(find.text('Tus familiares'), findsOneWidget);
+    expect(find.text('Añadir ser querido'), findsOneWidget);
+    expect(find.text('Tus seres queridos'), findsOneWidget);
     expect(
-      find.text('Todavía no has añadido ningún familiar.'),
+      find.text('Las historias de tu familia empiezan aquí'),
       findsOneWidget,
     );
     expect(find.byTooltip('Perfil'), findsOneWidget);
@@ -119,6 +123,8 @@ void main() {
   testWidgets('muestra las preguntas pendientes del usuario autenticado', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final questionRequestService = FakeQuestionRequestService(
       pendingByRecipient: {
         testAuthUser.id: [
@@ -142,7 +148,7 @@ void main() {
     expect(questionRequestService.requestedRecipientIds, [testAuthUser.id]);
     expect(find.text('Preguntas para ti'), findsOneWidget);
     expect(find.text('¿Qué recuerdo guardas de tu infancia?'), findsOneWidget);
-    expect(find.text('Enviada por otro familiar · Pendiente'), findsOneWidget);
+    expect(find.text('Una pregunta para ti · 04/10/2026'), findsOneWidget);
 
     await tester.tap(find.text('¿Qué recuerdo guardas de tu infancia?'));
     await tester.pumpAndSettle();
@@ -151,9 +157,11 @@ void main() {
     expect(find.text('Responder'), findsOneWidget);
   });
 
-  testWidgets('oculta la sección si no hay preguntas pendientes', (
+  testWidgets('muestra un estado discreto sin preguntas pendientes', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final questionRequestService = FakeQuestionRequestService();
     await tester.pumpWidget(
       testApp(
@@ -165,12 +173,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(questionRequestService.requestedRecipientIds, [testAuthUser.id]);
-    expect(find.text('Preguntas para ti'), findsNothing);
+    expect(find.text('Preguntas para ti'), findsOneWidget);
+    expect(find.text('No tienes preguntas pendientes.'), findsOneWidget);
   });
 
   testWidgets('sin sesión no carga ni muestra preguntas recibidas', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final localStorage = MemoryFamilyMemberStorage();
     final questionRequestService = FakeQuestionRequestService(
       pendingByRecipient: {
@@ -191,7 +202,7 @@ void main() {
     expect(questionRequestService.requestedRecipientIds, isEmpty);
     expect(questionRequestService.watchedRecipientIds, isEmpty);
     expect(questionRequestService.requestedAnsweredRecipientIds, isEmpty);
-    expect(find.text('Tus respuestas'), findsNothing);
+    expect(find.text('Historias contadas'), findsNothing);
     expect(find.text('Preguntas para ti'), findsNothing);
     expect(find.text('Pregunta privada'), findsNothing);
 
@@ -211,6 +222,8 @@ void main() {
   testWidgets('pull-to-refresh actualiza familiares y preguntas', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final familyMemberService = FakeFamilyMemberService();
     final questionRequestService = FakeQuestionRequestService();
     await tester.pumpWidget(
@@ -260,6 +273,8 @@ void main() {
   testWidgets('un evento Realtime relevante refresca las preguntas', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final service = FakeQuestionRequestService();
     await tester.pumpWidget(
       testApp(
@@ -294,6 +309,8 @@ void main() {
   testWidgets('un evento Realtime no relevante no refresca las preguntas', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final service = FakeQuestionRequestService();
     await tester.pumpWidget(
       testApp(
@@ -314,6 +331,8 @@ void main() {
   testWidgets('Realtime sustituye y cancela la suscripción al cambiar sesión', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     const secondUser = AuthUser(
       id: 'second-user-id',
       email: 'bruno@example.com',
@@ -343,6 +362,8 @@ void main() {
   testWidgets(
     'no crea suscripciones Realtime duplicadas para la misma sesión',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final authService = FakeAuthService(testAuthUser);
       final service = FakeQuestionRequestService();
       await tester.pumpWidget(
@@ -369,6 +390,8 @@ void main() {
   testWidgets('muestra un error recuperable si fallan las preguntas', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final questionRequestService = FakeQuestionRequestService(
       loadError: Exception('network failure'),
     );
@@ -390,6 +413,8 @@ void main() {
   testWidgets('un cambio de sesión no muestra preguntas del usuario anterior', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     const secondUser = AuthUser(
       id: 'second-user-id',
       email: 'bruno@example.com',
@@ -573,6 +598,8 @@ void main() {
   });
 
   testWidgets('refresca Home cuando una respuesta se completa', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final request = testQuestionRequest(
       id: 'request-1',
       recipientId: testAuthUser.id,
@@ -618,6 +645,8 @@ void main() {
   });
 
   testWidgets('inicia sesión con Google desde el perfil', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = FakeAuthService();
     final profileService = FakeProfileService();
     await tester.pumpWidget(
@@ -654,6 +683,8 @@ void main() {
   });
 
   testWidgets('restaura la sesión y permite cerrarla', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = FakeAuthService(testAuthUser);
     await tester.pumpWidget(
       testApp(MemoryFamilyMemberStorage(), authService: authService),
@@ -677,6 +708,8 @@ void main() {
   testWidgets(
     'muestra el perfil cacheado durante la actualización silenciosa',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final refreshCompleter = Completer<UserProfile>();
       final profileService = FakeProfileService(
         refreshCompleter: refreshCompleter,
@@ -713,6 +746,8 @@ void main() {
   testWidgets('limpia la caché y no reutiliza datos entre sesiones', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = FakeAuthService(testAuthUser);
     final profileService = FakeProfileService();
     await tester.pumpWidget(
@@ -751,6 +786,8 @@ void main() {
   testWidgets('mantiene disponible el perfil si falla su carga', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final profileService = FakeProfileService(error: Exception('fallo'));
     await tester.pumpWidget(
       testApp(
@@ -776,6 +813,8 @@ void main() {
   });
 
   testWidgets('edita el nombre del perfil autenticado', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final profileService = FakeProfileService();
     await tester.pumpWidget(
       testApp(
@@ -810,6 +849,8 @@ void main() {
   testWidgets('selecciona, guarda y muestra un avatar predefinido', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final profileService = FakeProfileService();
     await tester.pumpWidget(
       testApp(
@@ -870,6 +911,8 @@ void main() {
   testWidgets('valida el nombre y conserva el texto si falla el guardado', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final profileService = FakeProfileService(
       updateError: Exception('fallo al guardar'),
     );
@@ -938,6 +981,8 @@ void main() {
   });
 
   testWidgets('elegir avatar local limpia avatar_url', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final profileService = FakeProfileService(
       profile: const UserProfile(
         id: 'google-user-id',
@@ -967,6 +1012,8 @@ void main() {
   });
 
   testWidgets('guarda foto personalizada y limpia avatar_key', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final profileService = FakeProfileService(
       profile: const UserProfile(
         id: 'google-user-id',
@@ -1018,6 +1065,8 @@ void main() {
   testWidgets('un error de subida conserva el perfil y la edición', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     const originalProfile = UserProfile(
       id: 'google-user-id',
       name: 'Ana García',
@@ -1066,11 +1115,15 @@ void main() {
   });
 
   testWidgets('permite añadir un familiar', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final storage = MemoryFamilyMemberStorage();
     await tester.pumpWidget(testApp(storage));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Añadir familiar'));
+    await tester.tap(find.byTooltip('Crear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
 
     expect(find.text('Nombre'), findsOneWidget);
@@ -1085,8 +1138,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Ana'), findsOneWidget);
+    await tester.tap(find.text('Seres queridos'));
+    await tester.pumpAndSettle();
     expect(find.text('Abuelo/a'), findsOneWidget);
-    expect(find.text('Todavía no has añadido ningún familiar.'), findsNothing);
+    expect(
+      find.text('Las historias de tu familia empiezan aquí'),
+      findsNothing,
+    );
     expect(storage.members.single.name, 'Ana');
     expect(storage.saveCalls, 1);
   });
@@ -1094,6 +1152,8 @@ void main() {
   testWidgets('sin sesión carga únicamente los familiares locales', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final storage = MemoryFamilyMemberStorage(
       members: const [
         FamilyMember(
@@ -1127,6 +1187,8 @@ void main() {
   testWidgets('con sesión carga únicamente los familiares remotos', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final storage = MemoryFamilyMemberStorage(
       members: const [
         FamilyMember(
@@ -1164,6 +1226,8 @@ void main() {
   testWidgets('con sesión crea el familiar mediante el servicio remoto', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final storage = MemoryFamilyMemberStorage();
     final remoteService = FakeFamilyMemberService();
     await tester.pumpWidget(
@@ -1175,7 +1239,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Añadir familiar'));
+    await tester.tap(find.byTooltip('Crear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'Elena');
     await tester.tap(find.text('Relación contigo'));
@@ -1195,6 +1261,8 @@ void main() {
   testWidgets(
     'un error remoto conserva los datos locales y permite reintentar',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final storage = MemoryFamilyMemberStorage(
         members: const [
           FamilyMember(
@@ -1237,10 +1305,14 @@ void main() {
   );
 
   testWidgets('valida los campos obligatorios', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Añadir familiar'));
+    await tester.tap(find.byTooltip('Crear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar'));
     await tester.pump();
@@ -1252,10 +1324,14 @@ void main() {
   testWidgets('navega desde un familiar hasta el aviso de grabación', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Añadir familiar'));
+    await tester.tap(find.byTooltip('Crear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'Ana');
     await tester.tap(find.text('Relación contigo'));
@@ -1288,11 +1364,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('¿Cómo era tu casa cuando eras pequeño/a?'),
+      find.text(
+        questionDisplayText('¿Cómo era tu casa cuando eras pequeño/a?'),
+      ),
       findsOneWidget,
     );
 
-    await tester.tap(find.text('¿Cómo era tu casa cuando eras pequeño/a?'));
+    await tester.tap(
+      find.text(
+        questionDisplayText('¿Cómo era tu casa cuando eras pequeño/a?'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Responder ahora'), findsOneWidget);
@@ -1631,6 +1713,8 @@ void main() {
   );
 
   testWidgets('un enlace con sesión abre la previsualización', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final incomingLinks = FakeIncomingLinkService();
     final invitationService = FakeInvitationService();
     await tester.pumpWidget(
@@ -1656,6 +1740,8 @@ void main() {
   testWidgets('sin sesión conserva el token y continúa después del login', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final authService = FakeAuthService();
     final incomingLinks = FakeIncomingLinkService();
     final invitationService = FakeInvitationService();
@@ -1684,6 +1770,8 @@ void main() {
   });
 
   testWidgets('no procesa dos veces el mismo enlace entrante', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final incomingLinks = FakeIncomingLinkService();
     final invitationService = FakeInvitationService();
     await tester.pumpWidget(
@@ -1708,6 +1796,8 @@ void main() {
   testWidgets('aceptar desde enlace usa el mismo InvitationService', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final incomingLinks = FakeIncomingLinkService();
     final invitationService = FakeInvitationService();
     await tester.pumpWidget(
@@ -1732,10 +1822,14 @@ void main() {
   testWidgets('permite escribir y continuar con una pregunta personalizada', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Añadir familiar'));
+    await tester.tap(find.byTooltip('Crear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'Ana');
     await tester.tap(find.text('Relación contigo'));
@@ -1780,6 +1874,8 @@ void main() {
   });
 
   testWidgets('carga los familiares persistidos al iniciar', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final storage = MemoryFamilyMemberStorage(
       members: const [
         FamilyMember(
@@ -1794,6 +1890,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Carlos'), findsOneWidget);
+    await tester.tap(find.text('Seres queridos'));
+    await tester.pumpAndSettle();
     expect(find.text('Padre/Madre'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
@@ -1935,6 +2033,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Seres queridos'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ana'));
     await tester.pumpAndSettle();
 
@@ -1945,6 +2045,8 @@ void main() {
   testWidgets('carga, filtra y ordena las historias remotas del familiar', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     const familyMember = FamilyMember(
       id: 'remote-family-id',
       name: 'Pepe',
@@ -2067,6 +2169,8 @@ void main() {
   testWidgets('muestra un error recuperable al cargar historias remotas', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     const familyMember = FamilyMember(
       id: 'remote-family-id',
       name: 'Pepe',
@@ -2152,142 +2256,159 @@ void main() {
     );
     expect(find.text('Preparado para grabar'), findsOneWidget);
   });
-  testWidgets('Tus respuestas muestra fecha y abre la carga de la respuesta', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 1200);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final loading = Completer<FamilyStory?>();
-    final service = FakeQuestionRequestService(
-      answeredByRecipient: {
-        testAuthUser.id: [
-          testQuestionRequest(
-            id: 'newer',
-            recipientId: testAuthUser.id,
-            questionText: 'Respuesta reciente',
-            status: QuestionRequestStatus.answered,
-            answeredAt: DateTime.utc(2026, 10, 5, 12),
-          ),
-          testQuestionRequest(
-            id: 'older',
-            recipientId: testAuthUser.id,
-            questionText: 'Respuesta anterior',
-            status: QuestionRequestStatus.answered,
-            answeredAt: DateTime.utc(2026, 10, 4, 12),
-          ),
-          testQuestionRequest(
-            id: 'no-date',
-            recipientId: testAuthUser.id,
-            questionText: 'Respuesta sin fecha',
-            status: QuestionRequestStatus.answered,
-          ),
-        ],
-      },
-      answerStoryCompleters: {'newer': loading},
-    );
-    await tester.pumpWidget(
-      testApp(
-        MemoryFamilyMemberStorage(),
-        authService: FakeAuthService(testAuthUser),
-        questionRequestService: service,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(service.requestedAnsweredRecipientIds, [testAuthUser.id]);
-    expect(find.text('Tus respuestas'), findsOneWidget);
-    expect(find.text('Respondida el 05/10/2026'), findsOneWidget);
-    expect(find.text('Respondida el 04/10/2026'), findsOneWidget);
-    expect(find.text('Respuesta sin fecha'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('Respuesta reciente')).dy,
-      lessThan(tester.getTopLeft(find.text('Respuesta anterior')).dy),
-    );
-    await tester.tap(find.text('Respuesta reciente'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(AnswerScreen), findsOneWidget);
-    expect(service.requestedAnswerStoryIds, ['newer']);
-    loading.complete(null);
-    await tester.pumpAndSettle();
-    expect(find.text('No se pudo abrir esta respuesta.'), findsOneWidget);
-    expect(find.text('Reintentar'), findsOneWidget);
-  });
+  testWidgets(
+    'Historias que has contado muestra fecha y abre la carga de la respuesta',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final loading = Completer<FamilyStory?>();
+      final service = FakeQuestionRequestService(
+        answeredByRecipient: {
+          testAuthUser.id: [
+            testQuestionRequest(
+              id: 'newer',
+              recipientId: testAuthUser.id,
+              questionText: 'Respuesta reciente',
+              status: QuestionRequestStatus.answered,
+              answeredAt: DateTime.utc(2026, 10, 5, 12),
+            ),
+            testQuestionRequest(
+              id: 'older',
+              recipientId: testAuthUser.id,
+              questionText: 'Respuesta anterior',
+              status: QuestionRequestStatus.answered,
+              answeredAt: DateTime.utc(2026, 10, 4, 12),
+            ),
+            testQuestionRequest(
+              id: 'no-date',
+              recipientId: testAuthUser.id,
+              questionText: 'Respuesta sin fecha',
+              status: QuestionRequestStatus.answered,
+            ),
+          ],
+        },
+        answerStoryCompleters: {'newer': loading},
+      );
+      await tester.pumpWidget(
+        testApp(
+          MemoryFamilyMemberStorage(),
+          authService: FakeAuthService(testAuthUser),
+          questionRequestService: service,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(service.requestedAnsweredRecipientIds, [testAuthUser.id]);
+      expect(find.text('Historias contadas'), findsOneWidget);
+      expect(find.text('Para quien te preguntó · 05/10/2026'), findsOneWidget);
+      expect(find.text('Para quien te preguntó · 04/10/2026'), findsOneWidget);
+      expect(find.text('Respuesta sin fecha'), findsNothing);
+      await tester.tap(find.text('Ver todas'));
+      await tester.pumpAndSettle();
+      expect(find.text('Respuesta sin fecha'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Respuesta reciente')).dy,
+        lessThan(tester.getTopLeft(find.text('Respuesta anterior')).dy),
+      );
+      await tester.tap(find.text('Respuesta reciente'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(AnswerScreen), findsOneWidget);
+      expect(service.requestedAnswerStoryIds, ['newer']);
+      loading.complete(null);
+      await tester.pumpAndSettle();
+      expect(find.text('No se pudo abrir esta respuesta.'), findsOneWidget);
+      expect(find.text('Reintentar'), findsOneWidget);
+    },
+  );
 
-  testWidgets('un error en Tus respuestas no impide cargar las pendientes', (
-    tester,
-  ) async {
-    final service = FakeQuestionRequestService(
-      answersLoadError: Exception('private database details'),
-      pendingByRecipient: {
-        testAuthUser.id: [
-          testQuestionRequest(
-            id: 'pending',
-            recipientId: testAuthUser.id,
-            questionText: 'Sigue pendiente',
-          ),
-        ],
-      },
-    );
-    await tester.pumpWidget(
-      testApp(
-        MemoryFamilyMemberStorage(),
-        authService: FakeAuthService(testAuthUser),
-        questionRequestService: service,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Sigue pendiente'), findsOneWidget);
-    expect(find.text('No se pudieron cargar tus respuestas.'), findsOneWidget);
-    expect(find.textContaining('private database details'), findsNothing);
-    service.answersLoadError = null;
-    await tester.ensureVisible(find.text('Reintentar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Reintentar'));
-    await tester.pumpAndSettle();
-    expect(find.text('No se pudieron cargar tus respuestas.'), findsNothing);
-    expect(service.requestedAnsweredRecipientIds, hasLength(2));
-    expect(service.requestedRecipientIds, hasLength(1));
-  });
+  testWidgets(
+    'un error en Historias que has contado no impide cargar las pendientes',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = FakeQuestionRequestService(
+        answersLoadError: Exception('private database details'),
+        pendingByRecipient: {
+          testAuthUser.id: [
+            testQuestionRequest(
+              id: 'pending',
+              recipientId: testAuthUser.id,
+              questionText: 'Sigue pendiente',
+            ),
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        testApp(
+          MemoryFamilyMemberStorage(),
+          authService: FakeAuthService(testAuthUser),
+          questionRequestService: service,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Sigue pendiente'), findsOneWidget);
+      expect(
+        find.text('No se pudieron cargar tus respuestas.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('private database details'), findsNothing);
+      service.answersLoadError = null;
+      await tester.ensureVisible(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(find.text('No se pudieron cargar tus respuestas.'), findsNothing);
+      expect(service.requestedAnsweredRecipientIds, hasLength(2));
+      expect(service.requestedRecipientIds, hasLength(2));
+    },
+  );
 
-  testWidgets('Tus respuestas se refresca con Realtime y al reabrir la app', (
-    tester,
-  ) async {
-    final service = FakeQuestionRequestService();
-    await tester.pumpWidget(
-      testApp(
-        MemoryFamilyMemberStorage(),
-        authService: FakeAuthService(testAuthUser),
-        questionRequestService: service,
-      ),
-    );
-    await tester.pumpAndSettle();
-    service.answeredByRecipient[testAuthUser.id] = [
-      testQuestionRequest(
-        id: 'answered',
-        recipientId: testAuthUser.id,
-        questionText: 'Respuesta nueva',
-        status: QuestionRequestStatus.answered,
-      ),
-    ];
-    service.emitRealtimeChange(testAuthUser.id);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pumpAndSettle();
-    expect(find.text('Respuesta nueva'), findsOneWidget);
-    expect(service.watchedRecipientIds, [testAuthUser.id]);
-    service.answeredByRecipient[testAuthUser.id]!.clear();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-    expect(find.text('Respuesta nueva'), findsNothing);
-    expect(service.requestedAnsweredRecipientIds, hasLength(3));
-    expect(service.watchedRecipientIds, [testAuthUser.id]);
-  });
+  testWidgets(
+    'Historias que has contado se refresca con Realtime y al reabrir la app',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = FakeQuestionRequestService();
+      await tester.pumpWidget(
+        testApp(
+          MemoryFamilyMemberStorage(),
+          authService: FakeAuthService(testAuthUser),
+          questionRequestService: service,
+        ),
+      );
+      await tester.pumpAndSettle();
+      service.answeredByRecipient[testAuthUser.id] = [
+        testQuestionRequest(
+          id: 'answered',
+          recipientId: testAuthUser.id,
+          questionText: 'Respuesta nueva',
+          status: QuestionRequestStatus.answered,
+        ),
+      ];
+      service.emitRealtimeChange(testAuthUser.id);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+      expect(find.text('Respuesta nueva'), findsOneWidget);
+      expect(service.watchedRecipientIds, [testAuthUser.id]);
+      service.answeredByRecipient[testAuthUser.id]!.clear();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('Respuesta nueva'), findsNothing);
+      expect(service.requestedAnsweredRecipientIds, hasLength(3));
+      expect(service.watchedRecipientIds, [testAuthUser.id]);
+    },
+  );
 
   testWidgets('un cambio de sesión descarta respuestas que llegan tarde', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final loading = Completer<List<QuestionRequest>>();
     final auth = FakeAuthService(testAuthUser);
     final service = FakeQuestionRequestService(
@@ -2321,7 +2442,7 @@ void main() {
     ]);
     await auth.signOut();
     await tester.pumpAndSettle();
-    expect(find.text('Tus respuestas'), findsNothing);
+    expect(find.text('Historias contadas'), findsNothing);
   });
 
   testWidgets('Tu respuesta reutiliza la descarga privada y StoryScreen', (
@@ -2430,6 +2551,8 @@ void main() {
   testWidgets('no reproduce una descarga tardía después de cerrar sesión', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final request = testQuestionRequest(
       id: 'answered',
       recipientId: testAuthUser.id,
@@ -2600,6 +2723,7 @@ FamilyStoriesApp testApp(
   InvitationShareService? invitationShareService,
   IncomingLinkService? incomingLinkService,
   QuestionRequestService? questionRequestService,
+  ReceivedRequestDetailsService? receivedRequestDetailsService,
 }) {
   return FamilyStoriesApp(
     authService: authService ?? FakeAuthService(),
@@ -2617,6 +2741,7 @@ FamilyStoriesApp testApp(
     incomingLinkService: incomingLinkService ?? FakeIncomingLinkService(),
     questionRequestService:
         questionRequestService ?? FakeQuestionRequestService(),
+    receivedRequestDetailsService: receivedRequestDetailsService,
   );
 }
 

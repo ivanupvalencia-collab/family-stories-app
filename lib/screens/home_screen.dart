@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../design/aritoria_design.dart';
 import '../models/family_member.dart';
 import '../models/question_request.dart';
 import '../services/auth_service.dart';
@@ -16,11 +17,15 @@ import '../services/invitation_share_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../services/question_request_service.dart';
+import '../services/received_request_details_service.dart';
+import '../widgets/aritoria_home_view.dart';
+import '../widgets/family_member_photo_view.dart';
 import 'add_family_member_screen.dart';
 import 'answer_screen.dart';
 import 'family_member_screen.dart';
 import 'profile_screen.dart';
 import 'question_request_screen.dart';
+import 'questions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -36,6 +41,7 @@ class HomeScreen extends StatefulWidget {
     this.invitationService,
     this.invitationShareService,
     this.questionRequestService,
+    this.receivedRequestDetailsService,
     super.key,
   });
 
@@ -51,6 +57,7 @@ class HomeScreen extends StatefulWidget {
   final InvitationService? invitationService;
   final InvitationShareService? invitationShareService;
   final QuestionRequestService? questionRequestService;
+  final ReceivedRequestDetailsService? receivedRequestDetailsService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -65,6 +72,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final QuestionRequestService _questionRequestService;
   late final FamilyStoryService _familyStoryService;
   late final ProfileService _profileService;
+  late final ReceivedRequestDetailsService _detailsService;
+  late FamilyMemberPhotoService _photos;
+  final Map<String, ReceivedRequestDetails> _details = {};
+  int _detailsGeneration = 0;
+  int _section = 0;
+  int _questionTab = 0;
+  bool _profileOpen = false;
   late final StreamSubscription<AuthUser?> _authSubscription;
   StreamSubscription<void>? _questionRealtimeSubscription;
   String? _questionRealtimeUserId;
@@ -103,7 +117,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _familyStoryService =
         widget.familyStoryService ?? SupabaseFamilyStoryService();
     _profileService = widget.profileService ?? SupabaseProfileService();
+    _detailsService =
+        widget.receivedRequestDetailsService ??
+        SupabaseReceivedRequestDetailsService();
     _user = _authService.currentUser;
+    _photos = _photoServiceFor(_user);
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
     _loadFamilyMembers();
     _loadReceivedRequests();
@@ -142,6 +160,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _familyMembers.clear();
       _questionRequests.clear();
       _answeredRequests.clear();
+      _details.clear();
+      _detailsGeneration++;
+      _photos = _photoServiceFor(user);
     });
     _loadFamilyMembers();
     _loadReceivedRequests();
@@ -214,6 +235,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     try {
       await _profileService.loadForUser(user.id);
+      if (mounted && _user?.id == user.id) setState(() {});
     } catch (_) {
       // ProfileScreen keeps its own retryable error state when opened.
     }
@@ -253,7 +275,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadReceivedRequests() async {
+    final generation = ++_detailsGeneration;
+    final userId = _user?.id;
     await Future.wait([_loadQuestionRequests(), _loadAnsweredRequests()]);
+    if (!mounted ||
+        userId == null ||
+        _user?.id != userId ||
+        generation != _detailsGeneration) {
+      return;
+    }
+    try {
+      final details = await _detailsService.load([
+        ..._questionRequests.map((r) => r.id),
+        ..._answeredRequests.map((r) => r.id),
+      ]);
+      if (mounted && _user?.id == userId && generation == _detailsGeneration) {
+        setState(() {
+          _details
+            ..clear()
+            ..addAll(details);
+        });
+      }
+    } catch (_) {
+      // Optional manual RPC: questions and playback work without enrichment.
+    }
   }
 
   Future<void> _loadAnsweredRequests() async {
@@ -269,6 +314,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final answers = await _questionRequestService.loadAnsweredForRecipient(
         user.id,
       );
+      answers.sort((a, b) {
+        if (a.answeredAt == null && b.answeredAt != null) return 1;
+        if (a.answeredAt != null && b.answeredAt == null) return -1;
+        return (b.answeredAt ?? b.createdAt).compareTo(
+          a.answeredAt ?? a.createdAt,
+        );
+      });
       if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
         return;
       }
@@ -300,12 +352,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  String _answerDate(DateTime date) {
-    final local = date.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')}/${local.year}';
-  }
-
   Future<void> _loadQuestionRequests() async {
     final request = ++_questionsLoadRequest;
     final user = _user;
@@ -327,6 +373,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final questionRequests = await _questionRequestService
           .loadPendingForRecipient(user.id);
+      questionRequests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (!mounted ||
           request != _questionsLoadRequest ||
           _user?.id != user.id) {
@@ -451,8 +498,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _openProfile() {
-    Navigator.of(context).push(
+  Future<void> _openProfile() async {
+    if (_profileOpen) return;
+    _profileOpen = true;
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ProfileScreen(
           authService: _authService,
@@ -463,6 +512,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+    _profileOpen = false;
+    if (mounted) setState(() {});
   }
 
   Future<void> _openQuestionRequest(QuestionRequest questionRequest) async {
@@ -480,197 +531,313 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textTheme = theme.textTheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        actions: [
-          IconButton(
-            onPressed: _openProfile,
-            tooltip: 'Perfil',
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
-          const SizedBox(width: 8),
-        ],
+  Future<void> _openQuestions(FamilyMember member) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => QuestionsScreen(
+          familyMember: member,
+          familyStoryStorage:
+              widget.familyStoryStorage ?? LocalFamilyStoryStorage(),
+          authService: _authService,
+          invitationService: _invitationService,
+          invitationShareService: _invitationShareService,
+          familyMemberService: _familyMemberService,
+          questionRequestService: _questionRequestService,
+          isRemoteFamilyMember: _user != null,
+        ),
       ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 24),
-                  Text(
-                    'Family Stories',
-                    style: textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Conserva las historias de las personas que quieres.',
-                    style: textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  FilledButton.icon(
-                    onPressed: _isLoading || _isSaving
-                        ? null
-                        : _addFamilyMember,
-                    icon: const Icon(Icons.person_add_alt_1),
-                    label: const Text('Añadir familiar'),
-                  ),
-                  const SizedBox(height: 32),
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: _refreshHome,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: [
-                          if (_user != null &&
-                              (_questionsLoading ||
-                                  _questionsLoadFailed ||
-                                  _questionRequests.isNotEmpty)) ...[
-                            Text(
-                              'Preguntas para ti',
-                              style: textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_questionsLoading)
-                              const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            else if (_questionsLoadFailed)
-                              _QuestionRequestsLoadError(
-                                onRetry: _loadQuestionRequests,
-                              )
-                            else
-                              ..._questionRequests.map(
-                                (questionRequest) => Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    leading: const CircleAvatar(
-                                      child: Icon(Icons.markunread_outlined),
-                                    ),
-                                    title: Text(questionRequest.questionText),
-                                    subtitle: const Text(
-                                      'Enviada por otro familiar · Pendiente',
-                                    ),
-                                    trailing: const Icon(Icons.chevron_right),
-                                    onTap: () =>
-                                        _openQuestionRequest(questionRequest),
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 32),
-                          ],
-                          if (_user != null) ...[
-                            Text(
-                              'Tus respuestas',
-                              style: textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_answersLoading)
-                              const Center(child: CircularProgressIndicator())
-                            else if (_answersLoadFailed)
-                              _QuestionRequestsLoadError(
-                                message:
-                                    'No se pudieron cargar tus respuestas.',
-                                onRetry: _loadAnsweredRequests,
-                              )
-                            else if (_answeredRequests.isEmpty)
-                              const Text(
-                                'Todavía no has enviado ninguna respuesta.',
-                              )
-                            else
-                              ..._answeredRequests.map(
-                                (answer) => Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    leading: const CircleAvatar(
-                                      child: Icon(Icons.headphones_outlined),
-                                    ),
-                                    title: Text(answer.questionText),
-                                    subtitle: answer.answeredAt == null
-                                        ? null
-                                        : Text(
-                                            'Respondida el ${_answerDate(answer.answeredAt!)}',
-                                          ),
-                                    trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => _openAnswer(answer),
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 32),
-                          ],
-                          Text(
-                            'Tus familiares',
-                            style: textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (_isLoading)
-                            const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(32),
-                                child: CircularProgressIndicator(),
-                              ),
-                            )
-                          else if (_loadFailed)
-                            _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
-                          else if (_familyMembers.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 32),
-                              child: Text(
-                                'Todavía no has añadido ningún familiar.',
-                                textAlign: TextAlign.center,
-                                style: textTheme.bodyLarge?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          else
-                            ..._familyMembers.map(
-                              (familyMember) => Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: const CircleAvatar(
-                                    child: Icon(Icons.person_outline),
-                                  ),
-                                  title: Text(familyMember.name),
-                                  subtitle: Text(familyMember.relationship),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _openFamilyMember(familyMember),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+    );
+    if (mounted) await _refreshHome();
+  }
+
+  void _selectSection(int index) {
+    if (index == 2) {
+      _quickCreate();
+      return;
+    }
+    if (index == 4) {
+      _openProfile();
+      return;
+    }
+    setState(() => _section = index);
+  }
+
+  Future<void> _quickCreate() async {
+    final action = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AritoriaColors.cream,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: AritoriaSpace.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.mic_none),
+                title: const Text('Grabar una historia'),
+                onTap: () => Navigator.pop(context, 0),
               ),
-            ),
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: const Text('Enviar una pregunta'),
+                onTap: () => Navigator.pop(context, 1),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1_outlined),
+                title: const Text('Añadir ser querido'),
+                onTap: () => Navigator.pop(context, 2),
+              ),
+            ],
           ),
         ),
       ),
     );
+    if (!mounted || action == null) return;
+    if (action == 2 || _familyMembers.isEmpty) {
+      await _addFamilyMember();
+      return;
+    }
+    final account = _user?.id;
+    final member = await showModalBottomSheet<FamilyMember>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AritoriaColors.cream,
+      builder: (_) => SafeArea(
+        child: SizedBox(
+          height: 360,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AritoriaSpace.md),
+                child: Text(
+                  action == 0
+                      ? '¿De quién quieres guardar una historia?'
+                      : '¿A quién quieres preguntar?',
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _familyMembers.length,
+                  itemBuilder: (_, index) {
+                    final member = _familyMembers[index];
+                    return ListTile(
+                      title: Text(member.name),
+                      subtitle: Text(member.relationship),
+                      leading: FamilyMemberPhotoView(
+                        member: member,
+                        photoService: _photos,
+                        radius: 22,
+                      ),
+                      onTap: () => Navigator.pop(context, member),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || member == null || account != _user?.id) return;
+    // Existing question selection offers both recording now and sending.
+    await _openQuestions(member);
   }
+
+  void _showRequests(int tab) => setState(() {
+    _section = 3;
+    _questionTab = tab;
+  });
+
+  Widget? _memberStatus() => _isLoading || _isSaving
+      ? const Center(
+          child: Padding(
+            padding: EdgeInsets.all(AritoriaSpace.md),
+            child: CircularProgressIndicator(),
+          ),
+        )
+      : _loadFailed
+      ? _FamilyMembersLoadError(onRetry: _loadFamilyMembers)
+      : null;
+
+  Widget? _requestStatus(bool answers) {
+    if (answers ? _answersLoading : _questionsLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AritoriaSpace.md),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (answers ? _answersLoadFailed : _questionsLoadFailed) {
+      return _QuestionRequestsLoadError(
+        onRetry: _loadReceivedRequests,
+        message: answers
+            ? 'No se pudieron cargar tus respuestas.'
+            : 'No se pudieron cargar tus preguntas.',
+      );
+    }
+    return null;
+  }
+
+  Widget _membersView() => RefreshIndicator(
+    onRefresh: _refreshHome,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(AritoriaSpace.lg),
+      children: [
+        if (_memberStatus() != null)
+          _memberStatus()!
+        else if (_familyMembers.isEmpty)
+          const Text('Todavía no has añadido ningún ser querido.')
+        else
+          for (final member in _familyMembers)
+            ListTile(
+              leading: FamilyMemberPhotoView(
+                member: member,
+                photoService: _photos,
+                radius: 24,
+              ),
+              title: Text(member.name),
+              subtitle: Text(member.relationship),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _openFamilyMember(member),
+            ),
+        TextButton.icon(
+          onPressed: _isLoading || _isSaving ? null : _addFamilyMember,
+          icon: const Icon(Icons.add),
+          label: const Text('Añadir ser querido'),
+        ),
+      ],
+    ),
+  );
+
+  Widget _requestsView() {
+    final answers = _questionTab == 1;
+    final requests = answers ? _answeredRequests : _questionRequests;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AritoriaSpace.lg),
+          child: Wrap(
+            spacing: AritoriaSpace.sm,
+            children: [
+              ChoiceChip(
+                label: const Text('Preguntas para ti'),
+                selected: !answers,
+                onSelected: (_) => setState(() => _questionTab = 0),
+              ),
+              ChoiceChip(
+                label: const Text('Historias que has contado'),
+                selected: answers,
+                onSelected: (_) => setState(() => _questionTab = 1),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refreshHome,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(AritoriaSpace.lg),
+              children: [
+                if (_user == null)
+                  const Text(
+                    'Inicia sesión desde tu perfil para recibir preguntas y consultar tus historias.',
+                  )
+                else if (_requestStatus(answers) != null)
+                  _requestStatus(answers)!
+                else if (requests.isEmpty)
+                  Text(
+                    answers
+                        ? 'Todavía no has contado ninguna historia.'
+                        : 'No tienes preguntas pendientes.',
+                  )
+                else
+                  for (final request in requests)
+                    ReceivedRequestRow(
+                      request: request,
+                      details: _details[request.id],
+                      onTap: () => answers
+                          ? _openAnswer(request)
+                          : _openQuestionRequest(request),
+                    ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: AritoriaDesign.theme(),
+    child: PopScope(
+      canPop: _section == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _section != 0) setState(() => _section = 0);
+      },
+      child: Scaffold(
+        appBar: _section == 0
+            ? null
+            : AppBar(
+                title: Text(_section == 1 ? 'Seres queridos' : 'Preguntas'),
+              ),
+        body: SafeArea(
+          bottom: false,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AritoriaSpace.maxWidth,
+              ),
+              child: _section == 1
+                  ? _membersView()
+                  : _section == 3
+                  ? _requestsView()
+                  : AritoriaHomeView(
+                      members: _familyMembers,
+                      photos: _photos,
+                      profile: _user == null
+                          ? null
+                          : _profileService.cachedForUser(_user!.id),
+                      authenticated: _user != null,
+                      questions: _questionRequests,
+                      answers: _answeredRequests,
+                      details: _details,
+                      memberStatus: _memberStatus(),
+                      questionStatus: _requestStatus(false),
+                      answerStatus: _requestStatus(true),
+                      onRefresh: _refreshHome,
+                      onProfile: _openProfile,
+                      onAdd: _addFamilyMember,
+                      onMember: _openFamilyMember,
+                      onHero: () {
+                        final member = selectHomeHero(_familyMembers);
+                        if (_isLoading || _isSaving || _loadFailed) return;
+                        if (member == null) {
+                          _addFamilyMember();
+                        } else {
+                          _openQuestions(member);
+                        }
+                      },
+                      onAllMembers: () => _selectSection(1),
+                      onAllQuestions: () => _showRequests(0),
+                      onAllAnswers: () => _showRequests(1),
+                      onQuestion: _openQuestionRequest,
+                      onAnswer: _openAnswer,
+                    ),
+            ),
+          ),
+        ),
+        bottomNavigationBar: AritoriaNavigation(
+          selected: _section,
+          onSelect: _selectSection,
+        ),
+      ),
+    ),
+  );
 }
 
 class _FamilyMembersLoadError extends StatelessWidget {
@@ -719,25 +886,23 @@ class _QuestionRequestsLoadError extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.error,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AritoriaSpace.md),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.error,
             ),
-            TextButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
-        ),
+          ),
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/question_text.dart';
+
 import '../models/question.dart';
 import '../models/question_request.dart';
 import '../services/audio_answer_service.dart';
@@ -86,7 +88,7 @@ class _QuestionRequestScreenState extends State<QuestionRequestScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
+                  QuestionText(
                     widget.questionRequest.questionText,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,

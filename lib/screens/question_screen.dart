@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../widgets/question_text.dart';
+
 import '../models/family_member.dart';
 import '../models/question.dart';
 import '../services/audio_answer_service.dart';
@@ -407,7 +409,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text(
+                  QuestionText(
                     widget.question.text,
                     style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
