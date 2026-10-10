@@ -15,6 +15,13 @@ abstract class FamilyMemberService {
     required String name,
     required String relationship,
   });
+
+  Future<FamilyMember> updatePhoto({
+    required String ownerId,
+    required String familyMemberId,
+    required String? photoPath,
+    required String? expectedPhotoPath,
+  });
 }
 
 class SupabaseFamilyMemberService implements FamilyMemberService {
@@ -27,7 +34,7 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
   Future<List<FamilyMember>> loadForOwner(String ownerId) async {
     final data = await _client
         .from('family_members')
-        .select('id, name, relationship, linked_account_id')
+        .select('id, name, relationship, linked_account_id, photo_path')
         .eq('owner_id', ownerId)
         .order('created_at');
 
@@ -41,7 +48,7 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
   }) async {
     final data = await _client
         .from('family_members')
-        .select('id, name, relationship, linked_account_id')
+        .select('id, name, relationship, linked_account_id, photo_path')
         .eq('owner_id', ownerId)
         .eq('id', familyMemberId)
         .maybeSingle();
@@ -62,9 +69,34 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
     final data = await _client
         .from('family_members')
         .insert(familyMember.toSupabaseInsert(ownerId: ownerId))
-        .select('id, name, relationship, linked_account_id')
+        .select('id, name, relationship, linked_account_id, photo_path')
         .single();
 
     return FamilyMember.fromSupabaseJson(data);
+  }
+
+  @override
+  Future<FamilyMember> updatePhoto({
+    required String ownerId,
+    required String familyMemberId,
+    required String? photoPath,
+    required String? expectedPhotoPath,
+  }) async {
+    if (_client.auth.currentUser?.id != ownerId) {
+      throw StateError('The owner session is required.');
+    }
+    // Install supabase/manual/02_family_member_photo_rpc.sql manually first.
+    // The RPC updates only photo_path and checks ownership and the old value.
+    final data = await _client.rpc(
+      'set_family_member_photo',
+      params: {
+        'p_family_member_id': familyMemberId,
+        'p_photo_path': photoPath,
+        'p_expected_photo_path': expectedPhotoPath,
+      },
+    );
+    return FamilyMember.fromSupabaseJson(
+      Map<String, dynamic>.from(data as Map),
+    );
   }
 }

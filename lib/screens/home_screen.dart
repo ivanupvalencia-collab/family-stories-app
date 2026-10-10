@@ -7,6 +7,7 @@ import '../models/question_request.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_storage_service.dart';
 import '../services/family_member_service.dart';
+import '../services/family_member_photo_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_story_storage.dart';
 import '../services/family_story_service.dart';
@@ -29,6 +30,7 @@ class HomeScreen extends StatefulWidget {
     this.avatarStorageService,
     this.familyMemberStorage,
     this.familyMemberService,
+    this.familyMemberPhotoService,
     this.familyStoryStorage,
     this.familyStoryService,
     this.invitationService,
@@ -43,6 +45,7 @@ class HomeScreen extends StatefulWidget {
   final AvatarStorageService? avatarStorageService;
   final FamilyMemberStorage? familyMemberStorage;
   final FamilyMemberService? familyMemberService;
+  final FamilyMemberPhotoService? familyMemberPhotoService;
   final FamilyStoryStorage? familyStoryStorage;
   final FamilyStoryService? familyStoryService;
   final InvitationService? invitationService;
@@ -354,18 +357,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _addFamilyMember() async {
-    final familyMember = await Navigator.of(context).push<FamilyMember>(
-      MaterialPageRoute(builder: (context) => const AddFamilyMemberScreen()),
+    final creationUser = _user;
+    final photoService = _photoServiceFor(creationUser);
+    final draft = await Navigator.of(context).push<FamilyMemberDraft>(
+      MaterialPageRoute(
+        builder: (context) => AddFamilyMemberScreen(
+          imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
+          photoService: photoService,
+        ),
+      ),
     );
 
-    if (familyMember == null || !mounted) {
+    if (draft == null || !mounted || _user?.id != creationUser?.id) {
       return;
     }
 
+    final familyMember = draft.member;
     final user = _user;
     setState(() => _isSaving = true);
     try {
-      final savedMember = user == null
+      var savedMember = user == null
           ? await _saveLocalFamilyMember(familyMember)
           : await _familyMemberService.create(
               ownerId: user.id,
@@ -375,6 +386,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted || _user?.id != user?.id) {
         return;
       }
+      if (draft.photo != null) {
+        try {
+          savedMember = await photoService.save(savedMember, draft.photo);
+        } catch (_) {
+          if (mounted && _user?.id == user?.id) {
+            _showMessage(
+              'El familiar se ha guardado, pero no su foto. Puedes añadirla desde su perfil.',
+            );
+          }
+        }
+      }
+      if (!mounted || _user?.id != user?.id) return;
       setState(() {
         _familyMembers.add(savedMember);
       });
@@ -390,9 +413,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<FamilyMember> _saveLocalFamilyMember(FamilyMember familyMember) async {
-    await _familyMemberStorage.save([..._familyMembers, familyMember]);
+    final current = await _familyMemberStorage.load();
+    await _familyMemberStorage.save([...current, familyMember]);
     return familyMember;
   }
+
+  FamilyMemberPhotoService _photoServiceFor(AuthUser? user) =>
+      widget.familyMemberPhotoService ??
+      (user == null
+          ? LocalFamilyMemberPhotoService(storage: _familyMemberStorage)
+          : SupabaseFamilyMemberPhotoService(
+              ownerId: user.id,
+              memberService: _familyMemberService,
+            ));
 
   Future<void> _openFamilyMember(FamilyMember familyMember) async {
     await Navigator.of(context).push(
@@ -407,10 +440,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           isRemoteFamilyMember: _user != null,
           familyStoryStorage: widget.familyStoryStorage,
           familyStoryService: _familyStoryService,
+          familyMemberStorage: _familyMemberStorage,
+          photoService: _photoServiceFor(_user),
+          imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
         ),
       ),
     );
-    if (mounted && _user != null) {
+    if (mounted) {
       await _loadFamilyMembers();
     }
   }

@@ -19,6 +19,7 @@ import 'package:family_stories_app/services/audio_answer_service.dart';
 import 'package:family_stories_app/services/avatar_storage_service.dart';
 import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
+import 'package:family_stories_app/services/family_member_photo_service.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
 import 'package:family_stories_app/services/family_story_service.dart';
 import 'package:family_stories_app/services/incoming_link_service.dart';
@@ -2593,6 +2594,7 @@ FamilyStoriesApp testApp(
   ProfileImagePicker? profileImagePicker,
   AvatarStorageService? avatarStorageService,
   FamilyMemberService? familyMemberService,
+  FamilyMemberPhotoService? familyMemberPhotoService,
   FamilyStoryService? familyStoryService,
   InvitationService? invitationService,
   InvitationShareService? invitationShareService,
@@ -2606,6 +2608,7 @@ FamilyStoriesApp testApp(
     avatarStorageService: avatarStorageService ?? FakeAvatarStorageService(),
     familyMemberStorage: familyMemberStorage,
     familyMemberService: familyMemberService ?? FakeFamilyMemberService(),
+    familyMemberPhotoService: familyMemberPhotoService,
     familyStoryStorage: MemoryFamilyStoryStorage(),
     familyStoryService: familyStoryService ?? FakeFamilyStoryService(),
     invitationService: invitationService ?? FakeInvitationService(),
@@ -2840,6 +2843,22 @@ class FakeFamilyMemberService implements FamilyMemberService {
     );
     members.add(member);
     return member;
+  }
+
+  @override
+  Future<FamilyMember> updatePhoto({
+    required String ownerId,
+    required String familyMemberId,
+    required String? photoPath,
+    required String? expectedPhotoPath,
+  }) async {
+    final index = members.indexWhere((member) => member.id == familyMemberId);
+    if (index < 0 || members[index].photoPath != expectedPhotoPath) {
+      throw StateError('Photo changed or member unavailable.');
+    }
+    final updated = members[index].withPhotoPath(photoPath);
+    members[index] = updated;
+    return updated;
   }
 }
 

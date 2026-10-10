@@ -6,6 +6,10 @@ import '../models/family_member.dart';
 import '../models/family_story.dart';
 import '../services/auth_service.dart';
 import '../services/family_member_service.dart';
+import '../services/family_member_storage.dart';
+import '../services/family_member_photo_service.dart';
+import '../services/profile_image_picker.dart';
+import '../widgets/family_member_photo_view.dart';
 import '../services/family_story_storage.dart';
 import '../services/family_story_service.dart';
 import '../services/invitation_service.dart';
@@ -25,6 +29,9 @@ class FamilyMemberScreen extends StatefulWidget {
     required this.isRemoteFamilyMember,
     this.familyStoryStorage,
     this.familyStoryService,
+    this.familyMemberStorage,
+    this.photoService,
+    this.imagePicker,
     super.key,
   });
 
@@ -37,6 +44,9 @@ class FamilyMemberScreen extends StatefulWidget {
   final bool isRemoteFamilyMember;
   final FamilyStoryStorage? familyStoryStorage;
   final FamilyStoryService? familyStoryService;
+  final FamilyMemberStorage? familyMemberStorage;
+  final FamilyMemberPhotoService? photoService;
+  final ProfileImagePicker? imagePicker;
 
   @override
   State<FamilyMemberScreen> createState() => _FamilyMemberScreenState();
@@ -51,17 +61,74 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
   bool _storiesLoadFailed = false;
   bool _isRefreshingMember = false;
   int _storiesLoadRequest = 0;
+  late final FamilyMemberPhotoService _photoService;
+  late final String? _photoOwnerId;
+  late final StreamSubscription<AuthUser?> _photoAuthSubscription;
+  bool _photoBusy = false;
+
+  bool get _canManagePhoto => widget.isRemoteFamilyMember
+      ? _photoOwnerId != null &&
+            widget.authService.currentUser?.id == _photoOwnerId
+      : widget.authService.currentUser == null;
 
   @override
   void initState() {
     super.initState();
     _familyMember = widget.familyMember;
+    _photoOwnerId = widget.authService.currentUser?.id;
+    _photoService =
+        widget.photoService ??
+        (widget.isRemoteFamilyMember
+            ? SupabaseFamilyMemberPhotoService(
+                ownerId: _photoOwnerId ?? '',
+                memberService: widget.familyMemberService,
+              )
+            : LocalFamilyMemberPhotoService(
+                storage:
+                    widget.familyMemberStorage ??
+                    SharedPreferencesFamilyMemberStorage(),
+              ));
+    _photoAuthSubscription = widget.authService.authStateChanges.listen((_) {
+      if (mounted) setState(() {});
+    });
     _storyStorage = widget.familyStoryStorage ?? LocalFamilyStoryStorage();
     _remoteStoryService = widget.isRemoteFamilyMember
         ? widget.familyStoryService ?? SupabaseFamilyStoryService()
         : null;
     _loadStories();
     unawaited(_refreshRemoteFamilyMember());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_photoAuthSubscription.cancel());
+    super.dispose();
+  }
+
+  Future<void> _managePhoto(bool remove) async {
+    if (!_canManagePhoto || _photoBusy || _isRefreshingMember) return;
+    setState(() => _photoBusy = true);
+    try {
+      final image = remove
+          ? null
+          : await (widget.imagePicker ?? DeviceProfileImagePicker())
+                .pickFromGallery();
+      if (!mounted || !_canManagePhoto || (!remove && image == null)) return;
+      final updated = await _photoService.save(_familyMember, image);
+      if (mounted && _canManagePhoto) setState(() => _familyMember = updated);
+    } catch (_) {
+      if (mounted && _canManagePhoto) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo guardar la foto. Usa una imagen de hasta 10 MB e inténtalo de nuevo.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
   }
 
   Future<void> _loadStories() async {
@@ -122,7 +189,10 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
 
   Future<void> _refreshRemoteFamilyMember({bool showError = false}) async {
     final user = widget.authService.currentUser;
-    if (!widget.isRemoteFamilyMember || user == null || _isRefreshingMember) {
+    if (!widget.isRemoteFamilyMember ||
+        user == null ||
+        _isRefreshingMember ||
+        _photoBusy) {
       return;
     }
 
@@ -194,6 +264,20 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
       appBar: AppBar(
         title: Text(_familyMember.name),
         actions: [
+          PopupMenuButton<bool>(
+            tooltip: 'Foto del familiar',
+            enabled: _canManagePhoto && !_photoBusy && !_isRefreshingMember,
+            onSelected: _managePhoto,
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: false,
+                child: Text('Elegir foto de la galería'),
+              ),
+              if (_familyMember.photoPath != null)
+                const PopupMenuItem(value: true, child: Text('Eliminar foto')),
+            ],
+            icon: const Icon(Icons.photo_camera_outlined),
+          ),
           if (widget.isRemoteFamilyMember)
             IconButton(
               onPressed: _isRefreshingMember ? null : _refreshRemoteData,
@@ -209,14 +293,12 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                CircleAvatar(
+                FamilyMemberPhotoView(
+                  member: _canManagePhoto
+                      ? _familyMember
+                      : _familyMember.withPhotoPath(null),
+                  photoService: _photoService,
                   radius: 40,
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Icon(
-                    Icons.person_outline,
-                    size: 44,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(

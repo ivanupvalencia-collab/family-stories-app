@@ -10,9 +10,12 @@ abstract class FamilyMemberStorage {
 }
 
 class SharedPreferencesFamilyMemberStorage implements FamilyMemberStorage {
+  SharedPreferencesFamilyMemberStorage({SharedPreferencesAsync? preferences})
+    : _preferences = preferences ?? SharedPreferencesAsync();
+
   static const _storageKey = 'family_members';
 
-  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+  final SharedPreferencesAsync _preferences;
 
   @override
   Future<List<FamilyMember>> load() async {

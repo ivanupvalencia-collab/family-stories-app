@@ -6,6 +6,7 @@ class FamilyMember {
     required this.name,
     required this.relationship,
     this.linkedAccountId,
+    this.photoPath,
   });
 
   factory FamilyMember.create({
@@ -25,6 +26,7 @@ class FamilyMember {
       name: json['name'] as String,
       relationship: json['relationship'] as String,
       linkedAccountId: json['linkedAccountId'] as String?,
+      photoPath: json['photoPath'] as String?,
     );
   }
 
@@ -34,6 +36,7 @@ class FamilyMember {
       name: json['name'] as String,
       relationship: json['relationship'] as String,
       linkedAccountId: json['linked_account_id'] as String?,
+      photoPath: json['photo_path'] as String?,
     );
   }
 
@@ -41,6 +44,17 @@ class FamilyMember {
   final String name;
   final String relationship;
   final String? linkedAccountId;
+  // App-private relative filename for local members; private Storage object
+  // path for remote members. Never a linked account's avatar or a public URL.
+  final String? photoPath;
+
+  FamilyMember withPhotoPath(String? path) => FamilyMember(
+    id: id,
+    name: name,
+    relationship: relationship,
+    linkedAccountId: linkedAccountId,
+    photoPath: path,
+  );
 
   Map<String, dynamic> toJson() {
     return {
@@ -48,6 +62,7 @@ class FamilyMember {
       'name': name,
       'relationship': relationship,
       'linkedAccountId': linkedAccountId,
+      'photoPath': photoPath,
     };
   }
 

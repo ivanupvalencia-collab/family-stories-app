@@ -1,9 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../models/family_member.dart';
+import '../services/profile_image_picker.dart';
+import '../services/family_member_photo_service.dart';
+import '../widgets/family_member_photo_view.dart';
+
+class FamilyMemberDraft {
+  const FamilyMemberDraft({required this.member, this.photo});
+  final FamilyMember member;
+  final PickedProfileImage? photo;
+}
 
 class AddFamilyMemberScreen extends StatefulWidget {
-  const AddFamilyMemberScreen({super.key});
+  const AddFamilyMemberScreen({
+    required this.imagePicker,
+    required this.photoService,
+    super.key,
+  });
+
+  final ProfileImagePicker imagePicker;
+  final FamilyMemberPhotoService photoService;
 
   @override
   State<AddFamilyMemberScreen> createState() => _AddFamilyMemberScreenState();
@@ -22,6 +38,24 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   String? _relationship;
+  PickedProfileImage? _photo;
+  bool _pickingPhoto = false;
+
+  Future<void> _pickPhoto() async {
+    setState(() => _pickingPhoto = true);
+    try {
+      final photo = await widget.imagePicker.pickFromGallery();
+      if (photo != null && mounted) setState(() => _photo = photo);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo elegir la foto.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -35,9 +69,12 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
     }
 
     Navigator.of(context).pop(
-      FamilyMember.create(
-        name: _nameController.text.trim(),
-        relationship: _relationship!,
+      FamilyMemberDraft(
+        member: FamilyMember.create(
+          name: _nameController.text.trim(),
+          relationship: _relationship!,
+        ),
+        photo: _photo,
       ),
     );
   }
@@ -101,8 +138,31 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
                       },
                     ),
                     const SizedBox(height: 32),
+                    FamilyMemberPhotoView(
+                      member: FamilyMember(
+                        id: 'draft',
+                        name: _nameController.text,
+                        relationship: _relationship ?? '',
+                      ),
+                      photoService: widget.photoService,
+                      previewBytes: _photo?.bytes,
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('pick_family_member_photo'),
+                      onPressed: _pickingPhoto ? null : _pickPhoto,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Elegir foto (opcional)'),
+                    ),
+                    if (_photo != null)
+                      TextButton(
+                        onPressed: _pickingPhoto
+                            ? null
+                            : () => setState(() => _photo = null),
+                        child: const Text('Quitar foto seleccionada'),
+                      ),
+                    const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: _saveFamilyMember,
+                      onPressed: _pickingPhoto ? null : _saveFamilyMember,
                       child: const Text('Guardar'),
                     ),
                   ],
