@@ -102,12 +102,21 @@ class _FamilyMemberPhotoViewState extends State<FamilyMemberPhotoView> {
 
   Widget _image(Uint8List? bytes) => bytes == null || bytes.isEmpty
       ? _fallback()
-      : Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          alignment: widget.alignment,
-          gaplessPlayback: false,
-          errorBuilder: (_, _, _) => _fallback(),
+      : LayoutBuilder(
+          builder: (context, constraints) => Image.memory(
+            bytes,
+            cacheWidth:
+                ((constraints.hasBoundedWidth
+                            ? constraints.maxWidth
+                            : widget.radius * 2) *
+                        MediaQuery.devicePixelRatioOf(context))
+                    .ceil()
+                    .clamp(1, 2048),
+            fit: BoxFit.cover,
+            alignment: widget.alignment,
+            gaplessPlayback: false,
+            errorBuilder: (_, _, _) => _fallback(),
+          ),
         );
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../design/aritoria_design.dart';
 import '../models/family_member.dart';
@@ -18,6 +19,7 @@ import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../services/question_request_service.dart';
 import '../services/received_request_details_service.dart';
+import '../services/remote_family_member_cache.dart';
 import '../widgets/aritoria_home_view.dart';
 import '../widgets/family_member_photo_view.dart';
 import 'add_family_member_screen.dart';
@@ -94,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _loadFailed = false;
+  bool _hasMembersSnapshot = false;
   int _loadRequest = 0;
   bool _questionsLoading = false;
   bool _questionsLoadFailed = false;
@@ -123,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _user = _authService.currentUser;
     _photos = _photoServiceFor(_user);
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
-    _loadFamilyMembers();
+    _loadFamilyMembers(cacheFirst: true);
     _loadReceivedRequests();
     _replaceQuestionRealtimeSubscription(_user);
     unawaited(_preloadProfile(_user));
@@ -158,13 +161,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _user = user;
       _familyMembers.clear();
+      _hasMembersSnapshot = false;
       _questionRequests.clear();
       _answeredRequests.clear();
       _details.clear();
       _detailsGeneration++;
       _photos = _photoServiceFor(user);
     });
-    _loadFamilyMembers();
+    _loadFamilyMembers(cacheFirst: true);
     _loadReceivedRequests();
     _replaceQuestionRealtimeSubscription(user);
     unawaited(_preloadProfile(user));
@@ -241,38 +245,81 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadFamilyMembers() async {
+  Future<void> _loadFamilyMembers({bool cacheFirst = false}) async {
     final request = ++_loadRequest;
     final user = _user;
-    setState(() {
-      _isLoading = true;
-      _loadFailed = false;
-    });
+    if (_isLoading != !_hasMembersSnapshot || _loadFailed) {
+      setState(() {
+        _isLoading = !_hasMembersSnapshot;
+        _loadFailed = false;
+      });
+    }
 
     try {
+      final service = _familyMemberService;
+      if (cacheFirst && user != null && service is CachedFamilyMemberService) {
+        final cached = await (service as CachedFamilyMemberService)
+            .loadCachedForOwner(user.id);
+        if (!mounted || request != _loadRequest || _user?.id != user.id) return;
+        if (cached != null) {
+          // Warm only the hero and first portraits before publishing the
+          // snapshot. The rest read disk on demand, never holding up Home.
+          final hero = selectHomeHero(cached);
+          await _photos.warmCachedPhotos({...cached.take(6), ?hero}.toList());
+          if (!mounted || request != _loadRequest || _user?.id != user.id) {
+            return;
+          }
+          setState(() {
+            _familyMembers
+              ..clear()
+              ..addAll(cached);
+            _hasMembersSnapshot = true;
+            _isLoading = false;
+          });
+        }
+      }
       final familyMembers = user == null
           ? await _familyMemberStorage.load()
           : await _familyMemberService.loadForOwner(user.id);
       if (!mounted || request != _loadRequest) {
         return;
       }
-      setState(() {
-        _familyMembers
-          ..clear()
-          ..addAll(familyMembers);
-        _isLoading = false;
-      });
+      if (!_sameMembers(_familyMembers, familyMembers) ||
+          _isLoading ||
+          !_hasMembersSnapshot) {
+        setState(() {
+          if (!_sameMembers(_familyMembers, familyMembers)) {
+            _familyMembers
+              ..clear()
+              ..addAll(familyMembers);
+          }
+          _hasMembersSnapshot = true;
+          _isLoading = false;
+        });
+      }
+      if (user != null) {
+        // Full, authoritative lists prune old photo paths and deleted members.
+        unawaited(
+          _photos.retainPhotos(familyMembers).catchError((Object _) {}),
+        );
+      }
     } catch (_) {
       if (!mounted || request != _loadRequest) {
         return;
       }
       setState(() {
-        _familyMembers.clear();
         _isLoading = false;
-        _loadFailed = true;
+        _loadFailed = !_hasMembersSnapshot;
       });
     }
   }
+
+  bool _sameMembers(List<FamilyMember> a, List<FamilyMember> b) =>
+      a.length == b.length &&
+      List.generate(
+        a.length,
+        (i) => mapEquals(a[i].toJson(), b[i].toJson()),
+      ).every((same) => same);
 
   Future<void> _loadReceivedRequests() async {
     final generation = ++_detailsGeneration;
@@ -289,7 +336,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ..._questionRequests.map((r) => r.id),
         ..._answeredRequests.map((r) => r.id),
       ]);
-      if (mounted && _user?.id == userId && generation == _detailsGeneration) {
+      if (mounted &&
+          _user?.id == userId &&
+          generation == _detailsGeneration &&
+          !_sameDetails(_details, details)) {
         setState(() {
           _details
             ..clear()
@@ -301,12 +351,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  bool _sameDetails(
+    Map<String, ReceivedRequestDetails> a,
+    Map<String, ReceivedRequestDetails> b,
+  ) =>
+      a.length == b.length &&
+      a.keys.every(
+        (id) =>
+            b.containsKey(id) &&
+            a[id]!.senderName == b[id]!.senderName &&
+            a[id]!.durationSeconds == b[id]!.durationSeconds,
+      );
+
+  bool _sameRequests(List<QuestionRequest> a, List<QuestionRequest> b) =>
+      a.length == b.length &&
+      List.generate(
+        a.length,
+        (i) =>
+            a[i].id == b[i].id &&
+            a[i].questionText == b[i].questionText &&
+            a[i].senderId == b[i].senderId &&
+            a[i].recipientId == b[i].recipientId &&
+            a[i].familyMemberId == b[i].familyMemberId &&
+            a[i].status == b[i].status &&
+            a[i].createdAt == b[i].createdAt &&
+            a[i].answeredAt == b[i].answeredAt,
+      ).every((same) => same);
+
   Future<void> _loadAnsweredRequests() async {
     final request = ++_answersLoadRequest;
     final user = _user;
     setState(() {
-      _answeredRequests.clear();
-      _answersLoading = user != null;
+      if (user == null) _answeredRequests.clear();
+      _answersLoading = user != null && _answeredRequests.isEmpty;
       _answersLoadFailed = false;
     });
     if (user == null) return;
@@ -324,10 +401,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
         return;
       }
-      setState(() {
-        _answeredRequests.addAll(answers);
-        _answersLoading = false;
-      });
+      if (!_sameRequests(_answeredRequests, answers) || _answersLoading) {
+        setState(() {
+          if (!_sameRequests(_answeredRequests, answers)) {
+            _answeredRequests
+              ..clear()
+              ..addAll(answers);
+          }
+          _answersLoading = false;
+        });
+      }
     } catch (_) {
       if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
         return;
@@ -365,8 +448,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     setState(() {
-      _questionRequests.clear();
-      _questionsLoading = true;
+      _questionsLoading = _questionRequests.isEmpty;
       _questionsLoadFailed = false;
     });
 
@@ -379,10 +461,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _user?.id != user.id) {
         return;
       }
-      setState(() {
-        _questionRequests.addAll(questionRequests);
-        _questionsLoading = false;
-      });
+      if (!_sameRequests(_questionRequests, questionRequests) ||
+          _questionsLoading) {
+        setState(() {
+          if (!_sameRequests(_questionRequests, questionRequests)) {
+            _questionRequests
+              ..clear()
+              ..addAll(questionRequests);
+          }
+          _questionsLoading = false;
+        });
+      }
     } catch (_) {
       if (!mounted ||
           request != _questionsLoadRequest ||
@@ -390,7 +479,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
       setState(() {
-        _questionRequests.clear();
         _questionsLoading = false;
         _questionsLoadFailed = true;
       });
@@ -421,6 +509,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     final familyMember = draft.member;
     final user = _user;
+    _loadRequest++; // An older refresh must not overwrite this new member.
     setState(() => _isSaving = true);
     try {
       var savedMember = user == null
@@ -447,6 +536,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted || _user?.id != user?.id) return;
       setState(() {
         _familyMembers.add(savedMember);
+        _hasMembersSnapshot = true;
+        _isLoading = false;
       });
     } catch (_) {
       if (mounted) {
@@ -661,6 +752,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       : null;
 
   Widget? _requestStatus(bool answers) {
+    if ((answers ? _answeredRequests : _questionRequests).isNotEmpty) {
+      return null;
+    }
     if (answers ? _answersLoading : _questionsLoading) {
       return const Center(
         child: Padding(

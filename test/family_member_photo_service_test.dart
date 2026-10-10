@@ -8,6 +8,8 @@ import 'package:family_stories_app/services/family_member_photo_service.dart';
 import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
+import 'package:family_stories_app/services/remote_family_photo_disk_cache.dart';
+import 'package:family_stories_app/services/remote_family_member_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -212,11 +214,19 @@ void main() {
     late bool failCleanup;
     bool emptyDownload = false;
     Completer<void>? downloadGate;
+    late Directory remoteDirectory;
+    late RemoteFamilyPhotoDiskCache disk;
     const owner = '11111111-1111-4111-8111-111111111111';
     const id = '22222222-2222-4222-8222-222222222222';
     const oldPath = '$owner/$id/old.png';
 
     setUp(() async {
+      remoteDirectory = await Directory.systemTemp.createTemp(
+        'remote_photos_test_',
+      );
+      disk = RemoteFamilyPhotoDiskCache(
+        directoryProvider: () async => remoteDirectory,
+      );
       memberJson = {
         'id': id,
         'name': 'Pepe',
@@ -323,16 +333,21 @@ void main() {
           },
         }),
       );
-      members = SupabaseFamilyMemberService(client: client);
+      members = SupabaseFamilyMemberService(
+        client: client,
+        cache: RemoteFamilyMemberCache(preferences: _Preferences()),
+      );
       photos = SupabaseFamilyMemberPhotoService(
         ownerId: owner,
         memberService: members,
         client: client,
+        diskCache: disk,
       );
     });
     tearDown(() async {
       await client.dispose();
       await server.close(force: true);
+      await remoteDirectory.delete(recursive: true);
     });
 
     test(
@@ -375,6 +390,139 @@ void main() {
       expect(requests.where((r) => r.method == 'GET'), hasLength(2));
     });
 
+    Future<SupabaseClient> restartedClient() async {
+      final restarted = SupabaseClient(
+        'http://127.0.0.1:${server.port}',
+        'test-key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false),
+      );
+      await restarted.auth.recoverSession(
+        jsonEncode(client.auth.currentSession!.toJson()),
+      );
+      addTearDown(restarted.dispose);
+      return restarted;
+    }
+
+    test('persistent photo survives restart and warms synchronously accessible memory', () async {
+      final member = FamilyMember.fromSupabaseJson(memberJson);
+      await photos.load(member);
+      final restarted = await restartedClient();
+      final service = SupabaseFamilyMemberPhotoService(
+        ownerId: owner,
+        memberService: members,
+        client: restarted,
+        diskCache: RemoteFamilyPhotoDiskCache(
+          directoryProvider: () async => remoteDirectory,
+        ),
+      );
+      expect(service.cachedPhoto(member), isNull);
+      await service.warmCachedPhotos([member]);
+      expect(service.cachedPhoto(member), _image.bytes);
+      expect(await service.load(member), _image.bytes);
+      expect(
+        requests.where(
+          (r) => r.uri.path.contains('/storage/') && r.method == 'GET',
+        ),
+        hasLength(1),
+      );
+    });
+
+    test(
+      'missing, empty and corrupt disk files are downloaded again',
+      () async {
+        final member = FamilyMember.fromSupabaseJson(memberJson);
+        await photos.load(member);
+        for (final content in [
+          null,
+          <int>[],
+          <int>[1, 2, 3, 4],
+        ]) {
+          final file =
+              (await remoteDirectory
+                          .list(recursive: true)
+                          .where((f) => f is File)
+                          .toList())
+                      .single
+                  as File;
+          if (content == null) {
+            await file.delete();
+          } else {
+            await file.writeAsBytes(content, flush: true);
+          }
+          final restarted = await restartedClient();
+          final service = SupabaseFamilyMemberPhotoService(
+            ownerId: owner,
+            memberService: members,
+            client: restarted,
+            diskCache: disk,
+          );
+          expect(await service.load(member), _image.bytes);
+        }
+        expect(
+          requests.where(
+            (r) => r.uri.path.contains('/storage/') && r.method == 'GET',
+          ),
+          hasLength(4),
+        );
+      },
+    );
+
+    test(
+      'changed path and deleted member prune memory and persisted old photos',
+      () async {
+        final member = FamilyMember.fromSupabaseJson(memberJson);
+        await photos.load(member);
+        final changed = member.withPhotoPath('$owner/$id/changed.png');
+        await photos.retainPhotos([changed]);
+        expect(photos.cachedPhoto(member), isNull);
+        expect(
+          await remoteDirectory
+              .list(recursive: true)
+              .where((f) => f is File)
+              .length,
+          0,
+        );
+        await photos.load(changed);
+        await photos.retainPhotos([]);
+        expect(photos.cachedPhoto(changed), isNull);
+        expect(
+          await remoteDirectory
+              .list(recursive: true)
+              .where((f) => f is File)
+              .length,
+          0,
+        );
+      },
+    );
+
+    test(
+      'replacement and deletion invalidate disk entries across restart',
+      () async {
+        final member = FamilyMember.fromSupabaseJson(memberJson);
+        await photos.load(member);
+        final updated = await photos.save(member, _image);
+        expect(await disk.read(client.storage.url, owner, oldPath), isNull);
+        expect(
+          await disk.read(client.storage.url, owner, updated.photoPath!),
+          _image.bytes,
+        );
+        final restarted = await restartedClient();
+        final service = SupabaseFamilyMemberPhotoService(
+          ownerId: owner,
+          memberService: members,
+          client: restarted,
+          diskCache: disk,
+        );
+        await service.warmCachedPhotos([updated]);
+        expect(service.cachedPhoto(updated), _image.bytes);
+        await photos.save(updated, null);
+        expect(
+          await disk.read(client.storage.url, owner, updated.photoPath!),
+          isNull,
+        );
+      },
+    );
+
     test('account switch and logout discard previous session photos', () async {
       final member = FamilyMember.fromSupabaseJson(memberJson);
       final session = client.auth.currentSession!.toJson();
@@ -399,7 +547,9 @@ void main() {
         requests.where(
           (r) => r.uri.path.contains('/storage/') && r.method == 'GET',
         ),
-        hasLength(3),
+        hasLength(
+          1,
+        ), // Returning to the same account can use its private disk cache.
       );
     });
 

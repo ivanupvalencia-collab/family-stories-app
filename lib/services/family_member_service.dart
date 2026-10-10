@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_member.dart';
+import 'remote_family_member_cache.dart';
 
 abstract class FamilyMemberService {
   Future<List<FamilyMember>> loadForOwner(String ownerId);
@@ -24,21 +25,72 @@ abstract class FamilyMemberService {
   });
 }
 
-class SupabaseFamilyMemberService implements FamilyMemberService {
-  SupabaseFamilyMemberService({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+class SupabaseFamilyMemberService
+    implements FamilyMemberService, CachedFamilyMemberService {
+  SupabaseFamilyMemberService({
+    SupabaseClient? client,
+    RemoteFamilyMemberCache? cache,
+  }) : _client = client ?? Supabase.instance.client {
+    _cache = cache ?? (_caches[_client] ??= RemoteFamilyMemberCache());
+    _account = _client.auth.currentUser?.id;
+    _client.auth.onAuthStateChange.listen((state) {
+      final next = state.session?.user.id;
+      if (next != _account || state.event == AuthChangeEvent.signedOut) {
+        _generation++;
+        _account = next;
+      }
+    });
+  }
 
   final SupabaseClient _client;
+  static final _caches = Expando<RemoteFamilyMemberCache>();
+  late final RemoteFamilyMemberCache _cache;
+  String? _account;
+  int _generation = 0;
+  int _loadSequence = 0;
+  String get _backend => _client.storage.url;
+
+  void _requireOwner(String ownerId, int generation) {
+    if (_client.auth.currentUser?.id != ownerId || generation != _generation) {
+      throw StateError('The owner session changed.');
+    }
+  }
+
+  @override
+  Future<List<FamilyMember>?> loadCachedForOwner(String ownerId) async {
+    final generation = _generation;
+    _requireOwner(ownerId, generation);
+    final members = await _cache.read(_backend, ownerId);
+    _requireOwner(ownerId, generation);
+    return members;
+  }
 
   @override
   Future<List<FamilyMember>> loadForOwner(String ownerId) async {
+    final generation = _generation;
+    _requireOwner(ownerId, generation);
+    final sequence = ++_loadSequence;
+    final revision = _cache.revision;
     final data = await _client
         .from('family_members')
         .select('id, name, relationship, linked_account_id, photo_path')
         .eq('owner_id', ownerId)
         .order('created_at');
 
-    return data.map(FamilyMember.fromSupabaseJson).toList();
+    _requireOwner(ownerId, generation);
+    final members = data.map(FamilyMember.fromSupabaseJson).toList();
+    if (sequence == _loadSequence && revision == _cache.revision) {
+      final writing = _cache.replace(_backend, ownerId, members);
+      final writtenRevision = _cache.revision;
+      await writing;
+      _requireOwner(ownerId, generation);
+      if (_cache.revision == writtenRevision) return members;
+    }
+    // A photo mutation or newer load completed while this response/write was
+    // in flight. Do not hand its older references back to Home either.
+    final latest = await _cache.read(_backend, ownerId);
+    _requireOwner(ownerId, generation);
+    return latest ?? members;
   }
 
   @override
@@ -46,6 +98,8 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
     required String ownerId,
     required String familyMemberId,
   }) async {
+    final generation = _generation;
+    _requireOwner(ownerId, generation);
     final data = await _client
         .from('family_members')
         .select('id, name, relationship, linked_account_id, photo_path')
@@ -53,7 +107,15 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
         .eq('id', familyMemberId)
         .maybeSingle();
 
-    return data == null ? null : FamilyMember.fromSupabaseJson(data);
+    _requireOwner(ownerId, generation);
+    final member = data == null ? null : FamilyMember.fromSupabaseJson(data);
+    if (member == null) {
+      await _cache.remove(_backend, ownerId, familyMemberId);
+    } else {
+      await _cache.upsert(_backend, ownerId, member);
+    }
+    _requireOwner(ownerId, generation);
+    return member;
   }
 
   @override
@@ -62,6 +124,8 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
     required String name,
     required String relationship,
   }) async {
+    final generation = _generation;
+    _requireOwner(ownerId, generation);
     final familyMember = FamilyMember.create(
       name: name,
       relationship: relationship,
@@ -72,7 +136,11 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
         .select('id, name, relationship, linked_account_id, photo_path')
         .single();
 
-    return FamilyMember.fromSupabaseJson(data);
+    _requireOwner(ownerId, generation);
+    final member = FamilyMember.fromSupabaseJson(data);
+    await _cache.upsert(_backend, ownerId, member);
+    _requireOwner(ownerId, generation);
+    return member;
   }
 
   @override
@@ -82,6 +150,7 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
     required String? photoPath,
     required String? expectedPhotoPath,
   }) async {
+    final generation = _generation;
     if (_client.auth.currentUser?.id != ownerId) {
       throw StateError('The owner session is required.');
     }
@@ -95,8 +164,12 @@ class SupabaseFamilyMemberService implements FamilyMemberService {
         'p_expected_photo_path': expectedPhotoPath,
       },
     );
-    return FamilyMember.fromSupabaseJson(
+    _requireOwner(ownerId, generation);
+    final member = FamilyMember.fromSupabaseJson(
       Map<String, dynamic>.from(data as Map),
     );
+    await _cache.upsert(_backend, ownerId, member);
+    _requireOwner(ownerId, generation);
+    return member;
   }
 }

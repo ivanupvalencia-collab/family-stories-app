@@ -9,10 +9,13 @@ import '../models/local_id.dart';
 import 'family_member_service.dart';
 import 'family_member_storage.dart';
 import 'profile_image_picker.dart';
+import 'remote_family_photo_disk_cache.dart';
 
 abstract class FamilyMemberPhotoService {
   Uint8List? cachedPhoto(FamilyMember member) => null;
   Listenable? get cacheChanges => null;
+  Future<void> warmCachedPhotos(List<FamilyMember> members) async {}
+  Future<void> retainPhotos(List<FamilyMember> members) async {}
 
   Future<Uint8List> load(FamilyMember member);
 
@@ -157,13 +160,20 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
     required this.ownerId,
     required this.memberService,
     SupabaseClient? client,
-  }) : _clientOverride = client;
+    RemoteFamilyPhotoDiskCache? diskCache,
+  }) : _clientOverride = client,
+       _diskOverride = diskCache;
 
   static const bucketName = 'family-member-photos';
   final String ownerId;
   final FamilyMemberService memberService;
   final SupabaseClient? _clientOverride;
   SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
+  final RemoteFamilyPhotoDiskCache? _diskOverride;
+  static final _disks = Expando<RemoteFamilyPhotoDiskCache>();
+  RemoteFamilyPhotoDiskCache get _disk =>
+      _diskOverride ?? (_disks[_client] ??= RemoteFamilyPhotoDiskCache());
+  String get _backend => _client.storage.url;
   static final _caches = Expando<_RemotePhotoCache>();
   _RemotePhotoCache get _cache {
     final client = _client;
@@ -203,6 +213,44 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
 
   @override
   Future<Uint8List> load(FamilyMember member) async {
+    return _load(member, cacheOnly: false);
+  }
+
+  @override
+  Future<void> warmCachedPhotos(List<FamilyMember> members) async {
+    await Future.wait(
+      members.where((m) => m.photoPath != null).map((member) async {
+        try {
+          await _load(member, cacheOnly: true);
+        } catch (_) {
+          // A missing disk entry is fetched normally when its view is displayed.
+        }
+      }),
+    );
+  }
+
+  @override
+  Future<void> retainPhotos(List<FamilyMember> members) async {
+    _requireOwnerSession();
+    final paths = members
+        .where((m) => m.photoPath != null && _belongsTo(m, m.photoPath!))
+        .map((m) => m.photoPath!)
+        .toSet();
+    final cache = _cache;
+    final obsolete = cache.entries.keys
+        .where((path) => !paths.contains(path))
+        .toList();
+    for (final path in obsolete) {
+      cache.entries.remove(path);
+    }
+    if (obsolete.isNotEmpty) cache.changed();
+    await _disk.retain(_backend, ownerId, paths);
+  }
+
+  Future<Uint8List> _load(
+    FamilyMember member, {
+    required bool cacheOnly,
+  }) async {
     _requireOwnerSession();
     final path = member.photoPath;
     if (path == null || !_belongsTo(member, path)) {
@@ -215,9 +263,22 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
     final entry = _PhotoEntry();
     final generation = cache.generation;
     cache.entries[path] = entry;
+    bool valid() =>
+        _client.auth.currentUser?.id == ownerId &&
+        cache.generation == generation &&
+        cache.entries[path] == entry;
     final pending = () async {
       try {
-        final bytes = await _client.storage.from(bucketName).download(path);
+        var bytes = await _disk.read(_backend, ownerId, path);
+        _requireOwnerSession();
+        if (!valid()) throw StateError('Photo load was invalidated.');
+        if (bytes == null) {
+          if (cacheOnly) throw StateError('Photo is not on disk.');
+          bytes = await _client.storage.from(bucketName).download(path);
+          if (bytes.isEmpty) throw StateError('Empty photo download.');
+          await RemoteFamilyPhotoDiskCache.validate(bytes);
+          await _disk.write(_backend, ownerId, path, bytes, stillValid: valid);
+        }
         _requireOwnerSession();
         cache.syncSession();
         if (cache.generation != generation || cache.entries[path] != entry) {
@@ -324,6 +385,21 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
       cache.entries[newPath] = _PhotoEntry()..bytes = image.bytes;
     }
     cache.changed();
+    if (current.photoPath != null) {
+      await _disk.remove(_backend, ownerId, current.photoPath!);
+    }
+    if (newPath != null && image != null) {
+      await _disk.write(
+        _backend,
+        ownerId,
+        newPath,
+        image.bytes,
+        stillValid: () =>
+            cache.account == ownerId &&
+            cache.generation == generation &&
+            cache.entries[newPath]?.bytes == image.bytes,
+      );
+    }
     await _remove(member, current.photoPath);
     return updated;
   }
