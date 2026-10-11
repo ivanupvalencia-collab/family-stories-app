@@ -93,8 +93,12 @@ Widget _profile({
 );
 
 Future<void> _choosePhoto(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('Opciones del ser querido'));
-  await tester.pumpAndSettle();
+  if (find.byTooltip('Opciones del ser querido').evaluate().isNotEmpty) {
+    await tester.tap(find.byTooltip('Opciones del ser querido'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar información'));
+    await tester.pumpAndSettle();
+  }
   await tester.tap(find.text('Cambiar foto'));
   await tester.pumpAndSettle();
 }
@@ -108,6 +112,50 @@ Future<void> _fillCreateForm(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'two-item member menu moves photos into editor without losing name draft or link',
+    (tester) async {
+      final original = _member.withPhotoPath('own/member/original.png');
+      final storage = fixtures.MemoryFamilyMemberStorage(members: [original]);
+      final photos = _Photos(storage: storage);
+      await tester.pumpWidget(
+        _profile(
+          member: original,
+          photos: photos,
+          auth: fixtures.FakeAuthService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Opciones del ser querido'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<String>), findsNWidgets(2));
+      expect(find.text('Cambiar foto'), findsNothing);
+      expect(find.text('Eliminar foto'), findsNothing);
+      expect(find.text('Actualizar familiar'), findsNothing);
+      await tester.tap(find.text('Editar información'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Pepe actualizado');
+      await tester.tap(find.text('Cambiar foto'));
+      await tester.pumpAndSettle();
+      expect(storage.members.single.photoPath, 'own/member/1.png');
+      expect(
+        tester
+            .widget<TextFormField>(find.byType(TextFormField))
+            .controller!
+            .text,
+        'Pepe actualizado',
+      );
+      await tester.tap(find.text('Eliminar foto'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Guardar cambios'));
+      await tester.tap(find.text('Guardar cambios'));
+      await tester.pumpAndSettle();
+      expect(storage.members.single.name, 'Pepe actualizado');
+      expect(storage.members.single.photoPath, isNull);
+      expect(storage.members.single.linkedAccountId, original.linkedAccountId);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('cached photo is shown on the first frame without loading', (
     tester,
   ) async {
@@ -305,8 +353,6 @@ void main() {
         expect(view.member.photoPath, 'own/member/1.png');
         expect(view.member.linkedAccountId, 'linked-account');
         expect(photos.loadedPaths.last, 'own/member/1.png');
-        await tester.tap(find.byTooltip('Opciones del ser querido'));
-        await tester.pumpAndSettle();
         await tester.tap(find.text('Eliminar foto'));
         await tester.pumpAndSettle();
         view = tester.widget<FamilyMemberPhotoView>(
@@ -315,6 +361,9 @@ void main() {
         expect(view.member.photoPath, isNull);
         expect(view.member.linkedAccountId, 'linked-account');
         expect(photos.savedImages.last, isNull);
+        expect(find.byIcon(Icons.person_outline), findsOneWidget);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
         expect(find.text('P'), findsOneWidget);
         expect(
           (remote ? members.members : storage.members).single.photoPath,
@@ -372,7 +421,7 @@ void main() {
   );
 
   testWidgets(
-    'fallback does not load linked profiles and handles missing private images',
+    'guest fallback and missing private images remain safe',
     (tester) async {
       final photos = _Photos();
       await tester.pumpWidget(

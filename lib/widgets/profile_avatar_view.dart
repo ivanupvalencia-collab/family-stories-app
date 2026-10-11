@@ -7,39 +7,46 @@ class ProfileAvatarView extends StatelessWidget {
     this.avatarKey,
     this.avatarUrl,
     this.radius = 48,
+    this.width,
+    this.height,
+    this.circular = true,
+    this.alignment = Alignment.center,
+    this.fallback,
     super.key,
   });
 
   final String? avatarKey;
   final String? avatarUrl;
   final double radius;
+  final double? width;
+  final double? height;
+  final bool circular;
+  final Alignment alignment;
+  final Widget? fallback;
 
   @override
   Widget build(BuildContext context) {
     final normalizedUrl = avatarUrl?.trim();
     final avatar = ProfileAvatarCatalog.findByKey(avatarKey);
+    final placeholder = fallback ?? _GenericAvatarIcon(radius: radius);
+    final image = normalizedUrl != null && normalizedUrl.isNotEmpty
+        ? Image.network(
+            normalizedUrl,
+            fit: BoxFit.cover,
+            alignment: alignment,
+            loadingBuilder: (context, child, progress) =>
+                progress == null ? child : placeholder,
+            errorBuilder: (context, error, stackTrace) => placeholder,
+          )
+        : avatar != null
+        ? Image.asset(avatar.assetPath, fit: BoxFit.contain)
+        : placeholder;
 
     return Center(
-      child: SizedBox.square(
-        dimension: radius * 2,
-        child: ClipOval(
-          child: normalizedUrl != null && normalizedUrl.isNotEmpty
-              ? Image.network(
-                  normalizedUrl,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) {
-                      return child;
-                    }
-                    return _GenericAvatarIcon(radius: radius);
-                  },
-                  errorBuilder: (context, error, stackTrace) =>
-                      _GenericAvatarIcon(radius: radius),
-                )
-              : avatar != null
-              ? Image.asset(avatar.assetPath, fit: BoxFit.contain)
-              : _GenericAvatarIcon(radius: radius),
-        ),
+      child: SizedBox(
+        width: width ?? radius * 2,
+        height: height ?? radius * 2,
+        child: circular ? ClipOval(child: image) : ClipRect(child: image),
       ),
     );
   }

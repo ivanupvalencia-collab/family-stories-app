@@ -15,6 +15,9 @@ abstract final class AritoriaColors {
   static const photoShadeMid = Color(0xA62C2D25);
   static const photoShade = Color(0xD92C2D25);
   static const transparent = Colors.transparent;
+  static const moss = Color(0xFF60683F);
+  static const softOlive = Color(0xFFE8E8D5);
+  static const card = Color(0xFFFFFCF6);
 }
 
 abstract final class AritoriaSpace {
@@ -34,6 +37,34 @@ abstract final class AritoriaSpace {
 }
 
 abstract final class AritoriaType {
+  static const homeSection = TextStyle(
+    fontFamily: 'Nunito Sans',
+    fontSize: 21,
+    height: 1.25,
+    fontWeight: FontWeight.w700,
+    color: AritoriaColors.ink,
+  );
+  static const memberName = TextStyle(
+    fontFamily: 'Fraunces',
+    fontSize: 46,
+    height: 1.08,
+    fontWeight: FontWeight.w500,
+    color: AritoriaColors.ink,
+  );
+  static const memoryTitle = TextStyle(
+    fontFamily: 'Fraunces',
+    fontSize: 19,
+    height: 1.25,
+    fontWeight: FontWeight.w500,
+    color: AritoriaColors.ink,
+  );
+  static const question = TextStyle(
+    fontFamily: 'Fraunces',
+    fontSize: 22,
+    height: 1.28,
+    fontWeight: FontWeight.w500,
+    color: AritoriaColors.ink,
+  );
   static const brand = TextStyle(
     fontFamily: 'Fraunces',
     fontSize: 34,

@@ -54,7 +54,10 @@ cuentas vinculadas ni de `profiles`. Las filas existentes conservan
 
 `FamilyMemberPhotoService` y `FamilyMemberPhotoView` son los puntos reutilizables
 para próximas pantallas. El widget muestra fallback mientras carga, si falta
-la foto o si falla la lectura/decodificación; no consulta el perfil vinculado.
+la foto o si falla la lectura/decodificación. Si no hay foto propia, puede
+mostrar el avatar vinculado únicamente como fallback de visualización,
+mediante la RPC limitada de `08_visible_account_avatars.sql` (ver
+`ACCOUNT_AVATARS.md`). Nunca lo persiste como foto del familiar.
 No hay caché global de bytes privados compartida entre cuentas.
 
 ## Prueba manual sin sesión

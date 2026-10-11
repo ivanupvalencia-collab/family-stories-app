@@ -130,6 +130,7 @@ Widget _space(
   _MemberPhotos? photos,
   _StoryPhotos? storyPhotos,
 }) => MaterialApp(
+  debugShowCheckedModeBanner: false,
   home: FamilyMemberScreen(
     familyMember: member,
     authService: fixtures.FakeAuthService(
@@ -556,8 +557,9 @@ void main() {
             id: 'member',
             name: 'Mavi',
             relationship: 'Abuela',
+            linkedAccountId: 'linked',
           ),
-          [_story(1)],
+          [_story(0), _story(1), _story(2)],
         ),
       ),
     );
@@ -566,13 +568,20 @@ void main() {
     if (const bool.fromEnvironment('ARITORIA_PREVIEW')) {
       final boundary =
           key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      await tester.runAsync(() async {
+      Future<void> capture(String name) => tester.runAsync(() async {
         final image = await boundary.toImage();
         final data = await image.toByteData(format: ui.ImageByteFormat.png);
-        await File('.dart_tool/member-space-preview.png')
+        await File('.dart_tool/$name.png')
             .writeAsBytes(data!.buffer.asUint8List());
         image.dispose();
       });
+      await capture('member-space-preview');
+      await tester.drag(
+        find.byKey(const ValueKey('member-space-scroll')),
+        const Offset(0, -440),
+      );
+      await tester.pumpAndSettle();
+      await capture('member-space-stories-preview');
     }
   });
 }

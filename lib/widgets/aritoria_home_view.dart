@@ -1,22 +1,33 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'question_text.dart';
 
 import '../design/aritoria_design.dart';
 import '../models/family_member.dart';
+import '../models/profile_avatar.dart';
 import '../models/question_request.dart';
 import '../models/user_profile.dart';
 import '../services/family_member_photo_service.dart';
 import '../services/received_request_details_service.dart';
 import 'family_member_photo_view.dart';
-import 'profile_avatar_view.dart';
+import 'account_avatar_view.dart';
+import '../services/visible_account_avatar_service.dart';
 
-FamilyMember? selectHomeHero(List<FamilyMember> members) {
+FamilyMember? selectHomeHero(
+  List<FamilyMember> members, {
+  UserProfile? Function(String accountId)? linkedProfile,
+}) {
   if (members.isEmpty) return null;
-  return members.firstWhere(
-    (member) => member.photoPath != null,
-    orElse: () => members.first,
-  );
+  return members.firstWhere((member) {
+    if (member.photoPath != null) return true;
+    final accountId = member.linkedAccountId;
+    final profile = accountId == null ? null : linkedProfile?.call(accountId);
+    return (profile?.avatarUrl?.trim().isNotEmpty ?? false) ||
+        ProfileAvatarCatalog.findByKey(profile?.avatarKey) != null;
+  }, orElse: () => members.first);
 }
 
 String requestDate(DateTime date) {
@@ -58,7 +69,7 @@ class AritoriaHomeView extends StatelessWidget {
     required this.questionStatus,
     required this.answerStatus,
     required this.onRefresh,
-    required this.onProfile,
+    required this.onNotifications,
     required this.onAdd,
     required this.onMember,
     required this.onHero,
@@ -67,11 +78,13 @@ class AritoriaHomeView extends StatelessWidget {
     required this.onAllAnswers,
     required this.onQuestion,
     required this.onAnswer,
+    this.avatarService,
     super.key,
   });
 
   final List<FamilyMember> members;
   final FamilyMemberPhotoService photos;
+  final VisibleAccountAvatarService? avatarService;
   final UserProfile? profile;
   final bool authenticated;
   final List<QuestionRequest> questions;
@@ -79,18 +92,17 @@ class AritoriaHomeView extends StatelessWidget {
   final Map<String, ReceivedRequestDetails> details;
   final Widget? memberStatus, questionStatus, answerStatus;
   final Future<void> Function() onRefresh;
-  final VoidCallback onProfile,
+  final VoidCallback onNotifications,
       onAdd,
-      onHero,
       onAllMembers,
       onAllQuestions,
       onAllAnswers;
   final ValueChanged<FamilyMember> onMember;
+  final ValueChanged<FamilyMember?> onHero;
   final ValueChanged<QuestionRequest> onQuestion, onAnswer;
 
   @override
   Widget build(BuildContext context) {
-    final hero = selectHomeHero(members);
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView(
@@ -115,28 +127,31 @@ class AritoriaHomeView extends StatelessWidget {
                   ],
                 ),
               ),
-              Tooltip(
-                message: 'Perfil',
-                child: Semantics(
-                  button: true,
-                  label: 'Abrir perfil',
-                  child: InkResponse(
-                    onTap: onProfile,
-                    child: SizedBox.square(
-                      dimension: 48,
-                      child: ProfileAvatarView(
-                        avatarKey: profile?.avatarKey,
-                        avatarUrl: profile?.avatarUrl,
-                        radius: 23,
-                      ),
-                    ),
+              IconButton(
+                tooltip: 'Notificaciones',
+                onPressed: onNotifications,
+                icon: Badge(
+                  isLabelVisible: authenticated && questions.isNotEmpty,
+                  smallSize: 7,
+                  backgroundColor: const Color(0xFFB75D48),
+                  child: const Icon(
+                    Icons.notifications_none_outlined,
+                    size: 27,
+                    color: AritoriaColors.ink,
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: AritoriaSpace.xl),
-          _Hero(member: hero, photos: photos, onTap: onHero),
+          _AutomaticHero(
+            members: List.of(members),
+            photos: photos,
+            avatars: authenticated
+                ? avatarService ?? SupabaseVisibleAccountAvatarService.shared
+                : null,
+            onTap: onHero,
+          ),
           const SizedBox(height: AritoriaSpace.section),
           _SectionTitle(
             title: 'Tus seres queridos',
@@ -193,7 +208,7 @@ class AritoriaHomeView extends StatelessWidget {
             const SizedBox(height: AritoriaSpace.section),
             _SectionTitle(
               title: 'Preguntas para ti',
-              action: questions.length > 2 ? 'Ver todas' : null,
+              action: questions.isNotEmpty ? 'Ver todas' : null,
               onTap: onAllQuestions,
             ),
             const SizedBox(height: AritoriaSpace.sm),
@@ -233,14 +248,106 @@ class AritoriaHomeView extends StatelessWidget {
   }
 }
 
+// Resolve linked metadata independently of the rest of Home. Reuse its
+// account-scoped cache for both selection and the rendered hero image.
+class _AutomaticHero extends StatefulWidget {
+  const _AutomaticHero({
+    required this.members,
+    required this.photos,
+    required this.avatars,
+    required this.onTap,
+  });
+
+  final List<FamilyMember> members;
+  final FamilyMemberPhotoService photos;
+  final VisibleAccountAvatarService? avatars;
+  final ValueChanged<FamilyMember?> onTap;
+
+  @override
+  State<_AutomaticHero> createState() => _AutomaticHeroState();
+}
+
+class _AutomaticHeroState extends State<_AutomaticHero> {
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.avatars?.addListener(_avatarsChanged);
+    unawaited(_loadAvatars());
+  }
+
+  Future<void> _loadAvatars() async {
+    final generation = ++_generation;
+    final service = widget.avatars;
+    if (service == null) return;
+    final accounts = {
+      for (final member in widget.members)
+        if (member.photoPath == null && member.linkedAccountId != null)
+          member.linkedAccountId!,
+    };
+    await Future.wait(
+      accounts.map((account) async {
+        try {
+          await service.load(account);
+        } catch (_) {
+          // Optional metadata: keep selecting from the available own photos.
+        }
+      }),
+    );
+    if (mounted && generation == _generation) setState(() {});
+  }
+
+  void _avatarsChanged() {
+    setState(() {});
+    unawaited(_loadAvatars());
+  }
+
+  @override
+  void didUpdateWidget(_AutomaticHero oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.avatars != widget.avatars) {
+      oldWidget.avatars?.removeListener(_avatarsChanged);
+      widget.avatars?.addListener(_avatarsChanged);
+    }
+    if (oldWidget.avatars != widget.avatars ||
+        !listEquals(oldWidget.members, widget.members)) {
+      unawaited(_loadAvatars());
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    widget.avatars?.removeListener(_avatarsChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final member = selectHomeHero(
+      widget.members,
+      linkedProfile: widget.avatars?.cached,
+    );
+    return _Hero(
+      member: member,
+      photos: widget.photos,
+      avatars: widget.avatars,
+      onTap: () => widget.onTap(member),
+    );
+  }
+}
+
 class _Hero extends StatelessWidget {
   const _Hero({
     required this.member,
     required this.photos,
     required this.onTap,
+    this.avatars,
   });
   final FamilyMember? member;
   final FamilyMemberPhotoService photos;
+  final VisibleAccountAvatarService? avatars;
   final VoidCallback onTap;
 
   @override
@@ -257,6 +364,7 @@ class _Hero extends StatelessWidget {
                   : FamilyMemberPhotoView(
                       member: member!,
                       photoService: photos,
+                      avatarService: avatars,
                       circular: false,
                       alignment: const Alignment(0, -0.15),
                       width: constraints.maxWidth,
@@ -435,17 +543,36 @@ class _SectionTitle extends StatelessWidget {
   final String? action;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(child: Text(title, style: AritoriaType.section)),
-      if (action != null) ...[
-        const SizedBox(width: AritoriaSpace.sm),
-        TextButton(
-          onPressed: onTap,
-          child: Text(action!, style: AritoriaType.action),
-        ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Row(
+      children: [
+        Expanded(child: Text(title, style: AritoriaType.homeSection)),
+        if (action != null) ...[
+          const SizedBox(width: AritoriaSpace.sm),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * .4),
+            child: TextButton(
+              onPressed: onTap,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      action!,
+                      style: AritoriaType.action.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
-    ],
+    ),
   );
 }
 
@@ -464,18 +591,30 @@ class ReceivedRequestRow extends StatelessWidget {
     required this.request,
     required this.onTap,
     this.details,
+    this.avatarService,
     super.key,
   });
   final QuestionRequest request;
   final ReceivedRequestDetails? details;
+  final VisibleAccountAvatarService? avatarService;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Column(
     children: [
       ListTile(
         contentPadding: EdgeInsets.zero,
+        leading: request.status == QuestionRequestStatus.pending
+            ? AccountAvatarView(
+                accountId: request.senderId,
+                service: avatarService,
+                fallbackBuilder: (profile) =>
+                    _SenderInitial(name: profile?.name ?? details?.senderName),
+                fallback: _SenderInitial(name: details?.senderName),
+              )
+            : null,
         title: QuestionText(
           request.questionText,
+          style: AritoriaType.body.copyWith(fontSize: 17, height: 1.3),
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
         ),
@@ -496,6 +635,27 @@ class ReceivedRequestRow extends StatelessWidget {
       ),
       const Divider(height: 1),
     ],
+  );
+}
+
+class _SenderInitial extends StatelessWidget {
+  const _SenderInitial({this.name});
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: AritoriaColors.softOlive,
+    child: Center(
+      child: Text(
+        (name?.trim().isNotEmpty ?? false)
+            ? name!.trim().characters.first.toUpperCase()
+            : '?',
+        style: AritoriaType.body.copyWith(
+          fontSize: 22,
+          color: AritoriaColors.moss,
+        ),
+      ),
+    ),
   );
 }
 
@@ -521,7 +681,7 @@ class AritoriaNavigation extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             _item(0, 'Inicio', Icons.home_outlined),
-            _item(1, 'Seres queridos', Icons.people_outline),
+            _item(1, 'Familia', Icons.people_outline),
             Expanded(
               child: Center(
                 heightFactor: 1,
@@ -546,39 +706,42 @@ class AritoriaNavigation extends StatelessWidget {
   );
 
   Widget _item(int index, String label, IconData icon) => Expanded(
-    child: Semantics(
-      selected: selected == index,
-      button: true,
-      child: InkWell(
-        onTap: () => onSelect(index),
-        borderRadius: BorderRadius.circular(AritoriaSpace.sm),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AritoriaSpace.sm),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 23,
-                color: selected == index
-                    ? AritoriaColors.olive
-                    : AritoriaColors.muted,
-              ),
-              const SizedBox(height: AritoriaSpace.xs),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: AritoriaType.caption.copyWith(
-                  fontSize: 10,
+    child: Tooltip(
+      message: label,
+      child: Semantics(
+        selected: selected == index,
+        button: true,
+        child: InkWell(
+          onTap: () => onSelect(index),
+          borderRadius: BorderRadius.circular(AritoriaSpace.sm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AritoriaSpace.sm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 23,
                   color: selected == index
                       ? AritoriaColors.olive
                       : AritoriaColors.muted,
-                  fontWeight: selected == index
-                      ? FontWeight.w700
-                      : FontWeight.w400,
                 ),
-              ),
-            ],
+                const SizedBox(height: AritoriaSpace.xs),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: AritoriaType.caption.copyWith(
+                    fontSize: 10,
+                    color: selected == index
+                        ? AritoriaColors.olive
+                        : AritoriaColors.muted,
+                    fontWeight: selected == index
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

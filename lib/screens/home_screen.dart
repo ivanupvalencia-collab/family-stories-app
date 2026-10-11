@@ -904,11 +904,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       questionStatus: _requestStatus(false),
                       answerStatus: _requestStatus(true),
                       onRefresh: _refreshHome,
-                      onProfile: _openProfile,
+                      onNotifications: () => _showRequests(0),
                       onAdd: _addFamilyMember,
                       onMember: _openFamilyMember,
-                      onHero: () {
-                        final member = selectHomeHero(_familyMembers);
+                      onHero: (member) {
                         if (_isLoading || _isSaving || _loadFailed) return;
                         if (member == null) {
                           _addFamilyMember();

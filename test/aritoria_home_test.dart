@@ -101,8 +101,63 @@ fixtures.FakeQuestionRequestService _requests() =>
     );
 
 void main() {
+  for (final count in [0, 1, 2]) {
+    testWidgets(
+      'notification bell opens received questions; header action with $count pending',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 1400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final requests = fixtures.FakeQuestionRequestService(
+          pendingByRecipient: {
+            fixtures.testAuthUser.id: [
+              for (var i = 0; i < count; i++)
+                fixtures.testQuestionRequest(
+                  id: 'pending-$i',
+                  questionText: 'Pendiente $i',
+                  recipientId: fixtures.testAuthUser.id,
+                ),
+            ],
+          },
+        );
+        await tester.pumpWidget(
+          fixtures.testApp(
+            fixtures.MemoryFamilyMemberStorage(),
+            authService: fixtures.FakeAuthService(fixtures.testAuthUser),
+            questionRequestService: requests,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Notificaciones'), findsOneWidget);
+        expect(find.text('Familia'), findsOneWidget);
+        expect(
+          find.text('Ver todas'),
+          count == 0 ? findsNothing : findsOneWidget,
+        );
+        expect(
+          tester.widget<Text>(find.text('Preguntas para ti')).style,
+          AritoriaType.homeSection,
+        );
+        if (count > 0) {
+          await tester.ensureVisible(find.text('Ver todas'));
+          await tester.tap(find.text('Ver todas'));
+          await tester.pumpAndSettle();
+          expect(find.byType(ChoiceChip), findsNWidgets(2));
+          expect(find.byType(ReceivedRequestRow), findsNWidgets(count));
+          await tester.tap(find.text('Inicio'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.byTooltip('Notificaciones'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ChoiceChip), findsNWidgets(2));
+        if (count == 0) {
+          expect(find.text('No tienes preguntas pendientes.'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   test(
-    'hero deterministically prefers an own photo and never a linked avatar',
+    'hero keeps first-member fallback and prefers an own photo without avatar metadata',
     () {
       expect(selectHomeHero([]), isNull);
       expect(selectHomeHero([_pepe, _ana]), same(_pepe));
@@ -201,7 +256,7 @@ void main() {
         fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Seres queridos'));
+      await tester.tap(find.text('Familia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pepe'));
       await tester.pumpAndSettle();

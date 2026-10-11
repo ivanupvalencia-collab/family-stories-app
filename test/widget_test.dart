@@ -1138,7 +1138,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Ana'), findsOneWidget);
-    await tester.tap(find.text('Seres queridos'));
+    await tester.tap(find.text('Familia'));
     await tester.pumpAndSettle();
     expect(find.text('Abuelo/a'), findsOneWidget);
     expect(
@@ -1892,7 +1892,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Carlos'), findsOneWidget);
-    await tester.tap(find.text('Seres queridos'));
+    await tester.tap(find.text('Familia'));
     await tester.pumpAndSettle();
     expect(find.text('Padre/Madre'), findsOneWidget);
 
@@ -2035,7 +2035,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Seres queridos'));
+    await tester.tap(find.text('Familia'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ana'));
     await tester.pumpAndSettle();

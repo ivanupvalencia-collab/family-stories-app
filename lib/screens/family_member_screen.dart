@@ -151,17 +151,20 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
     }
   }
 
-  Future<void> _managePhoto(bool remove) async {
-    if (!_canManagePhoto || _photoBusy || _isRefreshingMember) return;
+  Future<FamilyMember?> _managePhoto(bool remove) async {
+    if (!_canManagePhoto || _photoBusy || _isRefreshingMember) return null;
     setState(() => _photoBusy = true);
     try {
       final image = remove
           ? null
           : await (widget.imagePicker ?? DeviceProfileImagePicker())
                 .pickFromGallery();
-      if (!mounted || !_canManagePhoto || (!remove && image == null)) return;
+      if (!mounted || !_canManagePhoto || (!remove && image == null)) {
+        return null;
+      }
       final updated = await _photoService.save(_familyMember, image);
       if (mounted && _canManagePhoto) setState(() => _familyMember = updated);
+      return _canManagePhoto ? updated : null;
     } catch (_) {
       if (mounted && _canManagePhoto) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -175,6 +178,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
     } finally {
       if (mounted) setState(() => _photoBusy = false);
     }
+    return null;
   }
 
   Future<void> _loadStories() async {
@@ -362,7 +366,11 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
       MaterialPageRoute(
         builder: (_) => Theme(
           data: AritoriaDesign.theme(),
-          child: EditFamilyMemberScreen(member: _familyMember),
+          child: EditFamilyMemberScreen(
+            member: _familyMember,
+            photos: _photoService,
+            onManagePhoto: _managePhoto,
+          ),
         ),
       ),
     );
@@ -493,14 +501,8 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
     switch (action) {
       case 'edit':
         _edit();
-      case 'photo':
-        _managePhoto(false);
-      case 'removePhoto':
-        _managePhoto(true);
       case 'delete':
         _delete();
-      case 'refresh':
-        _refreshRemoteData();
     }
   }
 
@@ -581,6 +583,12 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
                     onRefresh: _refreshRemoteData,
                     menu: PopupMenuButton<String>(
                       tooltip: 'Opciones del ser querido',
+                      color: AritoriaColors.card,
+                      surfaceTintColor: Colors.transparent,
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       enabled:
                           _canManagePhoto &&
                           !_photoBusy &&
@@ -591,31 +599,35 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
                       itemBuilder: (_) => [
                         const PopupMenuItem(
                           value: 'edit',
-                          child: Text('Editar informaci\u00f3n'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'photo',
-                          child: Text('Cambiar foto'),
-                        ),
-                        if (_familyMember.photoPath != null)
-                          const PopupMenuItem(
-                            value: 'removePhoto',
-                            child: Text('Eliminar foto'),
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, size: 20),
+                              SizedBox(width: 12),
+                              Flexible(child: Text('Editar informaci\u00f3n')),
+                            ],
                           ),
+                        ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text(
-                            'Eliminar ser querido',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                color: Theme.of(context).colorScheme.error,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  'Eliminar ser querido',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        if (widget.isRemoteFamilyMember)
-                          const PopupMenuItem(
-                            value: 'refresh',
-                            child: Text('Actualizar familiar'),
-                          ),
                       ],
                     ),
                   ),
