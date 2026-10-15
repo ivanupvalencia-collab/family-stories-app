@@ -21,6 +21,7 @@ import '../services/question_request_service.dart';
 import '../services/received_request_details_service.dart';
 import '../services/remote_family_member_cache.dart';
 import '../widgets/aritoria_home_view.dart';
+import '../widgets/aritoria_requests_view.dart';
 import '../widgets/family_member_photo_view.dart';
 import 'add_family_member_screen.dart';
 import 'answer_screen.dart';
@@ -809,59 +810,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _requestsView() {
     final answers = _questionTab == 1;
     final requests = answers ? _answeredRequests : _questionRequests;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AritoriaSpace.lg),
-          child: Wrap(
-            spacing: AritoriaSpace.sm,
-            children: [
-              ChoiceChip(
-                label: const Text('Preguntas para ti'),
-                selected: !answers,
-                onSelected: (_) => setState(() => _questionTab = 0),
-              ),
-              ChoiceChip(
-                label: const Text('Historias que has contado'),
-                selected: answers,
-                onSelected: (_) => setState(() => _questionTab = 1),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _refreshHome,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(AritoriaSpace.lg),
-              children: [
-                if (_user == null)
-                  const Text(
-                    'Inicia sesión desde tu perfil para recibir preguntas y consultar tus historias.',
-                  )
-                else if (_requestStatus(answers) != null)
-                  _requestStatus(answers)!
-                else if (requests.isEmpty)
-                  Text(
-                    answers
-                        ? 'Todavía no has contado ninguna historia.'
-                        : 'No tienes preguntas pendientes.',
-                  )
-                else
-                  for (final request in requests)
-                    ReceivedRequestRow(
-                      request: request,
-                      details: _details[request.id],
-                      onTap: () => answers
-                          ? _openAnswer(request)
-                          : _openQuestionRequest(request),
-                    ),
-              ],
-            ),
-          ),
-        ),
-      ],
+    return AritoriaRequestsView(
+      requests: requests,
+      details: _details,
+      pendingCount: _questionRequests.length,
+      showAnswers: answers,
+      status: _user == null
+          ? const Text(
+              'Inicia sesión desde tu perfil para recibir preguntas y consultar tus historias.',
+            )
+          : _requestStatus(answers) ??
+                (requests.isEmpty
+                    ? Text(
+                        answers
+                            ? 'Todavía no has contado ninguna historia.'
+                            : 'No tienes preguntas pendientes.',
+                      )
+                    : null),
+      onRefresh: _refreshHome,
+      onTabChanged: (index) => setState(() => _questionTab = index),
+      onRequestTap: (request) =>
+          answers ? _openAnswer(request) : _openQuestionRequest(request),
     );
   }
 
@@ -874,11 +843,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (!didPop && _section != 0) setState(() => _section = 0);
       },
       child: Scaffold(
-        appBar: _section == 0
-            ? null
-            : AppBar(
-                title: Text(_section == 1 ? 'Seres queridos' : 'Preguntas'),
-              ),
+        appBar: _section == 1
+            ? AppBar(title: const Text('Seres queridos'))
+            : null,
         body: SafeArea(
           bottom: false,
           child: Center(

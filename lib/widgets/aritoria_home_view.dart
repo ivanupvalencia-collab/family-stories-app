@@ -37,8 +37,10 @@ String requestDate(DateTime date) {
 
 String requestSubtitle(
   QuestionRequest request,
-  ReceivedRequestDetails? details,
-) {
+  ReceivedRequestDetails? details, {
+  bool keepTimingTogether = false,
+  bool recipientOnSeparateLine = false,
+}) {
   final name = details?.senderName;
   final answered = request.status == QuestionRequestStatus.answered;
   final parts = <String>[
@@ -53,6 +55,16 @@ String requestSubtitle(
     if (answered && details?.durationSeconds != null)
       '${details!.durationSeconds! ~/ 60}:${(details.durationSeconds! % 60).toString().padLeft(2, '0')}',
   ];
+  if (keepTimingTogether &&
+      answered &&
+      request.answeredAt != null &&
+      details?.durationSeconds != null) {
+    final duration = parts.removeLast();
+    parts[parts.length - 1] = '${parts.last}\u00a0·\u00a0$duration';
+  }
+  if (recipientOnSeparateLine && parts.length > 1) {
+    return '${parts.first}\n${parts.skip(1).join(' · ')}';
+  }
   return parts.join(' · ');
 }
 
@@ -592,41 +604,95 @@ class ReceivedRequestRow extends StatelessWidget {
     required this.onTap,
     this.details,
     this.avatarService,
+    this.editorial = false,
     super.key,
   });
   final QuestionRequest request;
   final ReceivedRequestDetails? details;
   final VisibleAccountAvatarService? avatarService;
+  final bool editorial;
   final VoidCallback onTap;
+  Widget _metadata(BuildContext context) {
+    final original = requestSubtitle(request, details);
+    final text = requestSubtitle(
+      request,
+      details,
+      keepTimingTogether: editorial,
+    );
+    if (!editorial ||
+        request.status != QuestionRequestStatus.answered ||
+        request.answeredAt == null) {
+      return Text(text, semanticsLabel: original, style: AritoriaType.caption);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: DefaultTextStyle.of(context).style
+                .merge(AritoriaType.caption),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final wraps = painter.computeLineMetrics().length > 1;
+        painter.dispose();
+        return Text(
+          requestSubtitle(
+            request,
+            details,
+            keepTimingTogether: true,
+            recipientOnSeparateLine: wraps,
+          ),
+          semanticsLabel: original,
+          style: AritoriaType.caption,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
       ListTile(
-        contentPadding: EdgeInsets.zero,
+        contentPadding: editorial
+            ? const EdgeInsets.symmetric(vertical: AritoriaSpace.md)
+            : EdgeInsets.zero,
         leading: request.status == QuestionRequestStatus.pending
             ? AccountAvatarView(
                 accountId: request.senderId,
+                radius: editorial ? 27 : 24,
                 service: avatarService,
                 fallbackBuilder: (profile) =>
                     _SenderInitial(name: profile?.name ?? details?.senderName),
                 fallback: _SenderInitial(name: details?.senderName),
               )
+            : editorial
+            ? const CircleAvatar(
+                radius: 27,
+                backgroundColor: AritoriaColors.olive,
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: AritoriaColors.onPhoto,
+                ),
+              )
             : null,
         title: QuestionText(
           request.questionText,
-          style: AritoriaType.body.copyWith(fontSize: 17, height: 1.3),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
+          style: editorial
+              ? AritoriaType.question.copyWith(fontSize: 18)
+              : AritoriaType.body.copyWith(fontSize: 17, height: 1.3),
+          maxLines: editorial ? null : 3,
+          overflow: editorial ? TextOverflow.clip : TextOverflow.ellipsis,
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: AritoriaSpace.xs),
-          child: Text(
-            requestSubtitle(request, details),
-            style: AritoriaType.caption,
+          padding: EdgeInsets.only(
+            top: editorial ? AritoriaSpace.sm : AritoriaSpace.xs,
           ),
+          child: _metadata(context),
         ),
         trailing: Icon(
-          request.status == QuestionRequestStatus.answered
+          !editorial && request.status == QuestionRequestStatus.answered
               ? Icons.play_circle_outline
               : Icons.chevron_right,
           color: AritoriaColors.olive,

@@ -141,14 +141,16 @@ void main() {
           await tester.ensureVisible(find.text('Ver todas'));
           await tester.tap(find.text('Ver todas'));
           await tester.pumpAndSettle();
-          expect(find.byType(ChoiceChip), findsNWidgets(2));
+          expect(find.text('Preguntas para ti ($count)'), findsOneWidget);
+          expect(find.text('Historias que has contado'), findsOneWidget);
           expect(find.byType(ReceivedRequestRow), findsNWidgets(count));
           await tester.tap(find.text('Inicio'));
           await tester.pumpAndSettle();
         }
         await tester.tap(find.byTooltip('Notificaciones'));
         await tester.pumpAndSettle();
-        expect(find.byType(ChoiceChip), findsNWidgets(2));
+        expect(find.text('Preguntas para ti ($count)'), findsOneWidget);
+        expect(find.text('Historias que has contado'), findsOneWidget);
         if (count == 0) {
           expect(find.text('No tienes preguntas pendientes.'), findsOneWidget);
         }
@@ -156,16 +158,13 @@ void main() {
       },
     );
   }
-  test(
-    'hero keeps first-member fallback and prefers an own photo without avatar metadata',
-    () {
-      expect(selectHomeHero([]), isNull);
-      expect(selectHomeHero([_pepe, _ana]), same(_pepe));
-      final photographed = _ana.withPhotoPath('own/ana/photo.png');
-      expect(selectHomeHero([_pepe, photographed]), same(photographed));
-      expect(selectHomeHero([_pepe, photographed]), same(photographed));
-    },
-  );
+  test('hero keeps first-member fallback and prefers an own photo without avatar metadata', () {
+    expect(selectHomeHero([]), isNull);
+    expect(selectHomeHero([_pepe, _ana]), same(_pepe));
+    final photographed = _ana.withPhotoPath('own/ana/photo.png');
+    expect(selectHomeHero([_pepe, photographed]), same(photographed));
+    expect(selectHomeHero([_pepe, photographed]), same(photographed));
+  });
 
   testWidgets('hero opens the existing questions flow and keeps its theme', (
     tester,
@@ -310,7 +309,7 @@ void main() {
       await tester.tap(find.text('Ver todas').last);
       await tester.pumpAndSettle();
       expect(find.text('Historia 3'), findsOneWidget);
-      await tester.tap(find.text('Preguntas para ti'));
+      await tester.tap(find.text('Preguntas para ti (5)'));
       await tester.pumpAndSettle();
       expect(find.text('Pregunta 5'), findsOneWidget);
       expect(find.text('Pregunta 3'), findsOneWidget);
