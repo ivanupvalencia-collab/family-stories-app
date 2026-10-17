@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:family_stories_app/design/aritoria_design.dart';
+
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/models/question_request.dart';
 import 'package:family_stories_app/services/family_member_photo_service.dart';
@@ -135,6 +137,24 @@ void main() {
           expect((tile.trailing as Icon).icon, Icons.chevron_right);
         }
         expect(photos.loaded, metadataError ? isEmpty : ['story-0']);
+        final fallback = find.descendant(
+          of: rows.last,
+          matching: find.byKey(const ValueKey('home-story-no-photo')),
+        );
+        expect(tester.getSize(fallback), const Size(48, 48));
+        final decoration =
+            tester.widget<DecoratedBox>(fallback).decoration as BoxDecoration;
+        expect(decoration.borderRadius, BorderRadius.circular(10));
+        expect(decoration.color, AritoriaColors.sage.withValues(alpha: .18));
+        final play = tester.widget<Icon>(
+          find.descendant(of: fallback, matching: find.byType(Icon)),
+        );
+        expect(play.icon, Icons.play_arrow_rounded);
+        expect(play.color, AritoriaColors.olive);
+        expect(
+          find.descendant(of: rows.last, matching: find.byType(CircleAvatar)),
+          findsNothing,
+        );
         if (!metadataError) {
           final image = find.descendant(
             of: photoRow,

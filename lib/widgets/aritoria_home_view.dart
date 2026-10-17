@@ -655,10 +655,15 @@ class _HomeAnswerPreviewState extends State<_HomeAnswerPreview> {
     }
   }
 
-  Widget get _play => const CircleAvatar(
-    radius: _homeRequestLeadingSize / 2,
-    backgroundColor: AritoriaColors.olive,
-    child: Icon(Icons.play_arrow_rounded, color: AritoriaColors.onPhoto),
+  Widget get _play => DecoratedBox(
+    key: const ValueKey('home-story-no-photo'),
+    decoration: BoxDecoration(
+      color: AritoriaColors.sage.withValues(alpha: 0.18),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: const Center(
+      child: Icon(Icons.play_arrow_rounded, color: AritoriaColors.olive),
+    ),
   );
 
   @override
