@@ -7,6 +7,10 @@ import 'question_text.dart';
 
 import '../design/aritoria_design.dart';
 import '../models/family_member.dart';
+import '../models/family_story.dart';
+import '../services/question_request_service.dart';
+import '../services/story_photo_service.dart';
+import 'private_photo_view.dart';
 import '../models/profile_avatar.dart';
 import '../models/question_request.dart';
 import '../models/user_profile.dart';
@@ -15,6 +19,8 @@ import '../services/received_request_details_service.dart';
 import 'family_member_photo_view.dart';
 import 'account_avatar_view.dart';
 import '../services/visible_account_avatar_service.dart';
+
+const double _homeRequestLeadingSize = 48;
 
 FamilyMember? selectHomeHero(
   List<FamilyMember> members, {
@@ -91,12 +97,16 @@ class AritoriaHomeView extends StatelessWidget {
     required this.onQuestion,
     required this.onAnswer,
     this.avatarService,
+    this.answerService,
+    this.storyPhotos,
     super.key,
   });
 
   final List<FamilyMember> members;
   final FamilyMemberPhotoService photos;
   final VisibleAccountAvatarService? avatarService;
+  final QuestionRequestService? answerService;
+  final StoryPhotoService? storyPhotos;
   final UserProfile? profile;
   final bool authenticated;
   final List<QuestionRequest> questions;
@@ -238,7 +248,7 @@ class AritoriaHomeView extends StatelessWidget {
             const SizedBox(height: AritoriaSpace.xl),
             _SectionTitle(
               title: 'Historias contadas',
-              action: answers.length > 2 ? 'Ver todas' : null,
+              action: answers.isNotEmpty ? 'Ver todas' : null,
               onTap: onAllAnswers,
             ),
             const SizedBox(height: AritoriaSpace.sm),
@@ -251,6 +261,12 @@ class AritoriaHomeView extends StatelessWidget {
                 ReceivedRequestRow(
                   request: request,
                   details: details[request.id],
+                  leading: _HomeAnswerPreview(
+                    key: ValueKey('${request.recipientId}/${request.id}'),
+                    request: request,
+                    answers: answerService,
+                    photos: storyPhotos,
+                  ),
                   onTap: () => onAnswer(request),
                 ),
           ],
@@ -598,6 +614,97 @@ class _Empty extends StatelessWidget {
   );
 }
 
+class _HomeAnswerPreview extends StatefulWidget {
+  const _HomeAnswerPreview({
+    required this.request,
+    required this.answers,
+    required this.photos,
+    super.key,
+  });
+  final QuestionRequest request;
+  final QuestionRequestService? answers;
+  final StoryPhotoService? photos;
+
+  @override
+  State<_HomeAnswerPreview> createState() => _HomeAnswerPreviewState();
+}
+
+class _HomeAnswerPreviewState extends State<_HomeAnswerPreview> {
+  late Future<FamilyStory?> _story;
+  late final StoryPhotoService _photos =
+      widget.photos ?? SupabaseStoryPhotoService();
+
+  void _load() {
+    _story =
+        widget.answers?.loadAnswerStory(widget.request.id) ??
+        Future.value(null);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_HomeAnswerPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.request != widget.request ||
+        oldWidget.answers != widget.answers) {
+      _load();
+    }
+  }
+
+  Widget get _play => const CircleAvatar(
+    radius: _homeRequestLeadingSize / 2,
+    backgroundColor: AritoriaColors.olive,
+    child: Icon(Icons.play_arrow_rounded, color: AritoriaColors.onPhoto),
+  );
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: _homeRequestLeadingSize,
+    child: FutureBuilder<FamilyStory?>(
+      future: _story,
+      builder: (context, snapshot) {
+        final story = snapshot.data;
+        if (snapshot.hasError || story?.photoPath == null) return _play;
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: PrivatePhotoView<FamilyStory>(
+                item: story!,
+                identity: story.id,
+                reference: story.photoPath,
+                service: _photos,
+                width: _homeRequestLeadingSize,
+                height: _homeRequestLeadingSize,
+                label: 'Foto de esta historia',
+                fallback: const CircleAvatar(
+                  backgroundColor: AritoriaColors.olive,
+                ),
+              ),
+            ),
+            const IgnorePointer(
+              child: CircleAvatar(
+                radius: 11,
+                backgroundColor: AritoriaColors.olive,
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  size: 17,
+                  color: AritoriaColors.onPhoto,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
 class ReceivedRequestRow extends StatelessWidget {
   const ReceivedRequestRow({
     required this.request,
@@ -605,12 +712,14 @@ class ReceivedRequestRow extends StatelessWidget {
     this.details,
     this.avatarService,
     this.editorial = false,
+    this.leading,
     super.key,
   });
   final QuestionRequest request;
   final ReceivedRequestDetails? details;
   final VisibleAccountAvatarService? avatarService;
   final bool editorial;
+  final Widget? leading;
   final VoidCallback onTap;
   Widget _metadata(BuildContext context) {
     final original = requestSubtitle(request, details);
@@ -658,25 +767,28 @@ class ReceivedRequestRow extends StatelessWidget {
         contentPadding: editorial
             ? const EdgeInsets.symmetric(vertical: AritoriaSpace.md)
             : EdgeInsets.zero,
-        leading: request.status == QuestionRequestStatus.pending
-            ? AccountAvatarView(
-                accountId: request.senderId,
-                radius: editorial ? 27 : 24,
-                service: avatarService,
-                fallbackBuilder: (profile) =>
-                    _SenderInitial(name: profile?.name ?? details?.senderName),
-                fallback: _SenderInitial(name: details?.senderName),
-              )
-            : editorial
-            ? const CircleAvatar(
-                radius: 27,
-                backgroundColor: AritoriaColors.olive,
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: AritoriaColors.onPhoto,
-                ),
-              )
-            : null,
+        leading:
+            leading ??
+            (request.status == QuestionRequestStatus.pending
+                ? AccountAvatarView(
+                    accountId: request.senderId,
+                    radius: editorial ? 27 : _homeRequestLeadingSize / 2,
+                    service: avatarService,
+                    fallbackBuilder: (profile) => _SenderInitial(
+                      name: profile?.name ?? details?.senderName,
+                    ),
+                    fallback: _SenderInitial(name: details?.senderName),
+                  )
+                : editorial
+                ? const CircleAvatar(
+                    radius: 27,
+                    backgroundColor: AritoriaColors.olive,
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      color: AritoriaColors.onPhoto,
+                    ),
+                  )
+                : null),
         title: QuestionText(
           request.questionText,
           style: editorial
@@ -692,7 +804,9 @@ class ReceivedRequestRow extends StatelessWidget {
           child: _metadata(context),
         ),
         trailing: Icon(
-          !editorial && request.status == QuestionRequestStatus.answered
+          leading == null &&
+                  !editorial &&
+                  request.status == QuestionRequestStatus.answered
               ? Icons.play_circle_outline
               : Icons.chevron_right,
           color: AritoriaColors.olive,

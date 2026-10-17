@@ -2328,7 +2328,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(AnswerScreen), findsOneWidget);
-      expect(service.requestedAnswerStoryIds, ['newer']);
+      expect(service.requestedAnswerStoryIds, ['newer', 'older', 'newer']);
       loading.complete(null);
       await tester.pumpAndSettle();
       expect(find.text('No se pudo abrir esta respuesta.'), findsOneWidget);

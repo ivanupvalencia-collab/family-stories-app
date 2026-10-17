@@ -872,6 +872,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       authenticated: _user != null,
                       questions: _questionRequests,
                       answers: _answeredRequests,
+                      answerService: _questionRequestService,
                       details: _details,
                       memberStatus: _memberStatus(),
                       questionStatus: _requestStatus(false),
