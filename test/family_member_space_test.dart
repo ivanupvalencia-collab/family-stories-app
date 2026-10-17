@@ -503,16 +503,20 @@ void main() {
           );
           await tester.tap(find.text('Abrir'));
           await tester.pumpAndSettle();
-          if (remote) {
-            await tester.tap(find.text('Responder'));
-            await tester.pumpAndSettle();
-          }
           await tester.tap(find.text('Grabar respuesta'));
           await tester.pump();
           await tester.pump(const Duration(seconds: 1));
-          await tester.tap(find.text('Detener grabación'));
+          await tester.tap(
+            remote
+                ? find.byTooltip('Detener grabación')
+                : find.text('Detener grabación'),
+          );
           await tester.pumpAndSettle();
           await tester.tap(find.text('Añadir una foto (opcional)'));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.text(remote ? 'Enviar respuesta' : 'Guardar historia'),
+          );
           await tester.pumpAndSettle();
           await tester.tap(
             find.text(remote ? 'Enviar respuesta' : 'Guardar historia'),
@@ -520,6 +524,12 @@ void main() {
           await tester.pumpAndSettle();
           expect(photos.saves, 1);
           if (remote) {
+            expect(
+              find.text('¡Gracias por compartir tu historia!'),
+              findsOneWidget,
+            );
+            await tester.tap(find.text('Volver'));
+            await tester.pumpAndSettle();
             expect(requests.completedQuestionRequestIds, [request.id]);
             expect(requests.deletedObjectPaths, isEmpty);
           } else {

@@ -101,6 +101,28 @@ fixtures.FakeQuestionRequestService _requests() =>
     );
 
 void main() {
+  testWidgets(
+    'received question reuses the sender name already loaded by Home',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        fixtures.testApp(
+          fixtures.MemoryFamilyMemberStorage(),
+          authService: fixtures.FakeAuthService(fixtures.testAuthUser),
+          questionRequestService: _requests(),
+          receivedRequestDetailsService: _Details(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Pregunta 5'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pregunta 5'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enviada por Iván · Pendiente'), findsOneWidget);
+    },
+  );
+
   for (final count in [0, 1, 2]) {
     testWidgets(
       'notification bell opens received questions; header action with $count pending',

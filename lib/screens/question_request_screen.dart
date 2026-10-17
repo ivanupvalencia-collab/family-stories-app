@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../widgets/question_text.dart';
-
-import '../models/question.dart';
+import '../data/question_answer_hints.dart';
+import '../widgets/question_answer_view.dart';
 import '../models/question_request.dart';
 import '../services/audio_answer_service.dart';
 import '../services/question_request_service.dart';
@@ -17,6 +16,7 @@ class QuestionRequestScreen extends StatefulWidget {
     this.audioService,
     this.photoService,
     this.imagePicker,
+    this.senderName,
     super.key,
   });
 
@@ -25,12 +25,15 @@ class QuestionRequestScreen extends StatefulWidget {
   final AudioAnswerService? audioService;
   final StoryPhotoService? photoService;
   final ProfileImagePicker? imagePicker;
+  final String? senderName;
 
   @override
   State<QuestionRequestScreen> createState() => _QuestionRequestScreenState();
 }
 
 class _QuestionRequestScreenState extends State<QuestionRequestScreen> {
+  DateTime? _sentAt;
+  bool _openingRecorder = false;
   Future<void> _submitAnswer({
     required String audioPath,
     required Duration duration,
@@ -79,6 +82,8 @@ class _QuestionRequestScreenState extends State<QuestionRequestScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.fromLTRB(16, 0, 16, 96),
               content: Text(
                 'La respuesta se ha enviado sin foto. Puedes añadirla desde Historias contadas.',
               ),
@@ -90,63 +95,48 @@ class _QuestionRequestScreenState extends State<QuestionRequestScreen> {
   }
 
   Future<void> _openRecorder() async {
-    final sent = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (context) => QuestionScreen.forQuestionRequest(
-          question: Question(widget.questionRequest.questionText),
-          onSubmit: _submitAnswer,
-          audioService: widget.audioService,
-          imagePicker: widget.imagePicker,
-          photoService: widget.photoService,
+    if (_openingRecorder) return;
+    setState(() => _openingRecorder = true);
+    try {
+      final sent = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => QuestionScreen.forQuestionRequest(
+            question: questionForReceivedRequest(
+              widget.questionRequest.questionText,
+            ),
+            onSubmit: _submitAnswer,
+            audioService: widget.audioService,
+            imagePicker: widget.imagePicker,
+            photoService: widget.photoService,
+            senderName: widget.senderName,
+          ),
         ),
-      ),
-    );
+      );
 
-    if (sent == true && mounted) {
-      Navigator.of(context).pop(true);
+      if (sent == true && mounted) {
+        setState(() => _sentAt = DateTime.now());
+      }
+    } finally {
+      if (mounted) setState(() => _openingRecorder = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Pregunta para ti')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  QuestionText(
-                    widget.questionRequest.questionText,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Enviada por otro familiar · Pendiente',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: _openRecorder,
-                    icon: const Icon(Icons.mic_outlined),
-                    label: const Text('Responder'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => PopScope(
+    canPop: _sentAt == null,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && _sentAt != null) Navigator.of(context).pop(true);
+    },
+    child: QuestionAnswerView(
+      question: questionForReceivedRequest(widget.questionRequest.questionText),
+      stage: _sentAt == null
+          ? QuestionAnswerStage.initial
+          : QuestionAnswerStage.sent,
+      startLabel: 'Grabar respuesta',
+      senderName: widget.senderName,
+      onStart: _openingRecorder ? null : _openRecorder,
+      sentAt: _sentAt,
+      onReturn: () => Navigator.of(context).pop(true),
+    ),
+  );
 }

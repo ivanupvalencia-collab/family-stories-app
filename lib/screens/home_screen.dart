@@ -19,6 +19,7 @@ import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
 import '../services/question_request_service.dart';
 import '../services/received_request_details_service.dart';
+import '../services/visible_account_avatar_service.dart';
 import '../services/remote_family_member_cache.dart';
 import '../widgets/aritoria_home_view.dart';
 import '../widgets/aritoria_requests_view.dart';
@@ -614,6 +615,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (context) => QuestionRequestScreen(
           questionRequest: questionRequest,
           questionRequestService: _questionRequestService,
+          senderName:
+              _details[questionRequest.id]?.senderName ??
+              SupabaseVisibleAccountAvatarService.shared
+                  ?.cached(questionRequest.senderId)
+                  ?.name,
         ),
       ),
     );

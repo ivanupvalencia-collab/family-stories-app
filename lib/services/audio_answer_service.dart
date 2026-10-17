@@ -6,6 +6,8 @@ import 'package:record/record.dart';
 
 abstract class AudioAnswerService {
   Stream<void> get onPlaybackComplete;
+  Stream<Duration> get onPositionChanged;
+  Stream<Duration> get onDurationChanged;
 
   Future<bool> requestPermission();
   Future<void> startRecording();
@@ -13,19 +15,32 @@ abstract class AudioAnswerService {
   Future<void> play(String path);
   Future<void> pause();
   Future<void> resume();
+
+  /// Seek proportionally to the real local audio duration, without autoplay.
+  Future<void> seek(String path, double fraction);
   Future<void> discard(String path);
   Future<void> dispose();
 }
 
 class DeviceAudioAnswerService implements AudioAnswerService {
-  final AudioRecorder _recorder = AudioRecorder();
-  final AudioPlayer _player = AudioPlayer();
+  DeviceAudioAnswerService({AudioRecorder? recorder, AudioPlayer? player})
+    : _recorder = recorder ?? AudioRecorder(),
+      _player = player ?? AudioPlayer();
+
+  final AudioRecorder _recorder;
+  final AudioPlayer _player;
 
   String? _recordingPath;
   bool _isRecording = false;
 
   @override
   Stream<void> get onPlaybackComplete => _player.onPlayerComplete;
+
+  @override
+  Stream<Duration> get onPositionChanged => _player.onPositionChanged;
+
+  @override
+  Stream<Duration> get onDurationChanged => _player.onDurationChanged;
 
   @override
   Future<bool> requestPermission() => _recorder.hasPermission();
@@ -67,6 +82,25 @@ class DeviceAudioAnswerService implements AudioAnswerService {
 
   @override
   Future<void> resume() => _player.resume();
+
+  @override
+  Future<void> seek(String path, double fraction) async {
+    if (!fraction.isFinite) throw ArgumentError.value(fraction, 'fraction');
+    final source = _player.source;
+    if (source is! DeviceFileSource || source.path != path) {
+      await _player.setSource(DeviceFileSource(path));
+    }
+    final duration = await _player.getDuration();
+    if (duration == null || duration <= Duration.zero) {
+      throw StateError('Audio duration unavailable');
+    }
+    await _player.seek(
+      Duration(
+        microseconds: (duration.inMicroseconds * fraction.clamp(0.0, 1.0))
+            .round(),
+      ),
+    );
+  }
 
   @override
   Future<void> discard(String path) async {

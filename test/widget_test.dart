@@ -154,7 +154,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Pregunta para ti'), findsOneWidget);
-    expect(find.text('Responder'), findsOneWidget);
+    expect(find.text('Grabar respuesta'), findsOneWidget);
   });
 
   testWidgets('muestra un estado discreto sin preguntas pendientes', (
@@ -466,7 +466,9 @@ void main() {
     expect(storyService.clearAudioCacheCalls, 1);
   });
 
-  testWidgets('abre el grabador desde una pregunta recibida', (tester) async {
+  testWidgets('inicia la grabación con un solo toque desde la pregunta', (
+    tester,
+  ) async {
     final audioService = FakeAudioAnswerService();
     await tester.pumpWidget(
       questionRequestAnswerApp(
@@ -477,12 +479,14 @@ void main() {
 
     await tester.tap(find.text('Abrir pregunta recibida'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Responder'));
+    await tester.tap(find.text('Grabar respuesta'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tu respuesta'), findsOneWidget);
+    expect(find.text('Pregunta para ti'), findsOneWidget);
     expect(find.text('¿Qué recuerdo guardas de tu infancia?'), findsOneWidget);
-    expect(find.text('Grabar respuesta'), findsOneWidget);
+    expect(find.byTooltip('Detener grabación'), findsOneWidget);
+    expect(find.text('Grabar respuesta'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('sube el audio, completa la solicitud y vuelve al terminar', (
@@ -501,6 +505,9 @@ void main() {
     await tester.tap(find.text('Enviar respuesta'));
     await tester.pumpAndSettle();
 
+    expect(find.text('¡Gracias por compartir tu historia!'), findsOneWidget);
+    await tester.tap(find.text('Volver'));
+    await tester.pumpAndSettle();
     expect(find.text('Abrir pregunta recibida'), findsOneWidget);
     expect(service.uploadedLocalPaths, ['/temporary/answer.m4a']);
     expect(service.uploadedObjectPaths, hasLength(1));
@@ -537,6 +544,8 @@ void main() {
     expect(service.completedQuestionRequestIds, hasLength(1));
 
     completion.complete('story-id');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Volver'));
     await tester.pumpAndSettle();
     expect(find.text('Abrir pregunta recibida'), findsOneWidget);
   });
@@ -2676,12 +2685,10 @@ Future<void> openAndRecordQuestionRequest(
 }) async {
   await tester.tap(find.text('Abrir pregunta recibida'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Responder'));
-  await tester.pumpAndSettle();
   await tester.tap(find.text('Grabar respuesta'));
   await tester.pump();
   await tester.pump(Duration(seconds: seconds));
-  await tester.tap(find.text('Detener grabación'));
+  await tester.tap(find.byTooltip('Detener grabación'));
   await tester.pump();
 }
 
@@ -3348,11 +3355,28 @@ class FakeAudioAnswerService implements AudioAnswerService {
   final bool hasPermission;
   final List<String> discardedPaths = [];
   final List<String> playedPaths = [];
+  final List<({String path, double fraction})> seeks = [];
+  int pauseCalls = 0;
+  int resumeCalls = 0;
   final StreamController<void> _playbackCompleteController =
       StreamController<void>.broadcast();
 
   @override
   Stream<void> get onPlaybackComplete => _playbackCompleteController.stream;
+
+  final _positionController = StreamController<Duration>.broadcast();
+  final _durationController = StreamController<Duration>.broadcast();
+  @override
+  Stream<Duration> get onPositionChanged => _positionController.stream;
+  @override
+  Stream<Duration> get onDurationChanged => _durationController.stream;
+
+  void updatePlayback(Duration position, Duration duration) {
+    _durationController.add(duration);
+    _positionController.add(position);
+  }
+
+  void finishPlayback() => _playbackCompleteController.add(null);
 
   @override
   Future<bool> requestPermission() async => hasPermission;
@@ -3369,10 +3393,19 @@ class FakeAudioAnswerService implements AudioAnswerService {
   }
 
   @override
-  Future<void> pause() async {}
+  Future<void> pause() async {
+    pauseCalls++;
+  }
 
   @override
-  Future<void> resume() async {}
+  Future<void> resume() async {
+    resumeCalls++;
+  }
+
+  @override
+  Future<void> seek(String path, double fraction) async {
+    seeks.add((path: path, fraction: fraction));
+  }
 
   @override
   Future<void> discard(String path) async {
@@ -3382,5 +3415,7 @@ class FakeAudioAnswerService implements AudioAnswerService {
   @override
   Future<void> dispose() async {
     await _playbackCompleteController.close();
+    await _positionController.close();
+    await _durationController.close();
   }
 }
