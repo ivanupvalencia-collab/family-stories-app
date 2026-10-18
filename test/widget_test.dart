@@ -903,7 +903,7 @@ void main() {
       of: find.byKey(const ValueKey('profile_avatar')),
       matching: find.byType(ClipOval),
     );
-    expect(tester.getSize(avatarClip), const Size.square(96));
+    expect(tester.getSize(avatarClip), const Size.square(120));
 
     final avatarImage = tester.widget<Image>(
       find.descendant(

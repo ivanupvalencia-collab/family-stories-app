@@ -6,6 +6,7 @@ class ProfileAvatarView extends StatelessWidget {
   const ProfileAvatarView({
     this.avatarKey,
     this.avatarUrl,
+    this.imageProvider,
     this.radius = 48,
     this.width,
     this.height,
@@ -17,6 +18,7 @@ class ProfileAvatarView extends StatelessWidget {
 
   final String? avatarKey;
   final String? avatarUrl;
+  final ImageProvider? imageProvider;
   final double radius;
   final double? width;
   final double? height;
@@ -30,8 +32,8 @@ class ProfileAvatarView extends StatelessWidget {
     final avatar = ProfileAvatarCatalog.findByKey(avatarKey);
     final placeholder = fallback ?? _GenericAvatarIcon(radius: radius);
     final image = normalizedUrl != null && normalizedUrl.isNotEmpty
-        ? Image.network(
-            normalizedUrl,
+        ? Image(
+            image: imageProvider ?? NetworkImage(normalizedUrl),
             fit: BoxFit.cover,
             alignment: alignment,
             loadingBuilder: (context, child, progress) =>

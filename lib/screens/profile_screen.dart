@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../design/aritoria_design.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_storage_service.dart';
 import '../services/invitation_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
+import '../services/profile_avatar_image_cache.dart';
 import '../widgets/profile_avatar_view.dart';
 import 'accept_invitation_screen.dart';
 import 'edit_profile_screen.dart';
@@ -85,6 +87,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final userChanged = _user?.id != user?.id;
+    final profileService = _profileService;
+    if (userChanged &&
+        _user != null &&
+        profileService is ProfileAvatarImageSource) {
+      (profileService as ProfileAvatarImageSource).avatarImages.clear();
+    }
     final cachedProfile = user == null
         ? null
         : _profileService.cachedForUser(user.id);
@@ -223,106 +231,294 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = AritoriaDesign.theme();
     final user = _user;
     final profile = _profile;
+    final canEdit = user != null && profile != null && !_isWorking;
+    final profileService = _profileService;
+    final avatarImage =
+        profile != null && profileService is ProfileAvatarImageSource
+        ? (profileService as ProfileAvatarImageSource).avatarImages.imageFor(
+            profile,
+          )
+        : null;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Perfil')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ProfileAvatarView(
-                    key: const ValueKey('profile_avatar'),
-                    avatarKey: profile?.avatarKey,
-                    avatarUrl: profile?.avatarUrl,
-                  ),
-                  const SizedBox(height: 24),
-                  if (user != null && _isProfileLoading)
-                    const Center(
-                      child: SizedBox.square(
-                        dimension: 28,
-                        child: CircularProgressIndicator(strokeWidth: 3),
+    return Theme(
+      data: theme,
+      child: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 80,
+          centerTitle: false,
+          title: const Text('Perfil', style: AritoriaType.brand),
+        ),
+        body: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AritoriaSpace.maxWidth,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: SizedBox.square(
+                          dimension: 120,
+                          child: Stack(
+                            children: [
+                              ProfileAvatarView(
+                                key: const ValueKey('profile_avatar'),
+                                avatarKey: profile?.avatarKey,
+                                avatarUrl: profile?.avatarUrl,
+                                imageProvider: avatarImage,
+                                radius: 60,
+                              ),
+                              if (user != null && profile != null)
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AritoriaColors.sage,
+                                      border: Border.all(
+                                        color: AritoriaColors.cream,
+                                        width: 3,
+                                      ),
+                                    ),
+                                    child: IconButton(
+                                      tooltip: 'Editar foto de perfil',
+                                      onPressed: canEdit ? _editProfile : null,
+                                      color: AritoriaColors.onPhoto,
+                                      icon: const Icon(
+                                        Icons.camera_alt_outlined,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                    )
-                  else
-                    Text(
-                      user == null
-                          ? 'Aún no has iniciado sesión'
-                          : profile?.name ?? 'Usuario',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(height: 16),
+                      if (user != null && _isProfileLoading)
+                        const Center(
+                          child: SizedBox.square(
+                            dimension: 28,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                        )
+                      else
+                        Text(
+                          user == null
+                              ? 'Aún no has iniciado sesión'
+                              : profile?.name ?? 'Usuario',
+                          textAlign: TextAlign.center,
+                          style: AritoriaType.section.copyWith(
+                            fontSize: 28,
+                            color: AritoriaColors.olive,
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        user?.email ?? 'Inicia sesión para guardar tus historias y acceder a ellas desde otros dispositivos.',
+                        textAlign: TextAlign.center,
+                        style: AritoriaType.body.copyWith(
+                          color: AritoriaColors.muted,
+                        ),
                       ),
-                    ),
-                  const SizedBox(height: 12),
-                  Text(
-                    user?.email ?? 'Inicia sesión para guardar tus historias y acceder a ellas desde otros dispositivos.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (user != null && _profileLoadFailed) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'No se pudo cargar tu perfil.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.error,
+                      if (user != null && _profileLoadFailed) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'No se pudo cargar tu perfil.',
+                          textAlign: TextAlign.center,
+                          style: AritoriaType.body.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              _loadProfile(user.id, forceRefresh: true),
+                          child: const Text('Reintentar'),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+                      if (user == null) ...[
+                        OutlinedButton.icon(
+                          onPressed: _isWorking ? null : _signInWithGoogle,
+                          icon: const Icon(Icons.account_circle_outlined),
+                          label: Text(
+                            _isWorking
+                                ? 'Iniciando sesión...'
+                                : 'Continuar con Google',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      _ProfileSection(
+                        title: 'Tu cuenta',
+                        children: [
+                          if (user != null && profile != null)
+                            _ProfileOption(
+                              icon: Icons.person_outline,
+                              title: 'Editar perfil',
+                              subtitle: 'Nombre y foto de tu cuenta',
+                              onTap: canEdit ? _editProfile : null,
+                            ),
+                          _ProfileOption(
+                            icon: Icons.group_outlined,
+                            title: 'Introducir código de invitación',
+                            subtitle: 'Acepta una invitación recibida',
+                            onTap: _isWorking ? null : _openInvitationCode,
+                          ),
+                        ],
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () =>
-                          _loadProfile(user.id, forceRefresh: true),
-                      child: const Text('Reintentar'),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  if (user == null)
-                    OutlinedButton.icon(
-                      onPressed: _isWorking ? null : _signInWithGoogle,
-                      icon: const Icon(Icons.account_circle_outlined),
-                      label: Text(
-                        _isWorking
-                            ? 'Iniciando sesión...'
-                            : 'Continuar con Google',
+                      const SizedBox(height: 16),
+                      _ProfileSection(
+                        title: 'Ajustes',
+                        children: [
+                          _ProfileOption(
+                            icon: Icons.notifications_none_rounded,
+                            title: 'Notificaciones',
+                            subtitle: 'Gestiona tus preferencias',
+                            onTap: () => _showMessage('Próximamente'),
+                          ),
+                          _ProfileOption(
+                            icon: Icons.lock_outline_rounded,
+                            title: 'Privacidad',
+                            subtitle: 'Controla tus datos',
+                            onTap: () => _showMessage('Próximamente'),
+                          ),
+                          _ProfileOption(
+                            icon: Icons.help_outline_rounded,
+                            title: 'Ayuda y soporte',
+                            subtitle: 'Preguntas frecuentes y contacto',
+                            onTap: () => _showMessage('Próximamente'),
+                          ),
+                        ],
                       ),
-                    )
-                  else ...[
-                    if (profile != null) ...[
-                      FilledButton.icon(
-                        onPressed: _isWorking ? null : _editProfile,
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Editar perfil'),
-                      ),
-                      const SizedBox(height: 12),
+                      if (user != null) ...[
+                        const SizedBox(height: 24),
+                        OutlinedButton.icon(
+                          onPressed: _isWorking ? null : _signOut,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                            side: BorderSide(
+                              color: theme.colorScheme.error.withValues(
+                                alpha: 0.35,
+                              ),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          icon: const Icon(Icons.logout_rounded, size: 21),
+                          label: Text(
+                            _isWorking ? 'Cerrando sesión...' : 'Cerrar sesión',
+                          ),
+                        ),
+                      ],
                     ],
-                    OutlinedButton.icon(
-                      onPressed: _isWorking ? null : _signOut,
-                      icon: const Icon(Icons.logout),
-                      label: Text(
-                        _isWorking ? 'Cerrando sesión...' : 'Cerrar sesión',
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: _isWorking ? null : _openInvitationCode,
-                    icon: const Icon(Icons.password_outlined),
-                    label: const Text('Introducir código de invitación'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileSection extends StatelessWidget {
+  const _ProfileSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AritoriaColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AritoriaColors.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              title,
+              style: AritoriaType.section.copyWith(color: AritoriaColors.olive),
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              children[i],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileOption extends StatelessWidget {
+  const _ProfileOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AritoriaColors.sage.withValues(alpha: 0.13),
+              ),
+              child: Icon(icon, size: 23, color: AritoriaColors.olive),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AritoriaType.body),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: AritoriaType.caption.copyWith(fontSize: 13),
                   ),
                 ],
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AritoriaColors.muted,
+              size: 22,
+            ),
+          ],
         ),
       ),
     );
