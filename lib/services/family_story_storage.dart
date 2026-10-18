@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/family_story.dart';
 import 'family_member_storage.dart';
+import 'story_waveform_service.dart';
+import 'persistent_story_waveform_service.dart';
 
 abstract interface class EditableFamilyStoryStorage {
   Future<FamilyStory> updatePhoto(FamilyStory story, String? path);
@@ -28,10 +31,12 @@ class LocalFamilyStoryStorage
     SharedPreferencesAsync? preferences,
     Future<Directory> Function()? documentsProvider,
     Future<Directory> Function()? supportProvider,
+    StoryWaveformService? waveformService,
   }) : _preferencesOverride = preferences,
        documentsProvider =
            documentsProvider ?? getApplicationDocumentsDirectory,
-       supportProvider = supportProvider ?? getApplicationSupportDirectory;
+       supportProvider = supportProvider ?? getApplicationSupportDirectory,
+       waveforms = waveformService ?? StoryWaveforms.local;
   static const _storageKey = 'family_stories';
 
   final SharedPreferencesAsync? _preferencesOverride;
@@ -40,6 +45,7 @@ class LocalFamilyStoryStorage
       _preferencesOverride ??
       (_defaultPreferences ??= SharedPreferencesAsync());
   final Future<Directory> Function() documentsProvider, supportProvider;
+  final StoryWaveformService waveforms;
 
   Future<void> _persist(List<FamilyStory> stories) =>
       _preferences.setStringList(
@@ -96,6 +102,7 @@ class LocalFamilyStoryStorage
         }
       } catch (_) {}
     }
+    await waveforms.forgetFamily(id);
     final photoDirectory = Directory(
       '${support.path}/family_member_photos/$id',
     );
@@ -162,6 +169,7 @@ class LocalFamilyStoryStorage
       if (await temporaryFile.exists()) {
         await temporaryFile.delete();
       }
+      unawaited(waveforms.warm(story, () async => persistentFile.path));
       return story;
     } catch (_) {
       if (await persistentFile.exists()) {

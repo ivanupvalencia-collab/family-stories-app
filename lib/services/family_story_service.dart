@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
+import 'story_waveform_service.dart';
+import 'persistent_story_waveform_service.dart';
 
 abstract class FamilyStoryService {
   Future<List<FamilyStory>> loadForFamily(String familyMemberId);
@@ -13,15 +16,23 @@ abstract class FamilyStoryService {
   Future<void> clearAudioCache();
 }
 
-class SupabaseFamilyStoryService implements FamilyStoryService {
-  SupabaseFamilyStoryService({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+class SupabaseFamilyStoryService
+    implements FamilyStoryService, StoryWaveformProvider {
+  SupabaseFamilyStoryService({
+    SupabaseClient? client,
+    StoryWaveformService? waveformService,
+  }) : _client = client ?? Supabase.instance.client,
+       _waveformOverride = waveformService;
 
   static const audioBucketName = 'story-audio';
 
   final SupabaseClient _client;
+  final StoryWaveformService? _waveformOverride;
   final Map<String, ({String path, int size})> _audioCache = {};
   int _cacheGeneration = 0;
+  @override
+  StoryWaveformService get waveforms =>
+      _waveformOverride ?? StoryWaveforms.forClient(_client);
 
   @override
   Future<List<FamilyStory>> loadForFamily(String familyMemberId) async {
@@ -47,12 +58,18 @@ class SupabaseFamilyStoryService implements FamilyStoryService {
   @override
   Future<String> localAudioPathFor(FamilyStory story) async {
     final generation = _cacheGeneration;
+    final account = _client.auth.currentUser?.id;
+    final waveformScope = waveforms;
     final cached = _audioCache[story.audioPath];
     if (cached != null) {
       try {
         final file = File(cached.path);
         final size = await file.exists() ? await file.length() : 0;
-        if (generation == _cacheGeneration && size > 0 && size == cached.size) {
+        if (generation == _cacheGeneration &&
+            account == _client.auth.currentUser?.id &&
+            size > 0 &&
+            size == cached.size) {
+          unawaited(waveformScope.warm(story, () async => cached.path));
           return cached.path;
         }
       } on FileSystemException {
@@ -67,7 +84,8 @@ class SupabaseFamilyStoryService implements FamilyStoryService {
     if (bytes.isEmpty) {
       throw StateError('Storage returned an empty audio file.');
     }
-    if (generation != _cacheGeneration) {
+    if (generation != _cacheGeneration ||
+        account != _client.auth.currentUser?.id) {
       throw StateError('Audio cache was invalidated.');
     }
 
@@ -84,11 +102,13 @@ class SupabaseFamilyStoryService implements FamilyStoryService {
     if (fileSize != bytes.length) {
       throw StateError('Temporary audio size differs from downloaded bytes.');
     }
-    if (generation != _cacheGeneration) {
+    if (generation != _cacheGeneration ||
+        account != _client.auth.currentUser?.id) {
       await file.delete();
       throw StateError('Audio cache was invalidated.');
     }
     _audioCache[story.audioPath] = (path: file.path, size: fileSize);
+    unawaited(waveformScope.warm(story, () async => file.path));
     return file.path;
   }
 

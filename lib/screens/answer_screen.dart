@@ -21,6 +21,8 @@ class AnswerScreen extends StatefulWidget {
     this.audioService,
     this.photoService,
     this.imagePicker,
+    this.authorName,
+    this.recipientName,
     super.key,
   });
 
@@ -31,6 +33,7 @@ class AnswerScreen extends StatefulWidget {
   final AudioAnswerService? audioService;
   final StoryPhotoService? photoService;
   final ProfileImagePicker? imagePicker;
+  final String? authorName, recipientName;
 
   @override
   State<AnswerScreen> createState() => _AnswerScreenState();
@@ -95,6 +98,8 @@ class _AnswerScreenState extends State<AnswerScreen> {
     if (story != null) {
       return StoryScreen(
         story: story,
+        authorName: widget.authorName,
+        recipientName: widget.recipientName ?? 'quien te preguntó',
         remoteStoryService: widget.familyStoryService,
         audioService: widget.audioService,
         photoService: widget.photoService,

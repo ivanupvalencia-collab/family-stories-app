@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   record: 7.1.1
   audioplayers: 6.8.1
+  audio_waveforms: 2.0.2
   path_provider: 2.1.6
   shared_preferences: 2.5.5
   supabase_flutter: 2.18.0

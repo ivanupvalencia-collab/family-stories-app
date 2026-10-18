@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'persistent_story_waveform_service.dart';
+
 // Manual installation of SQL 07 has been confirmed by the owner.
 const familyMemberRemoteDeletionEnabled = true;
 
@@ -88,6 +90,7 @@ class SupabaseFamilyMemberDeletionService
         params: {'p_family_member_id': familyMemberId},
       );
       requireSession();
+      await StoryWaveforms.forClient(_client).forgetFamily(familyMemberId);
       return plan;
     } finally {
       _busy.remove(familyMemberId);

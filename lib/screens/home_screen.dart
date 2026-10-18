@@ -428,6 +428,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AnswerScreen(
+          authorName: _user == null
+              ? null
+              : _profileService.cachedForUser(_user!.id)?.name,
+          recipientName: _details[request.id]?.senderName,
           questionRequest: request,
           questionRequestService: _questionRequestService,
           familyStoryService: _familyStoryService,
@@ -571,6 +575,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FamilyMemberScreen(
+          viewerName: _user == null
+              ? null
+              : _profileService.cachedForUser(_user!.id)?.name,
           familyMember: familyMember,
           authService: _authService,
           familyMemberService: _familyMemberService,

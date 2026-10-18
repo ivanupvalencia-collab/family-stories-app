@@ -132,6 +132,7 @@ Widget _space(
 }) => MaterialApp(
   debugShowCheckedModeBanner: false,
   home: FamilyMemberScreen(
+    waveformService: fixtures.UnavailableStoryWaveforms(),
     familyMember: member,
     authService: fixtures.FakeAuthService(
       remote ? fixtures.testAuthUser : null,
@@ -402,6 +403,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: StoryScreen(
+            waveformService: fixtures.UnavailableStoryWaveforms(),
             story: _story(1),
             photoService: photos,
             audioService: audio,
@@ -418,7 +420,11 @@ void main() {
       await tester.tap(find.text('Añadir foto'));
       await tester.pumpAndSettle();
       expect(find.byType(StoryPhotoView), findsOneWidget);
-      await tester.tap(find.text('Reproducir historia'));
+      await tester.scrollUntilVisible(
+        find.byTooltip('Reproducir historia'),
+        200,
+      );
+      await tester.tap(find.byTooltip('Reproducir historia'));
       await tester.pumpAndSettle();
       expect(audio.playedPaths, ['/audio.m4a']);
       await tester.tap(find.byTooltip('Foto de la historia'));

@@ -16,6 +16,7 @@ import 'package:family_stories_app/screens/accept_invitation_screen.dart';
 import 'package:family_stories_app/screens/answer_options_screen.dart';
 import 'package:family_stories_app/services/auth_service.dart';
 import 'package:family_stories_app/services/audio_answer_service.dart';
+import 'package:family_stories_app/services/story_waveform_service.dart';
 import 'package:family_stories_app/services/avatar_storage_service.dart';
 import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_member_storage.dart';
@@ -2136,18 +2137,19 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Reproducir historia'));
+    await tester.tap(find.byTooltip('Reproducir historia'));
     await tester.pumpAndSettle();
 
-    expect(storyService.requestedAudioStoryIds, [story.id]);
+    // Opening extracts the waveform; fresh playback still revalidates the file.
+    expect(storyService.requestedAudioStoryIds, [story.id, story.id]);
     expect(audioService.playedPaths, [storyService.resolvedAudioPath]);
-    expect(find.text('Pausar'), findsOneWidget);
+    expect(find.byTooltip('Pausar'), findsOneWidget);
 
     audioService._playbackCompleteController.add(null);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reproducir historia'));
+    await tester.tap(find.byTooltip('Reproducir historia'));
     await tester.pumpAndSettle();
-    expect(storyService.requestedAudioStoryIds, [story.id, story.id]);
+    expect(storyService.requestedAudioStoryIds, [story.id, story.id, story.id]);
     expect(audioService.playedPaths, [
       storyService.resolvedAudioPath,
       storyService.resolvedAudioPath,
@@ -2168,13 +2170,17 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: StoryScreen(story: story, audioService: audioService),
+        home: StoryScreen(
+          story: story,
+          audioService: audioService,
+          waveformService: UnavailableStoryWaveforms(),
+        ),
       ),
     );
-    await tester.tap(find.text('Reproducir historia'));
+    await tester.tap(find.byTooltip('Reproducir historia'));
     await tester.pumpAndSettle();
     expect(audioService.playedPaths, [story.audioPath]);
-    expect(find.text('Pausar'), findsOneWidget);
+    expect(find.byTooltip('Pausar'), findsOneWidget);
   });
 
   testWidgets('muestra un error recuperable al cargar historias remotas', (
@@ -2230,11 +2236,11 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Reproducir historia'));
+    await tester.tap(find.byTooltip('Reproducir historia'));
     await tester.pumpAndSettle();
 
     expect(find.text('No se pudo reproducir esta historia.'), findsOneWidget);
-    expect(find.text('Reproducir historia'), findsOneWidget);
+    expect(find.byTooltip('Reproducir historia'), findsOneWidget);
     expect(audioService.playedPaths, isEmpty);
     expect(find.textContaining('storage details'), findsNothing);
   });
@@ -2499,14 +2505,14 @@ void main() {
       'answered/exact-upload.m4a',
     );
     expect(stories.requestedFamilyMemberIds, isEmpty);
-    await tester.tap(find.text('Reproducir historia'));
+    await tester.tap(find.byTooltip('Reproducir historia'));
     await tester.pumpAndSettle();
-    expect(stories.requestedAudioStoryIds, [story.id]);
+    expect(stories.requestedAudioStoryIds, [story.id, story.id]);
     expect(audio.playedPaths, [stories.resolvedAudioPath]);
     await auth.signOut();
     await tester.pumpAndSettle();
     expect(find.byType(StoryScreen), findsNothing);
-    expect(find.text('Reproducir historia'), findsNothing);
+    expect(find.byTooltip('Reproducir historia'), findsNothing);
   });
 
   testWidgets(
@@ -2596,8 +2602,9 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Reproducir historia'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.byTooltip('Reproducir historia'));
     await tester.pump();
     await auth.signOut();
     await tester.pumpAndSettle();
@@ -3304,7 +3311,18 @@ class MemoryFamilyStoryStorage implements FamilyStoryStorage {
   }
 }
 
-class FakeFamilyStoryService implements FamilyStoryService {
+class UnavailableStoryWaveforms extends StoryWaveformService {
+  @override
+  Future<List<double>> extract(String localAudioPath) async =>
+      throw StateError('No waveform fixture');
+  @override
+  Future<void> dispose() async {}
+}
+
+class FakeFamilyStoryService
+    implements FamilyStoryService, StoryWaveformProvider {
+  @override
+  StoryWaveformService get waveforms => UnavailableStoryWaveforms();
   FakeFamilyStoryService({
     List<FamilyStory> stories = const [],
     this.loadError,

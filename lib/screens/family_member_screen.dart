@@ -6,6 +6,7 @@ import '../design/aritoria_design.dart';
 import '../widgets/family_member_space_view.dart';
 import '../services/question_of_the_day.dart';
 import '../services/story_photo_service.dart';
+import '../services/story_waveform_service.dart';
 import '../models/question.dart';
 import 'edit_family_member_screen.dart';
 import 'invitation_details_screen.dart';
@@ -43,6 +44,8 @@ class FamilyMemberScreen extends StatefulWidget {
     this.imagePicker,
     this.storyPhotoService,
     this.deletionService,
+    this.viewerName,
+    this.waveformService,
     super.key,
   });
 
@@ -60,6 +63,8 @@ class FamilyMemberScreen extends StatefulWidget {
   final ProfileImagePicker? imagePicker;
   final StoryPhotoService? storyPhotoService;
   final FamilyMemberDeletionService? deletionService;
+  final String? viewerName;
+  final StoryWaveformService? waveformService;
 
   @override
   State<FamilyMemberScreen> createState() => _FamilyMemberScreenState();
@@ -293,6 +298,9 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
       MaterialPageRoute(
         builder: (context) => StoryScreen(
           story: story,
+          authorName: _familyMember.name,
+          waveformService: widget.waveformService,
+          recipientName: widget.viewerName ?? 'ti',
           remoteStoryService: _remoteStoryService,
           photoService: _storyPhotos,
           imagePicker: widget.imagePicker,

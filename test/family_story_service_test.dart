@@ -4,9 +4,23 @@ import 'dart:io';
 
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/services/family_story_service.dart';
+import 'package:family_stories_app/services/story_waveform_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+class _BackgroundWaveforms extends StoryWaveformService {
+  final entered = Completer<String>();
+  final finish = Completer<List<double>>();
+  @override
+  Future<List<double>> extract(String localAudioPath) {
+    if (!entered.isCompleted) entered.complete(localAudioPath);
+    return finish.future;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -129,6 +143,20 @@ void main() {
       expect(await File(path).exists(), isFalse);
     },
   );
+
+  test('remote waveform starts after full local write and does not block returning audio', () async {
+    final waveforms = _BackgroundWaveforms();
+    final warming = SupabaseFamilyStoryService(
+      client: client,
+      waveformService: waveforms,
+    );
+    final path = await warming.localAudioPathFor(story);
+    expect(await waveforms.entered.future, path);
+    expect(await File(path).readAsBytes(), responseBytes);
+    expect(waveforms.finish.isCompleted, isFalse);
+    waveforms.finish.complete([0, 1]);
+    await warming.clearAudioCache();
+  });
 
   for (final damage in ['empty', 'truncated', 'missing']) {
     test('redownloads a $damage cached file', () async {
