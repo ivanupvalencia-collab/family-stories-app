@@ -44,12 +44,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isWorking = false;
   bool _isProfileLoading = false;
   bool _profileLoadFailed = false;
+  ProfileAvatarImageCache? _avatarImages;
 
   @override
   void initState() {
     super.initState();
     _authService = widget.authService ?? SupabaseGoogleAuthService();
     _profileService = widget.profileService ?? SupabaseProfileService();
+    final source = _profileService;
+    if (source is ProfileAvatarImageSource) {
+      _avatarImages = (source as ProfileAvatarImageSource).avatarImages;
+      _avatarImages!.addListener(_profileImageChanged);
+    }
     _invitationService =
         widget.invitationService ?? SupabaseInvitationService();
     _user = _authService.currentUser;
@@ -71,8 +77,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _avatarImages?.removeListener(_profileImageChanged);
     _authSubscription.cancel();
     super.dispose();
+  }
+
+  void _profileImageChanged() {
+    final user = _user;
+    if (!mounted || user == null) return;
+    final profile = _profileService.cachedForUser(user.id);
+    if (profile != null && !identical(profile, _profile)) {
+      setState(() {
+        _profile = profile;
+        _isProfileLoading = false;
+      });
+    }
   }
 
   void _showMessage(String message) {

@@ -350,6 +350,44 @@ void main() {
         expect(await disk.read(client.storage.url, owner, oldPath), isNull);
       },
     );
+    test('answer thumbnail reference and bytes survive restart and are invalidated together', () async {
+      row['question_request_id'] = 'request';
+      final item = story();
+      await photos.load(item);
+      await photos.rememberPreview('request', item);
+      final restarted = SupabaseClient(
+        'http://127.0.0.1:${server.port}',
+        'test-key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false),
+      );
+      await _login(restarted, owner);
+      final next = SupabaseStoryPhotoService(
+        client: restarted,
+        diskCache: disk,
+      );
+      try {
+        final cached = (await next.readPreview('request'))!;
+        expect(cached.id, item.id);
+        expect(next.cachedPhoto(cached), fixtures.testPickedImage.bytes);
+        expect(downloads(), 1);
+        await next.rememberPreview('request', cached.withPhotoPath(null));
+        expect(next.cachedPhoto(cached), isNull);
+        expect(await disk.read(client.storage.url, owner, oldPath), isNull);
+        await next.rememberPreview('request', null);
+        expect(
+          await disk.readEntry(
+            client.storage.url,
+            owner,
+            'answer:request',
+            image: false,
+          ),
+          isNull,
+        );
+      } finally {
+        await restarted.dispose();
+      }
+    });
+
     test('concurrent downloads deduplicate, memory is shared, persistent photo survives restart', () async {
       final item = story();
       final other = SupabaseStoryPhotoService(client: client, diskCache: disk);

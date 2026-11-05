@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
 import '../services/visible_account_avatar_service.dart';
+import '../services/profile_avatar_image_cache.dart';
 import 'profile_avatar_view.dart';
 
 /// An account avatar used only as a display fallback, never as an owned photo.
@@ -82,9 +83,15 @@ class _AccountAvatarViewState extends State<AccountAvatarView> {
       builder: (context, snapshot) {
         // Never retain FutureBuilder's old-account snapshot on account changes.
         final profile = _service?.cached(widget.accountId);
+        final service = _service;
         return ProfileAvatarView(
           avatarKey: profile?.avatarKey,
           avatarUrl: profile?.avatarUrl,
+          imageProvider: profile != null && service is ProfileAvatarImageSource
+              ? (service as ProfileAvatarImageSource).avatarImages.imageFor(
+                  profile,
+                )
+              : null,
           radius: widget.radius,
           width: widget.width,
           height: widget.height,

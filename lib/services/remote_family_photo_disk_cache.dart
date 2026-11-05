@@ -99,8 +99,15 @@ class RemoteFamilyPhotoDiskCache {
     Uint8List bytes, {
     required bool Function() stillValid,
   }) => _enqueue(() async {
+    await _writeFile(await _file(backend, owner, path), bytes, stillValid);
+  });
+
+  Future<void> _writeFile(
+    File file,
+    Uint8List bytes,
+    bool Function() stillValid,
+  ) async {
     if (!stillValid()) return;
-    final file = await _file(backend, owner, path);
     await file.parent.create(recursive: true);
     final staged = File('${file.path}.pending');
     try {
@@ -111,6 +118,65 @@ class RemoteFamilyPhotoDiskCache {
     } finally {
       if (await staged.exists()) await staged.delete();
     }
+  }
+
+  // Opaque image references (avatar URLs/revisions and their metadata) reuse
+  // the same private, atomic store without pretending to be Storage paths.
+  Future<File> _named(String backend, String owner, String key) async {
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(owner) || key.isEmpty) {
+      throw const FormatException('Invalid cache identity.');
+    }
+    final encoded = base64Url.encode(utf8.encode(key));
+    final chunks = <String>[
+      for (var offset = 0; offset < encoded.length; offset += 80)
+        encoded.substring(offset, (offset + 80).clamp(0, encoded.length)),
+    ];
+    return File(
+      '${(await _root(backend, owner)).path}/entries/${chunks.join('/')}.cache',
+    );
+  }
+
+  Future<Uint8List?> readEntry(
+    String backend,
+    String owner,
+    String key, {
+    bool image = true,
+  }) async {
+    await _writes;
+    try {
+      final bytes = await (await _named(backend, owner, key)).readAsBytes();
+      if (image) {
+        await validate(bytes);
+      } else if (bytes.isEmpty || bytes.length > 64 * 1024) {
+        throw const FormatException('Invalid metadata size.');
+      }
+      return bytes;
+    } catch (_) {
+      await removeEntry(backend, owner, key);
+      return null;
+    }
+  }
+
+  Future<void> writeEntry(
+    String backend,
+    String owner,
+    String key,
+    Uint8List bytes, {
+    required bool Function() stillValid,
+  }) => _enqueue(() async {
+    await _writeFile(await _named(backend, owner, key), bytes, stillValid);
+  });
+
+  Future<void> removeEntry(String backend, String owner, String key) =>
+      _enqueue(() async {
+        final file = await _named(backend, owner, key);
+        if (await file.exists()) await file.delete();
+      });
+
+  Future<void> clearOwner(String backend, String owner) => _enqueue(() async {
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(owner)) return;
+    final root = await _root(backend, owner);
+    if (await root.exists()) await root.delete(recursive: true);
   });
 
   Future<void> remove(String backend, String owner, String path) =>

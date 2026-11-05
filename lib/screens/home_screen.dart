@@ -266,7 +266,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (cached != null) {
           // Warm only the hero and first portraits before publishing the
           // snapshot. The rest read disk on demand, never holding up Home.
-          final hero = selectHomeHero(cached);
+          final avatars = SupabaseVisibleAccountAvatarService.shared;
+          await avatars?.warmCached([
+            for (final member in cached)
+              if (member.photoPath == null && member.linkedAccountId != null)
+                member.linkedAccountId!,
+          ]);
+          final hero = selectHomeHero(cached, linkedProfile: avatars?.cached);
           await _photos.warmCachedPhotos({...cached.take(6), ?hero}.toList());
           if (!mounted || request != _loadRequest || _user?.id != user.id) {
             return;

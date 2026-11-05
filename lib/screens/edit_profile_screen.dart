@@ -5,6 +5,7 @@ import '../models/user_profile.dart';
 import '../services/avatar_storage_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
+import '../services/profile_avatar_image_cache.dart';
 import '../widgets/profile_avatar_view.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -112,6 +113,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final service = widget.profileService;
+    final image = service is ProfileAvatarImageSource
+        ? (service as ProfileAvatarImageSource).avatarImages.imageFor(
+            widget.profile,
+          )
+        : null;
     return Scaffold(
       appBar: AppBar(title: const Text('Editar perfil')),
       body: SafeArea(
@@ -154,6 +161,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 16),
                     _AvatarPreview(
+                      imageProvider: image,
                       photo: _selectedPhoto,
                       avatarKey: _selectedAvatarKey,
                       avatarUrl: _avatarUrl,
@@ -209,11 +217,13 @@ class _AvatarPreview extends StatelessWidget {
     required this.photo,
     required this.avatarKey,
     required this.avatarUrl,
+    this.imageProvider,
   });
 
   final PickedProfileImage? photo;
   final String? avatarKey;
   final String? avatarUrl;
+  final ImageProvider? imageProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +233,7 @@ class _AvatarPreview extends StatelessWidget {
         key: const ValueKey('edit_profile_avatar_preview'),
         avatarKey: avatarKey,
         avatarUrl: avatarUrl,
+        imageProvider: imageProvider,
         radius: 44,
       );
     }

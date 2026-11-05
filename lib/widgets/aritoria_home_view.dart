@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'question_text.dart';
 
@@ -631,13 +632,48 @@ class _HomeAnswerPreview extends StatefulWidget {
 
 class _HomeAnswerPreviewState extends State<_HomeAnswerPreview> {
   late Future<FamilyStory?> _story;
+  FamilyStory? _cachedStory;
+  int _generation = 0;
   late final StoryPhotoService _photos =
       widget.photos ?? SupabaseStoryPhotoService();
 
   void _load() {
-    _story =
-        widget.answers?.loadAnswerStory(widget.request.id) ??
-        Future.value(null);
+    final generation = ++_generation;
+    final id = widget.request.id;
+    _cachedStory = null;
+    _story = () async {
+      FamilyStory? cached;
+      try {
+        cached = await _photos.readPreview(id);
+      } catch (_) {
+        // An unavailable optional disk cache must never block the normal RPC.
+      }
+      if (!mounted || generation != _generation) return null;
+      if (cached != null) setState(() => _cachedStory = cached);
+      try {
+        final fresh = await widget.answers?.loadAnswerStory(id);
+        if (!mounted || generation != _generation) return null;
+        try {
+          await _photos.rememberPreview(id, fresh);
+        } catch (_) {
+          // The authoritative response remains usable if caching fails.
+        }
+        if (mounted && generation == _generation) _cachedStory = fresh;
+        return fresh;
+      } catch (error) {
+        // Transient network errors do not hide an already cached thumbnail.
+        if (error is PostgrestException &&
+            (error.code == '42501' || error.code == 'PGRST301')) {
+          try {
+            await _photos.rememberPreview(id, null);
+          } catch (_) {}
+          if (mounted && generation == _generation) _cachedStory = null;
+          rethrow;
+        }
+        if (_cachedStory != null) return _cachedStory;
+        rethrow;
+      }
+    }();
   }
 
   @override
@@ -672,7 +708,7 @@ class _HomeAnswerPreviewState extends State<_HomeAnswerPreview> {
     child: FutureBuilder<FamilyStory?>(
       future: _story,
       builder: (context, snapshot) {
-        final story = snapshot.data;
+        final story = _cachedStory ?? snapshot.data;
         if (snapshot.hasError || story?.photoPath == null) return _play;
         return Stack(
           alignment: Alignment.center,

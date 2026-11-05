@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:family_stories_app/design/aritoria_design.dart';
 
@@ -29,7 +30,92 @@ class _Photos extends StoryPhotoService {
       throw UnimplementedError();
 }
 
+class _CachedPhotos extends _Photos {
+  _CachedPhotos(this.preview);
+  FamilyStory? preview;
+  @override
+  Future<FamilyStory?> readPreview(String requestId) async => preview;
+  @override
+  Uint8List? cachedPhoto(FamilyStory story) => fixtures.testPickedImage.bytes;
+  @override
+  Future<void> rememberPreview(String requestId, FamilyStory? story) async {
+    preview = story;
+  }
+}
+
+class _SlowAnswers extends fixtures.FakeQuestionRequestService {
+  final gate = Completer<FamilyStory?>();
+  @override
+  Future<FamilyStory?> loadAnswerStory(String id) => gate.future;
+}
+
 void main() {
+  testWidgets(
+    'known thumbnail appears while RPC is pending and removal replaces it',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final request = fixtures.testQuestionRequest(
+        id: 'answer',
+        questionText: 'Una historia conocida',
+        recipientId: 'recipient',
+        status: QuestionRequestStatus.answered,
+      );
+      final photos = _CachedPhotos(
+        FamilyStory(
+          id: 'story',
+          familyMemberId: request.familyMemberId,
+          question: request.questionText,
+          audioPath: 'private/audio.m4a',
+          duration: const Duration(seconds: 5),
+          createdAt: DateTime.utc(2026),
+          photoPath: 'private/story/photo.png',
+        ),
+      );
+      final answers = _SlowAnswers();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AritoriaHomeView(
+              members: const [],
+              photos: LocalFamilyMemberPhotoService(
+                storage: fixtures.MemoryFamilyMemberStorage(),
+              ),
+              profile: null,
+              authenticated: true,
+              questions: const [],
+              answers: [request],
+              answerService: answers,
+              storyPhotos: photos,
+              details: const {},
+              memberStatus: null,
+              questionStatus: null,
+              answerStatus: null,
+              onRefresh: () async {},
+              onNotifications: () {},
+              onAdd: () {},
+              onMember: (_) {},
+              onHero: (_) {},
+              onAllMembers: () {},
+              onAllQuestions: () {},
+              onAllAnswers: () {},
+              onQuestion: (_) {},
+              onAnswer: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(answers.gate.isCompleted, isFalse);
+      expect(find.byType(Image), findsOneWidget);
+      expect(photos.loaded, isEmpty);
+      answers.gate.complete(null);
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsNothing);
+      expect(photos.preview, isNull);
+    },
+  );
+
   for (final metadataError in [false, true]) {
     testWidgets(
       'Home answers show photo/play, two rows and existing callbacks; metadata error=$metadataError',

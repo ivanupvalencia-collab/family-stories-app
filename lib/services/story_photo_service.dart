@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +13,8 @@ import 'profile_image_picker.dart';
 import 'remote_family_photo_disk_cache.dart';
 
 abstract class StoryPhotoService extends PrivatePhotoService<FamilyStory> {
+  Future<FamilyStory?> readPreview(String requestId) async => null;
+  Future<void> rememberPreview(String requestId, FamilyStory? story) async {}
   @override
   Uint8List? cachedPhoto(FamilyStory story) => null;
   Future<FamilyStory> refresh(FamilyStory story) async => story;
@@ -115,10 +118,12 @@ class _Cache extends ChangeNotifier {
   String? account;
   int generation = 0;
   final entries = <String, _Entry>{};
+  final previews = <String, FamilyStory?>{};
   void reset(String? next) {
     account = next;
     generation++;
     entries.clear();
+    previews.clear();
   }
 
   void sync() {
@@ -168,6 +173,68 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
   String _account() =>
       _client.auth.currentUser?.id ??
       (throw StateError('Authentication required'));
+
+  // Only presentation metadata from the existing authorized answer RPC.
+  // This cache never replaces the RPC used to open/play an answer.
+  @override
+  Future<FamilyStory?> readPreview(String requestId) async {
+    final account = _account();
+    final cache = _cache;
+    final generation = cache.generation;
+    if (cache.previews.containsKey(requestId)) return cache.previews[requestId];
+    try {
+      final data = await _disk.readEntry(
+        _backend,
+        account,
+        'answer:$requestId',
+        image: false,
+      );
+      _require(account, generation);
+      if (data == null) return null;
+      final story = FamilyStory.fromJson(jsonDecode(utf8.decode(data)));
+      if (story.questionRequestId != requestId || story.recordedBy != account) {
+        return null;
+      }
+      if (story.photoPath case final path?) {
+        if (!_belongs(story, path)) return null;
+        final bytes = await _disk.read(_backend, account, path);
+        _require(account, generation);
+        if (bytes != null) cache.entries[path] = _Entry()..bytes = bytes;
+      }
+      cache.previews[requestId] = story;
+      return story;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> rememberPreview(String requestId, FamilyStory? story) async {
+    final account = _account();
+    final cache = _cache;
+    final generation = cache.generation;
+    final old = cache.previews[requestId];
+    cache.previews[requestId] = story;
+    if (old?.photoPath != null && old!.photoPath != story?.photoPath) {
+      await forgetPhotos(account, [old.photoPath!]);
+    }
+    if (story == null) {
+      await _disk.removeEntry(_backend, account, 'answer:$requestId');
+    } else if (story.questionRequestId == requestId &&
+        story.recordedBy == account) {
+      await _disk.writeEntry(
+        _backend,
+        account,
+        'answer:$requestId',
+        Uint8List.fromList(utf8.encode(jsonEncode(story.toJson()))),
+        stillValid: () =>
+            _client.auth.currentUser?.id == account &&
+            cache.generation == generation &&
+            identical(cache.previews[requestId], story),
+      );
+    }
+  }
+
   void _require(String account, int generation) {
     if (_account() != account || _cache.generation != generation) {
       throw StateError('Photo session changed');
@@ -181,6 +248,14 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
     final cache = _cache;
     for (final path in paths) {
       if (_client.auth.currentUser?.id == account) cache.entries.remove(path);
+      final previews = cache.previews.entries
+          .where((entry) => entry.value?.photoPath == path)
+          .map((entry) => entry.key)
+          .toList();
+      for (final requestId in previews) {
+        cache.previews.remove(requestId);
+        await _disk.removeEntry(_backend, account, 'answer:$requestId');
+      }
       await _disk.remove(_backend, account, path);
     }
     cache.changed();
@@ -335,6 +410,9 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
       cache.entries[path] = _Entry()..bytes = image.bytes;
     }
     cache.changed();
+    if (updated.questionRequestId case final requestId?) {
+      await rememberPreview(requestId, updated);
+    }
     if (current.photoPath != null) {
       await _disk.remove(_backend, account, current.photoPath!);
     }
