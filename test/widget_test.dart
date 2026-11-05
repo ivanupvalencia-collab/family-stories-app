@@ -1140,7 +1140,7 @@ void main() {
     expect(find.text('Relación contigo'), findsOneWidget);
 
     await tester.enterText(find.byType(EditableText), 'Ana');
-    await tester.tap(find.text('Relación contigo'));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abuelo/a').last);
     await tester.pumpAndSettle();
@@ -1254,7 +1254,7 @@ void main() {
     await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'Elena');
-    await tester.tap(find.text('Relación contigo'));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hermano/a').last);
     await tester.pumpAndSettle();
@@ -1328,7 +1328,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Introduce un nombre'), findsOneWidget);
-    expect(find.text('Selecciona una relación'), findsOneWidget);
+    expect(find.text('Selecciona una relación'), findsNWidgets(2));
   });
 
   testWidgets('navega desde un familiar hasta el aviso de grabación', (
@@ -1344,7 +1344,7 @@ void main() {
     await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'Ana');
-    await tester.tap(find.text('Relación contigo'));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abuelo/a').last);
     await tester.pumpAndSettle();
@@ -1844,7 +1844,7 @@ void main() {
     await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'Ana');
-    await tester.tap(find.text('Relación contigo'));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abuelo/a').last);
     await tester.pumpAndSettle();
