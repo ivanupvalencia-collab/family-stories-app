@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:family_stories_app/main.dart';
+import 'package:family_stories_app/design/aritoria_design.dart';
 import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/family_invitation.dart';
 import 'package:family_stories_app/models/family_story.dart';
@@ -37,6 +38,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('las rutas y cargas heredan la paleta verde y crema actual', (
+    tester,
+  ) async {
+    await tester.pumpWidget(testApp(MemoryFamilyMemberStorage()));
+    await tester.pumpAndSettle();
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.theme!.colorScheme.primary, AritoriaColors.olive);
+    expect(app.theme!.colorScheme.surface, AritoriaColors.cream);
+    expect(app.theme!.scaffoldBackgroundColor, AritoriaColors.cream);
+    expect(app.theme!.progressIndicatorTheme.color, AritoriaColors.olive);
+    expect(
+      AritoriaDesign.theme().progressIndicatorTheme.color,
+      AritoriaColors.olive,
+    );
+  });
+
   test('construye y parsea un enlace de invitación válido', () {
     final link = InvitationLink.build(testInvitationToken);
 
@@ -1409,7 +1426,7 @@ void main() {
     expect(find.text('Para Ana'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
 
-    expect(find.text('Preparado para grabar'), findsOneWidget);
+    expect(find.text('Grabar historia'), findsOneWidget);
   });
 
   testWidgets('crea una invitación para un familiar remoto no vinculado', (
@@ -1434,6 +1451,18 @@ void main() {
       ),
     );
 
+    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.pumpAndSettle();
+    final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
+    expect(dialog.backgroundColor, AritoriaColors.cream);
+    expect(dialog.titleTextStyle!.fontFamily, 'Lora');
+    expect(dialog.contentTextStyle!.fontFamily, 'Nunito Sans');
+    final dialogTheme = Theme.of(tester.element(find.byType(AlertDialog)));
+    expect(dialogTheme.colorScheme.primary, AritoriaColors.olive);
+    expect(dialogTheme.textTheme.labelLarge!.fontFamily, 'Nunito Sans');
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(invitationService.createdFamilyMemberIds, isEmpty);
     await tester.tap(find.text('Enviar a Pepe'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Invitar a Pepe'));
@@ -1935,31 +1964,30 @@ void main() {
     await tester.tap(find.text('Grabar respuesta'));
     await tester.pump();
 
-    expect(find.text('Grabando'), findsOneWidget);
-    expect(find.text('00:00'), findsOneWidget);
+    expect(find.byTooltip('Detener grabación'), findsOneWidget);
+    expect(find.text('0:00'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('00:01'), findsOneWidget);
+    expect(find.text('0:01'), findsOneWidget);
 
-    await tester.tap(find.text('Detener grabación'));
+    await tester.tap(find.byTooltip('Detener grabación'));
     await tester.pump();
 
-    expect(find.text('Grabación terminada'), findsOneWidget);
-    expect(find.text('Duración: 00:01'), findsOneWidget);
-    expect(find.text('Reproducir'), findsOneWidget);
+    expect(find.byKey(const ValueKey('answer-waveform')), findsOneWidget);
+    expect(find.text('0:01'), findsOneWidget);
+    expect(find.byTooltip('Reproducir'), findsOneWidget);
 
-    await tester.tap(find.text('Reproducir'));
+    await tester.tap(find.byTooltip('Reproducir'));
     await tester.pump();
-    expect(find.text('Reproduciendo'), findsOneWidget);
-    expect(find.text('Pausar'), findsOneWidget);
+    expect(find.byTooltip('Pausar'), findsOneWidget);
 
-    await tester.tap(find.text('Pausar'));
+    await tester.tap(find.byTooltip('Pausar'));
     await tester.pump();
-    expect(find.text('Reproducir'), findsOneWidget);
+    expect(find.byTooltip('Reproducir'), findsOneWidget);
 
-    await tester.tap(find.text('Volver a grabar'));
+    await tester.tap(find.text('Grabar de nuevo'));
     await tester.pump();
-    expect(find.text('Preparado para grabar'), findsOneWidget);
+    expect(find.text('Grabar respuesta'), findsOneWidget);
     expect(audioService.discardedPaths, ['/temporary/answer.m4a']);
   });
 
@@ -2000,7 +2028,7 @@ void main() {
     await tester.tap(find.text('Grabar respuesta'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
-    await tester.tap(find.text('Detener grabación'));
+    await tester.tap(find.byTooltip('Detener grabación'));
     await tester.pump();
     await tester.tap(find.text('Guardar historia'));
     await tester.pumpAndSettle();
@@ -2271,7 +2299,7 @@ void main() {
       find.text('Se necesita acceso al micrófono para grabar respuestas.'),
       findsOneWidget,
     );
-    expect(find.text('Preparado para grabar'), findsOneWidget);
+    expect(find.text('Grabar respuesta'), findsOneWidget);
   });
   testWidgets(
     'Historias que has contado muestra fecha y abre la carga de la respuesta',

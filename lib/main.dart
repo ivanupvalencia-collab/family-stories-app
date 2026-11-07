@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
 
+import 'design/aritoria_design.dart';
 import 'screens/accept_invitation_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/profile_screen.dart';
@@ -224,7 +225,11 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
       title: 'Family Stories',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF72594A)),
+        colorScheme: AritoriaDesign.theme().colorScheme,
+        scaffoldBackgroundColor: AritoriaColors.cream,
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: AritoriaColors.olive,
+        ),
         useMaterial3: true,
       ),
       home: HomeScreen(

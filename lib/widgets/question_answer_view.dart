@@ -32,6 +32,10 @@ class QuestionAnswerView extends StatelessWidget {
     this.photoBytes,
     this.senderName,
     this.onSeek,
+    this.familyMemberName,
+    this.submitLabel = 'Enviar respuesta',
+    this.submittingLabel = 'Enviando respuesta...',
+    this.submitIcon = Icons.send_outlined,
     super.key,
   });
 
@@ -53,6 +57,9 @@ class QuestionAnswerView extends StatelessWidget {
   final Uint8List? photoBytes;
   final String? senderName;
   final ValueChanged<double>? onSeek;
+  final String? familyMemberName;
+  final String submitLabel, submittingLabel;
+  final IconData submitIcon;
 
   bool get _sent => stage == QuestionAnswerStage.sent;
   String get _duration =>
@@ -254,7 +261,9 @@ class QuestionAnswerView extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = sentAt?.toLocal();
     final sender = senderName?.trim();
-    final status = _sent
+    final status = familyMemberName != null
+        ? 'Para $familyMemberName'
+        : _sent
         ? 'Respuesta enviada${date == null ? '' : ' · ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'}'
         : 'Enviada por ${sender == null || sender.isEmpty ? 'otro familiar' : sender} · Pendiente';
     return Theme(
@@ -263,7 +272,7 @@ class QuestionAnswerView extends StatelessWidget {
         builder: (context) => Scaffold(
           appBar: AppBar(
             title: Text(
-              'Pregunta para ti',
+              familyMemberName == null ? 'Pregunta para ti' : 'Grabar historia',
               style: AritoriaType.section.copyWith(
                 fontSize: 20,
                 color: AritoriaColors.olive,
@@ -301,6 +310,8 @@ class QuestionAnswerView extends StatelessWidget {
                                 Icon(
                                   _sent
                                       ? Icons.check_circle
+                                      : familyMemberName != null
+                                      ? Icons.mic_none_rounded
                                       : Icons.send_outlined,
                                   size: 18,
                                   color: _sent
@@ -385,10 +396,8 @@ class QuestionAnswerView extends StatelessWidget {
                               ),
                             if (stage == QuestionAnswerStage.review) ...[
                               _button(
-                                submitting
-                                    ? 'Enviando respuesta...'
-                                    : 'Enviar respuesta',
-                                Icons.send_outlined,
+                                submitting ? submittingLabel : submitLabel,
+                                submitIcon,
                                 onSend,
                               ),
                               const SizedBox(height: 16),

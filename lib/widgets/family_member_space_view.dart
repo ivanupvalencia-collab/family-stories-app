@@ -101,11 +101,13 @@ class FamilyMemberSpaceView extends StatelessWidget {
     required this.loading,
     required this.failed,
     required this.onRetry,
+    this.photosForStory,
     super.key,
   });
   final FamilyMember member;
   final FamilyMemberPhotoService photos;
   final StoryPhotoService storyPhotos;
+  final StoryPhotoService Function(FamilyStory)? photosForStory;
   final List<FamilyStory> stories;
   final Question question;
   final Widget menu;
@@ -260,7 +262,7 @@ class FamilyMemberSpaceView extends StatelessWidget {
                     .map(
                       (story) => StoryMemoryRow(
                         story: story,
-                        photos: storyPhotos,
+                        photos: photosForStory?.call(story) ?? storyPhotos,
                         onTap: () => onStory(story),
                       ),
                     ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-// Applied to the Home shell only. Existing routes keep their current theme.
 abstract final class AritoriaColors {
   static const olive = Color(0xFF3E5B46);
   static const sage = Color(0xFF8CA68F);
@@ -45,42 +44,42 @@ abstract final class AritoriaType {
     color: AritoriaColors.ink,
   );
   static const memberName = TextStyle(
-    fontFamily: 'Fraunces',
+    fontFamily: 'Lora',
     fontSize: 46,
     height: 1.08,
     fontWeight: FontWeight.w500,
     color: AritoriaColors.ink,
   );
   static const memoryTitle = TextStyle(
-    fontFamily: 'Fraunces',
+    fontFamily: 'Lora',
     fontSize: 19,
     height: 1.25,
     fontWeight: FontWeight.w500,
     color: AritoriaColors.ink,
   );
   static const question = TextStyle(
-    fontFamily: 'Fraunces',
+    fontFamily: 'Lora',
     fontSize: 22,
     height: 1.28,
     fontWeight: FontWeight.w500,
     color: AritoriaColors.ink,
   );
   static const brand = TextStyle(
-    fontFamily: 'Fraunces',
+    fontFamily: 'Lora',
     fontSize: 34,
     height: 1.1,
     color: AritoriaColors.olive,
     fontWeight: FontWeight.w500,
   );
   static const editorial = TextStyle(
-    fontFamily: 'Fraunces',
+    fontFamily: 'Lora',
     fontSize: 30,
     height: 1.2,
     color: AritoriaColors.onPhoto,
     fontWeight: FontWeight.w500,
   );
   static const section = TextStyle(
-    fontFamily: 'Fraunces',
+    fontFamily: 'Lora',
     fontSize: 23,
     height: 1.2,
     color: AritoriaColors.ink,
@@ -112,6 +111,9 @@ abstract final class AritoriaDesign {
     useMaterial3: true,
     fontFamily: 'Nunito Sans',
     scaffoldBackgroundColor: AritoriaColors.cream,
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AritoriaColors.olive,
+    ),
     colorScheme: ColorScheme.fromSeed(seedColor: AritoriaColors.olive).copyWith(
       primary: AritoriaColors.olive,
       primaryContainer: AritoriaColors.sand,

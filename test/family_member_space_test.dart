@@ -154,6 +154,77 @@ Widget _space(
 );
 
 void main() {
+  for (final offline in [false, true]) {
+    testWidgets(
+      'remote profile retains local recordings with local photos, offline=$offline',
+      (tester) async {
+        const member = FamilyMember(
+          id: 'member',
+          name: 'Mavi',
+          relationship: 'Abuelo/a',
+        );
+        final local = FamilyStory(
+          id: 'local',
+          familyMemberId: member.id,
+          question: 'Recuerdo grabado aquí',
+          audioPath: '/private/local.m4a',
+          duration: const Duration(seconds: 2),
+          createdAt: DateTime(2026, 11, 5),
+          photoPath: 'story_photos/local/photo.png',
+        );
+        final remote = FamilyStory(
+          id: 'remote',
+          familyMemberId: member.id,
+          question: 'Respuesta remota',
+          audioPath: 'request/audio.m4a',
+          duration: const Duration(seconds: 2),
+          createdAt: DateTime(2026, 11, 4),
+        );
+        await tester.binding.setSurfaceSize(const Size(390, 1400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        // Without an override, each entry must use its own storage implementation.
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FamilyMemberScreen(
+              familyMember: member,
+              authService: fixtures.FakeAuthService(fixtures.testAuthUser),
+              familyMemberService: fixtures.FakeFamilyMemberService(
+                members: [member],
+              ),
+              familyStoryStorage: fixtures.MemoryFamilyStoryStorage(
+                stories: [local],
+              ),
+              familyStoryService: fixtures.FakeFamilyStoryService(
+                stories: [remote],
+                loadError: offline ? StateError('offline') : null,
+              ),
+              invitationService: fixtures.FakeInvitationService(),
+              invitationShareService: fixtures.FakeInvitationShareService(),
+              questionRequestService: fixtures.FakeQuestionRequestService(),
+              photoService: _MemberPhotos(),
+              isRemoteFamilyMember: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Recuerdo grabado aquí'), findsOneWidget);
+        expect(
+          find.text('Respuesta remota'),
+          offline ? findsNothing : findsOneWidget,
+        );
+        final space = tester.widget<FamilyMemberSpaceView>(
+          find.byType(FamilyMemberSpaceView),
+        );
+        expect(space.photosForStory!(local), isA<LocalStoryPhotoService>());
+        expect(space.photosForStory!(remote), isA<SupabaseStoryPhotoService>());
+        expect(
+          space.stories.map((s) => s.id),
+          offline ? ['local'] : ['local', 'remote'],
+        );
+      },
+    );
+  }
+
   testWidgets(
     'remote delete: cancel, loading, double tap, error, retry, cache cleanup and return',
     (tester) async {
@@ -512,11 +583,7 @@ void main() {
           await tester.tap(find.text('Grabar respuesta'));
           await tester.pump();
           await tester.pump(const Duration(seconds: 1));
-          await tester.tap(
-            remote
-                ? find.byTooltip('Detener grabación')
-                : find.text('Detener grabación'),
-          );
+          await tester.tap(find.byTooltip('Detener grabación'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('Añadir una foto (opcional)'));
           await tester.pumpAndSettle();
@@ -556,7 +623,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    for (final font in ['Fraunces', 'NunitoSans']) {
+    for (final font in ['Lora', 'NunitoSans']) {
       final loader = FontLoader(font == 'NunitoSans' ? 'Nunito Sans' : font)
         ..addFont(rootBundle.load('assets/fonts/$font.ttf'));
       await loader.load();

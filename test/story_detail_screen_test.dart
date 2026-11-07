@@ -79,7 +79,7 @@ void main() {
   testWidgets('story visual previews with bundled fonts', (tester) async {
     if (!const bool.fromEnvironment('ARITORIA_PREVIEW')) return;
     for (final (family, path) in [
-      ('Fraunces', 'assets/fonts/Fraunces.ttf'),
+      ('Lora', 'assets/fonts/Lora.ttf'),
       ('Nunito Sans', 'assets/fonts/NunitoSans.ttf'),
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
     ]) {
@@ -157,7 +157,7 @@ void main() {
                 .widget<QuestionText>(find.byType(QuestionText))
                 .style
                 ?.fontFamily,
-            'Fraunces',
+            'Lora',
           );
           await tester.scrollUntilVisible(
             find.text('17 de octubre de 2026 · Para Iván'),

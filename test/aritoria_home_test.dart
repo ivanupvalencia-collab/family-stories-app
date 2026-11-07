@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -188,24 +189,25 @@ void main() {
     expect(selectHomeHero([_pepe, photographed]), same(photographed));
   });
 
-  testWidgets('hero opens the existing questions flow and keeps its theme', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
-    );
-    await tester.pumpAndSettle();
-    expect(_heroTitle('Pepe'), findsOneWidget);
-    await tester.tap(find.text('Conoce su historia'));
-    await tester.pumpAndSettle();
-    expect(find.byType(QuestionsScreen), findsOneWidget);
-    expect(
-      Theme.of(tester.element(find.byType(QuestionsScreen)))
-          .colorScheme
-          .primary,
-      isNot(AritoriaColors.olive),
-    );
-  });
+  testWidgets(
+    'hero opens the existing questions flow with the current palette',
+    (tester) async {
+      await tester.pumpWidget(
+        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
+      );
+      await tester.pumpAndSettle();
+      expect(_heroTitle('Pepe'), findsOneWidget);
+      await tester.tap(find.text('Conoce su historia'));
+      await tester.pumpAndSettle();
+      expect(find.byType(QuestionsScreen), findsOneWidget);
+      expect(
+        Theme.of(tester.element(find.byType(QuestionsScreen)))
+            .colorScheme
+            .primary,
+        AritoriaColors.olive,
+      );
+    },
+  );
 
   testWidgets(
     'onboarding and all three quick create actions reuse existing routes',
@@ -445,10 +447,10 @@ void main() {
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(390, 844));
         addTearDown(() => tester.binding.setSurfaceSize(null));
-        for (final family in ['Fraunces', 'Nunito Sans']) {
+        for (final family in ['Lora', 'Nunito Sans']) {
           await (FontLoader(family)..addFont(
                 rootBundle.load(
-                  'assets/fonts/${family == 'Fraunces' ? 'Fraunces' : 'NunitoSans'}.ttf',
+                  'assets/fonts/${family == 'Lora' ? 'Lora' : 'NunitoSans'}.ttf',
                 ),
               ))
               .load();
@@ -525,8 +527,8 @@ void main() {
         await tester.binding.setSurfaceSize(Size(width, 844));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         await (FontLoader(
-          'Fraunces',
-        )..addFont(rootBundle.load('assets/fonts/Fraunces.ttf'))).load();
+          'Lora',
+        )..addFont(rootBundle.load('assets/fonts/Lora.ttf'))).load();
         final member = FamilyMember(
           id: 'person',
           name: name,
@@ -610,17 +612,31 @@ void main() {
   }
 
   testWidgets('visual preview with bundled fonts', (tester) async {
-    for (final license in ['fraunces-OFL.txt', 'nunitosans-OFL.txt']) {
+    final manifest = jsonDecode(
+      await rootBundle.loadString('FontManifest.json'),
+    ) as List<dynamic>;
+    final lora = manifest.singleWhere((entry) => entry['family'] == 'Lora');
+    expect(lora['fonts'], [
+      {'asset': 'assets/fonts/Lora.ttf', 'weight': 500},
+      {'asset': 'assets/fonts/Lora.ttf', 'weight': 600},
+    ]);
+    final nunito = manifest.singleWhere(
+      (entry) => entry['family'] == 'Nunito Sans',
+    );
+    expect(nunito['fonts'], [
+      {'asset': 'assets/fonts/NunitoSans.ttf'},
+    ]);
+    for (final license in ['lora-OFL.txt', 'nunitosans-OFL.txt']) {
       expect(
         await rootBundle.loadString('assets/fonts/$license'),
         contains('SIL OPEN FONT LICENSE'),
       );
     }
-    for (final family in ['Fraunces', 'Nunito Sans']) {
+    for (final family in ['Lora', 'Nunito Sans']) {
       final loader = FontLoader(family)
         ..addFont(
           rootBundle.load(
-            'assets/fonts/${family == 'Fraunces' ? 'Fraunces' : 'NunitoSans'}.ttf',
+            'assets/fonts/${family == 'Lora' ? 'Lora' : 'NunitoSans'}.ttf',
           ),
         );
       await loader.load();

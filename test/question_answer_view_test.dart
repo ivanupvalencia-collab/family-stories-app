@@ -202,7 +202,7 @@ void main() {
   testWidgets('four visual previews with bundled fonts', (tester) async {
     if (!const bool.fromEnvironment('ARITORIA_PREVIEW')) return;
     for (final (family, path) in [
-      ('Fraunces', 'assets/fonts/Fraunces.ttf'),
+      ('Lora', 'assets/fonts/Lora.ttf'),
       ('Nunito Sans', 'assets/fonts/NunitoSans.ttf'),
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
     ]) {

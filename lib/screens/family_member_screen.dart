@@ -88,6 +88,8 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
   bool _deleteDialogOpen = false;
   late final FamilyMemberDeletionService _deletionService;
   late final StoryPhotoService _storyPhotos;
+  late final StoryPhotoService _localStoryPhotos;
+  final _localStoryIds = <String>{};
   DateTime _day = DateTime.now();
 
   bool get _canManagePhoto => widget.isRemoteFamilyMember
@@ -127,6 +129,9 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
       }
     });
     _storyStorage = widget.familyStoryStorage ?? LocalFamilyStoryStorage();
+    _localStoryPhotos =
+        widget.storyPhotoService ??
+        LocalStoryPhotoService(storage: _storyStorage);
     _storyPhotos =
         widget.storyPhotoService ??
         (widget.isRemoteFamilyMember
@@ -193,13 +198,47 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
       _storiesLoadFailed = false;
     });
     try {
-      final stories =
-          await (_remoteStoryService?.loadForFamily(widget.familyMember.id) ??
-              _storyStorage.loadForFamily(widget.familyMember.id));
+      final remote = _remoteStoryService;
+      var remoteStories = <FamilyStory>[];
+      Object? remoteError;
+      StackTrace? remoteStack;
+      try {
+        if (remote != null) {
+          remoteStories = await remote.loadForFamily(widget.familyMember.id);
+        }
+      } catch (error, stack) {
+        remoteError = error;
+        remoteStack = stack;
+      }
+      List<FamilyStory> localStories;
+      try {
+        localStories = await _storyStorage.loadForFamily(
+          widget.familyMember.id,
+        );
+      } catch (_) {
+        if (remote == null) rethrow;
+        // Optional local records must not prevent loading remote stories.
+        localStories = [];
+      }
+      if (remoteError != null && localStories.isEmpty) {
+        Error.throwWithStackTrace(remoteError, remoteStack!);
+      }
+      final remoteIds = remoteStories.map((story) => story.id).toSet();
+      final stories = [
+        ...localStories.where((story) => !remoteIds.contains(story.id)),
+        ...remoteStories,
+      ];
       if (!mounted || request != _storiesLoadRequest) {
         return;
       }
       setState(() {
+        _localStoryIds
+          ..clear()
+          ..addAll(
+            localStories
+                .where((story) => !remoteIds.contains(story.id))
+                .map((story) => story.id),
+          );
         _day = DateTime.now();
         _stories
           ..clear()
@@ -301,8 +340,10 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
           authorName: _familyMember.name,
           waveformService: widget.waveformService,
           recipientName: widget.viewerName ?? 'ti',
-          remoteStoryService: _remoteStoryService,
-          photoService: _storyPhotos,
+          remoteStoryService: _localStoryIds.contains(story.id)
+              ? null
+              : _remoteStoryService,
+          photoService: _photosForStory(story),
           imagePicker: widget.imagePicker,
         ),
       ),
@@ -311,6 +352,9 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
       await _loadStories();
     }
   }
+
+  StoryPhotoService _photosForStory(FamilyStory story) =>
+      _localStoryIds.contains(story.id) ? _localStoryPhotos : _storyPhotos;
 
   Future<void> _refreshRemoteData() async {
     await Future.wait([
@@ -529,7 +573,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
                     .map(
                       (story) => StoryMemoryRow(
                         story: story,
-                        photos: _storyPhotos,
+                        photos: _photosForStory(story),
                         onTap: () async {
                           await _openStory(story);
                           if (listContext.mounted) updateList(() {});
@@ -567,6 +611,7 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
                         : _familyMember.withPhotoPath(null),
                     photos: _photoService,
                     storyPhotos: _storyPhotos,
+                    photosForStory: _photosForStory,
                     stories: _stories,
                     question: questionOfTheDay(
                       _familyMember.id,

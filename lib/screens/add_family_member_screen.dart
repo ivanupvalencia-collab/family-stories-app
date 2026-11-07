@@ -6,6 +6,7 @@ import '../models/family_relationships.dart';
 import '../services/profile_image_picker.dart';
 import '../services/family_member_photo_service.dart';
 import '../widgets/family_member_photo_view.dart';
+import '../widgets/aritoria_footer_wave.dart';
 
 class FamilyMemberDraft {
   const FamilyMemberDraft({required this.member, this.photo});
@@ -111,7 +112,7 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
               bottom: 0,
               height: 64,
               child: IgnorePointer(
-                child: CustomPaint(painter: _AddMemberWave()),
+                child: CustomPaint(painter: AritoriaFooterWave()),
               ),
             ),
             SafeArea(
@@ -326,40 +327,4 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
       ),
     );
   }
-}
-
-class _AddMemberWave extends CustomPainter {
-  const _AddMemberWave();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(0, size.height * 0.35)
-      ..cubicTo(
-        size.width * 0.25,
-        -size.height * 0.55,
-        size.width * 0.42,
-        size.height * 1.1,
-        size.width * 0.65,
-        size.height * 0.6,
-      )
-      ..cubicTo(
-        size.width * 0.82,
-        size.height * 0.1,
-        size.width * 0.87,
-        0,
-        size.width,
-        size.height * 0.25,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(
-      path,
-      Paint()..color = AritoriaColors.sand.withValues(alpha: 0.35),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_AddMemberWave oldDelegate) => false;
 }

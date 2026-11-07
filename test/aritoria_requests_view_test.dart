@@ -113,7 +113,7 @@ void main() {
       final question = tester.widget<QuestionText>(
         find.byType(QuestionText).first,
       );
-      expect(question.style!.fontFamily, 'Fraunces');
+      expect(question.style!.fontFamily, 'Lora');
       expect(question.data, contains('pequeño\u2060/\u2060a'));
       expect(question.semanticsLabel, _requests().first.questionText);
       expect(find.text('De Iván Fernández Ariza · 04/10/2026'), findsOneWidget);
@@ -284,7 +284,7 @@ void main() {
   testWidgets('questions visual preview with bundled fonts', (tester) async {
     if (!const bool.fromEnvironment('ARITORIA_PREVIEW')) return;
     for (final (family, path) in [
-      ('Fraunces', 'assets/fonts/Fraunces.ttf'),
+      ('Lora', 'assets/fonts/Lora.ttf'),
       ('Nunito Sans', 'assets/fonts/NunitoSans.ttf'),
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
     ]) {
