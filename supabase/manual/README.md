@@ -15,9 +15,10 @@ instaladas (01 y 02), ejecutar completos en este orden:
 4. `06_family_member_delete_audit.sql` es una consulta **de diagnóstico**, no
    habilita eliminación. Puede ejecutarse después para revisar FKs y políticas.
 
-La app mantiene la eliminación remota bloqueada: el esquema base y las FKs de
-invitaciones no están versionados aquí. Falta revisar esos resultados y diseñar
-el borrado coordinado con la API de Storage. No borrar `storage.objects` por SQL:
+La app mantiene la eliminación remota bloqueada: el esquema base, las FKs de
+invitaciones y las políticas están versionados en `supabase/migrations/`
+(este directorio conserva solo los scripts históricos puntuales). Falta revisar
+esos resultados y diseñar el borrado coordinado con la API de Storage. No borrar `storage.objects` por SQL:
 eso no elimina correctamente los archivos físicos. La eliminación local pide
 confirmación, retira las referencias y limpia los archivos de su espacio privado.
 
