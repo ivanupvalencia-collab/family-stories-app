@@ -59,7 +59,7 @@ void main() {
 
     expect(
       link.toString(),
-      'https://familystories.app/invite/$testInvitationToken',
+      'familystories://invite/$testInvitationToken',
     );
     expect(InvitationLink.tokenFrom(link), testInvitationToken);
   });
@@ -67,30 +67,121 @@ void main() {
   test('rechaza enlaces de invitación inválidos', () {
     expect(
       InvitationLink.tokenFrom(
-        Uri.parse('http://familystories.app/invite/$testInvitationToken'),
+        Uri.parse('https://familystories.app/invite/$testInvitationToken'),
       ),
       isNull,
     );
     expect(
       InvitationLink.tokenFrom(
-        Uri.parse('https://example.com/invite/$testInvitationToken'),
+        Uri.parse('familystories://other/$testInvitationToken'),
       ),
       isNull,
     );
     expect(
       InvitationLink.tokenFrom(
         Uri.parse(
-          'https://familystories.app/invite/$testInvitationToken/extra',
+          'familystories://invite/$testInvitationToken/extra',
         ),
       ),
       isNull,
     );
     expect(
       InvitationLink.tokenFrom(
-        Uri.parse('https://familystories.app/invite/short'),
+        Uri.parse('familystories://invite/short'),
       ),
       isNull,
     );
+    expect(
+      InvitationLink.tokenFrom(
+        Uri.parse('familystories://invite/$testInvitationToken?source=share'),
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFrom(
+        Uri.parse('familystories://invite/$testInvitationToken#fragment'),
+      ),
+      isNull,
+    );
+  });
+
+  test('acepta un token suelto o un enlace completo al pegarlo', () {
+    expect(
+      InvitationLink.tokenFromInput(testInvitationToken),
+      testInvitationToken,
+    );
+    expect(
+      InvitationLink.tokenFromInput('  $testInvitationToken  '),
+      testInvitationToken,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'familystories://invite/$testInvitationToken',
+      ),
+      testInvitationToken,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'familystories://invite/$testInvitationToken\n',
+      ),
+      testInvitationToken,
+    );
+  });
+
+  test('rechaza entradas que no son un token de invitación', () {
+    expect(InvitationLink.tokenFromInput(''), isNull);
+    expect(InvitationLink.tokenFromInput('   '), isNull);
+    expect(InvitationLink.tokenFromInput('codigo-no-valido'), isNull);
+    expect(
+      InvitationLink.tokenFromInput('familystories://invite/short'),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'familystories://other/$testInvitationToken',
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'familystories://invite/$testInvitationToken?source=share',
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'familystories://invite/$testInvitationToken#fragment',
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'https://familystories.app/invite/$testInvitationToken',
+      ),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFromInput(
+        'familystories://invite/$testInvitationToken/extra',
+      ),
+      isNull,
+    );
+    expect(InvitationLink.tokenFromInput('x'), isNull);
+    expect(
+      InvitationLink.tokenFromInput(List.filled(31, 'x').join()),
+      isNull,
+    );
+    expect(
+      InvitationLink.tokenFromInput(List.filled(257, 'x').join()),
+      isNull,
+    );
+  });
+
+  test('isValidToken comprueba el formato de un token', () {
+    expect(InvitationLink.isValidToken(testInvitationToken), isTrue);
+    expect(InvitationLink.isValidToken(' $testInvitationToken '), isTrue);
+    expect(InvitationLink.isValidToken('codigo-no-valido'), isFalse);
+    expect(InvitationLink.isValidToken(''), isFalse);
   });
 
   test('mapea FamilyMember entre Supabase y el formato local', () {
@@ -1670,7 +1761,12 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.byType(TextFormField), 'codigo-no-valido');
+    // Well-formed token so it passes client validation and reaches the RPC,
+    // which answers that it is not available.
+    await tester.enterText(
+      find.byType(TextFormField),
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    );
     await tester.tap(find.text('Comprobar código'));
     await tester.pumpAndSettle();
 
@@ -1679,6 +1775,56 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Pepe'), findsNothing);
+  });
+
+  testWidgets('rechaza en el cliente un código con formato inválido', (
+    tester,
+  ) async {
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AcceptInvitationScreen(invitationService: invitationService),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextFormField), 'codigo-no-valido');
+    await tester.tap(find.text('Comprobar código'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('El código no tiene un formato válido'),
+      findsOneWidget,
+    );
+    // Never reaches the network.
+    expect(invitationService.previewedTokens, isEmpty);
+  });
+
+  testWidgets('acepta el enlace completo pegado en el campo de código', (
+    tester,
+  ) async {
+    final invitationService = FakeInvitationService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AcceptInvitationScreen(invitationService: invitationService),
+      ),
+    );
+
+    // The familystories:// scheme is not linkified by messengers, so users
+    // paste the whole URI into the code field.
+    await tester.enterText(
+      find.byType(TextFormField),
+      'familystories://invite/$testInvitationToken',
+    );
+    await tester.tap(find.text('Comprobar código'));
+    await tester.pumpAndSettle();
+
+    // The RPC receives the bare token, not the full URI.
+    expect(invitationService.previewedTokens, [testInvitationToken]);
+    expect(
+      find.text('Ana García te invita a conectarte como Pepe.'),
+      findsOneWidget,
+    );
+    expect(find.text('Aceptar'), findsOneWidget);
   });
 
   testWidgets('acepta correctamente una invitación', (tester) async {
@@ -3107,6 +3253,10 @@ class FakeInvitationShareService implements InvitationShareService {
 
 class FakeIncomingLinkService implements IncomingLinkService {
   final StreamController<Uri> _controller = StreamController<Uri>.broadcast();
+  Uri? initialUri;
+
+  @override
+  Future<Uri?> getInitialUri() async => initialUri;
 
   @override
   Stream<Uri> get uriLinks => _controller.stream;

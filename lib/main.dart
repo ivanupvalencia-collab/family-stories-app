@@ -32,6 +32,10 @@ Future<void> main() async {
   await Supabase.initialize(
     url: _supabaseUrl,
     publishableKey: _supabasePublishableKey,
+    // The app owns deep-link handling through PlatformIncomingLinkService and
+    // never uses a redirect/OAuth flow, so supabase_flutter must not install
+    // its own link observer and race with getInitialUri().
+    authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
   );
 
   runApp(const FamilyStoriesApp());
@@ -102,6 +106,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
     _linkSubscription = _incomingLinkService.uriLinks.listen(
       _handleIncomingUri,
     );
+    unawaited(_handleInitialUri());
     _authSubscription = _authService.authStateChanges.listen(_handleAuthChange);
   }
 
@@ -126,6 +131,17 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
     } else {
       _activeInvitationToken = token;
       _afterCurrentFrame(() => _openInvitation(token));
+    }
+  }
+
+  Future<void> _handleInitialUri() async {
+    try {
+      final uri = await _incomingLinkService.getInitialUri();
+      if (uri != null && mounted) {
+        _handleIncomingUri(uri);
+      }
+    } catch (_) {
+      // Opening the app must remain possible if the platform cannot read a link.
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/family_invitation.dart';
+import '../services/invitation_link.dart';
 import '../services/invitation_service.dart';
 
 class AcceptInvitationScreen extends StatefulWidget {
@@ -58,7 +59,10 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
       return;
     }
 
-    final token = _tokenController.text.trim();
+    final token = InvitationLink.tokenFromInput(_tokenController.text);
+    if (token == null) {
+      return;
+    }
     setState(() {
       _isChecking = true;
       _errorMessage = null;
@@ -168,8 +172,14 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
                             border: OutlineInputBorder(),
                           ),
                           validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
+                            final raw = value?.trim() ?? '';
+                            if (raw.isEmpty) {
                               return 'Introduce el código de invitación';
+                            }
+                            // Accepts a bare token or a pasted
+                            // familystories://invite/<token> link.
+                            if (InvitationLink.tokenFromInput(raw) == null) {
+                              return 'El código no tiene un formato válido';
                             }
                             return null;
                           },
