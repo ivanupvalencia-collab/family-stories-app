@@ -22,6 +22,7 @@ import 'services/profile_image_picker.dart';
 import 'services/profile_service.dart';
 import 'services/question_request_service.dart';
 import 'services/received_request_details_service.dart';
+import 'services/secure_session_storage.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
 const _supabasePublishableKey =
@@ -29,13 +30,26 @@ const _supabasePublishableKey =
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // S-3: the session (JWT + refresh token) and the PKCE verifier must not
+  // live in plain SharedPreferences, where they are readable from the app's
+  // private directory and travel in device backups.
+  const secureStore = FlutterSecureKeyValueStore();
   await Supabase.initialize(
     url: _supabaseUrl,
     publishableKey: _supabasePublishableKey,
     // The app owns deep-link handling through PlatformIncomingLinkService and
     // never uses a redirect/OAuth flow, so supabase_flutter must not install
     // its own link observer and race with getInitialUri().
-    authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
+    authOptions: FlutterAuthClientOptions(
+      detectSessionInUri: false,
+      // Migrates any session still stored in plain SharedPreferences on the
+      // first launch after the upgrade, so nobody gets signed out.
+      localStorage: SecureLocalStorage(
+        sessionKey: SecureLocalStorage.sessionKeyFor(_supabaseUrl),
+        store: secureStore,
+      ),
+      pkceAsyncStorage: SecureGotrueAsyncStorage(store: secureStore),
+    ),
   );
 
   runApp(const FamilyStoriesApp());

@@ -59,9 +59,14 @@ El exportador del dashboard devolvió tres defectos que `0001` corrige:
 
 ### Hallazgos abiertos tras la exportación
 
+El índice completo de la auditoría (S-, A-, C-) vive en
+[`docs/AUDITORIA.md`](../docs/AUDITORIA.md); aquí solo se listan los que
+afectan a este directorio.
+
 | ID | Hallazgo | Estado |
 |---|---|---|
 | S-1 | Esquema + RLS no versionados | ✅ resuelto con `migrations/` |
+| S-3 | Sesión Supabase en SharedPreferences en claro | ✅ resuelto en la app (`secure_session_storage.dart`) |
 | S-19 | `get_story_photo_metadata` devuelve `can_edit` siempre `true` | ⏳ documentado en `0003` |
 | S-23 | Buckets sin límite de tipo/tamaño | ✅ `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | ✅ `0007` |
@@ -79,9 +84,8 @@ En un entorno nuevo basta con `migrations/`; `manual/` queda como registro
 histórico de la instalación original y como referencia de su documentación
 (`FAMILY_MEMBER_PHOTOS.md`, `ARITORIA_HOME.md`, `ACCOUNT_AVATARS.md`…).
 
-> `supabase/manual/README.md` indica que el esquema base "no está versionado
-> en este repositorio". **Eso ya no es cierto**: actualizar esa frase cuando
-> se confirme la aplicación de `migrations/`.
+> `supabase/manual/README.md` ya no afirma que el esquema base "no está
+> versionado en este repositorio": se corrigió en `b878d8c`.
 
 ## Cómo verificar que el baseline sigue fiel
 

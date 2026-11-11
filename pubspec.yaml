@@ -39,6 +39,9 @@ dependencies:
   audio_waveforms: 2.0.2
   path_provider: 2.1.6
   shared_preferences: 2.5.5
+  # S-3: the Supabase session (JWT + refresh token) and the PKCE verifier must
+  # not sit in plain SharedPreferences. Requires minSdk 23; Flutter sets 24.
+  flutter_secure_storage: 11.2.0
   supabase_flutter: 2.18.0
   google_sign_in: 7.2.0
   image_picker: ^1.2.3
