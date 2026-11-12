@@ -71,6 +71,7 @@ afectan a este directorio.
 | S-1 | Esquema + RLS no versionados | ✅ resuelto con `migrations/` |
 | S-3 | Sesión Supabase en SharedPreferences en claro | ✅ resuelto en la app (`secure_session_storage.dart`) |
 | S-5 | `profiles.avatar_url` es URL libre → SSRF on-device | ✅ allowlist en la app · `20261112000001` **pendiente de aplicar** |
+| S-8 | Flag de borrado remoto activo sin gate auditado | ✅ gate en `test/deletion_sql_gate_test.dart` + `tool/lint_rls.sh`: flag `true` ⇒ RPCs `prepare`/`finish_family_member_delete` en `migrations/` |
 | S-19 | `get_story_photo_metadata` devuelve `can_edit` siempre `true` | ⏳ documentado en `0003` |
 | S-23 | Buckets sin límite de tipo/tamaño | ✅ `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | ✅ `0007` |

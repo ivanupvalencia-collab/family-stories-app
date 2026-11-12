@@ -2,7 +2,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'persistent_story_waveform_service.dart';
 
-// Manual installation of SQL 07 has been confirmed by the owner.
+// S-8: the gate is the versioned baseline, never a verbal confirmation.
+// This flag may only stay `true` while supabase/migrations/ keeps both
+// deletion RPCs (revoked from public/anon, granted to authenticated):
+// test/deletion_sql_gate_test.dart and tool/lint_rls.sh fail otherwise.
 const familyMemberRemoteDeletionEnabled = true;
 
 class FamilyMemberDeletionPlan {

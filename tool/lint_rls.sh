@@ -103,6 +103,23 @@ if [ "$MODE" = "files" ]; then
     fail "0007 no define file_size_limit (S-23)"
   fi
 
+  section "Flag de borrado remoto coherente con las RPCs versionadas (S-8)"
+  FLAG_ON=$(grep -Eo "familyMemberRemoteDeletionEnabled[[:space:]]*=[[:space:]]*(true|false)" \
+      "$REPO_ROOT/lib/services/family_member_deletion_service.dart" | grep -c "true" || true)
+  if [ "$FLAG_ON" -gt 0 ]; then
+    for fn in prepare_family_member_delete finish_family_member_delete; do
+      if grep -qE "create or replace function public\.${fn}\(" "$REPO_ROOT"/supabase/migrations/*.sql \
+          && grep -qE "revoke all on function public\.${fn}\(uuid\) from public, anon" "$REPO_ROOT"/supabase/migrations/*.sql \
+          && grep -qE "grant execute on function public\.${fn}\(uuid\) to authenticated" "$REPO_ROOT"/supabase/migrations/*.sql; then
+        pass "${fn} versionada con sus revokes/grants"
+      else
+        fail "Flag=true pero falta ${fn} (con revoke/grant) en migrations/ (S-8)"
+      fi
+    done
+  else
+    pass "Flag de borrado remoto apagado: sin gate que comprobar"
+  fi
+
 else
   # -------------------------------------------------------------------------
   # Modo psql: comprueba el ESTADO REAL de la base de datos.
@@ -217,6 +234,28 @@ else
       fail "Falta indice ${idx}"
     fi
   done
+
+  section "Flag de borrado remoto vs RPCs reales (S-8)"
+  FLAG_ON=$(grep -Eo "familyMemberRemoteDeletionEnabled[[:space:]]*=[[:space:]]*(true|false)" \
+      "$REPO_ROOT/lib/services/family_member_deletion_service.dart" | grep -c "true" || true)
+  if [ "$FLAG_ON" -gt 0 ]; then
+    for fn in prepare_family_member_delete finish_family_member_delete; do
+      rows=$(run "select p.proname||' '||coalesce(p.pronacl::text,'-')
+                  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                  where n.nspname='public' and p.proname='${fn}';")
+      if [ -z "$rows" ]; then
+        fail "Flag=true pero no existe la funcion ${fn} (S-8)"
+      elif printf '%s' "$rows" | grep -q "anon="; then
+        fail "${fn} tiene EXECUTE para anon (S-8)"
+      elif ! printf '%s' "$rows" | grep -q "authenticated=X"; then
+        fail "${fn} sin EXECUTE para authenticated (S-8)"
+      else
+        pass "${fn} instalada, solo authenticated"
+      fi
+    done
+  else
+    pass "Flag de borrado remoto apagado: sin gate que comprobar"
+  fi
 fi
 
 printf '\n'
