@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:family_stories_app/services/avatar_url_policy.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:family_stories_app/services/profile_service.dart';
@@ -65,7 +66,11 @@ void main() {
   }
 
   ProfileAvatarImageCache newImages(SupabaseClient client) {
-    final cache = ProfileAvatarImageCache(client: client, diskCache: disk);
+    final cache = ProfileAvatarImageCache(
+      client: client,
+      diskCache: disk,
+      urlPolicy: AvatarUrlPolicy.permissive(),
+    );
     images.add(cache);
     return cache;
   }

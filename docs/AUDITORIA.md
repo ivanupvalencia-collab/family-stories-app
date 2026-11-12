@@ -15,7 +15,7 @@ desde entonces.
 | S-2 | Dominio de deep-link inexistente → App Links no verificables | Alto | ✅ `cd5a1e0` · scheme propio `familystories://` |
 | S-3 | JWT + refresh token + verificador PKCE en SharedPreferences en claro | Alto | ✅ este commit · `secure_session_storage.dart` |
 | S-4 | Release firmado con el keystore de debug + `applicationId` placeholder | Medio | ⏳ **veto: no tocar el keystore** |
-| S-5 | `profiles.avatar_url` es URL libre → SSRF on-device / probing de LAN | Medio | ⏳ abierto |
+| S-5 | `profiles.avatar_url` es URL libre → SSRF on-device / probing de LAN | Medio | ✅ este commit · allowlist en cliente + migración `20261112000001` (**no aplicada**) |
 | S-6 | El logout no limpia fotos/audio/lista remota en disco | Medio | ⏳ abierto |
 | S-7 | `signOut()` sin `finally` | Medio | ⏳ abierto |
 | S-8 | Flag de borrado remoto activo sin el gate auditado | Medio | ⏳ abierto |
@@ -288,7 +288,7 @@ los familiares por owner.
 
 | # | Hallazgo | Sev. | Ubicación |
 |---|---|---|---|
-| C-7 | Cero timeouts de red; HttpClient nuevo por descarga; un request colgado bloquea el avatar | Medio | `profile_avatar_image_cache.dart:176-225` |
+| C-7 | Cero timeouts de red; HttpClient nuevo por descarga; un request colgado bloquea el avatar (**parcial resuelto en S-5**: `connectionTimeout` 10 s + `requestTimeout` 30 s + `followRedirects = false` en la descarga de avatares; queda compartir el `HttpClient` con el resto de descargas) | Medio | `profile_avatar_image_cache.dart:176-225` |
 | C-8 | Doble-tap: `_isSaving` se pone tras el `await` del picker → dos filas creadas | Medio | `home_screen.dart:506-524,821,895` |
 | C-9 | Cola de escritura serializada y lecturas que esperan TODO el backlog | Medio | `remote_family_photo_disk_cache.dart:20,89-92,145` |
 | C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
@@ -315,7 +315,7 @@ correctas.
 
 1. ✅ C-1 dedup in-flight + `rename()` atómico en descargas de audio.
 2. ✅ C-2 mutex `_enqueue` en `family_story_storage` y `family_member_storage`.
-3. ✅ C-7 timeouts + HttpClient compartido + liberación garantizada de `_pendingBytes`.
+3. ✅ C-7 timeouts + HttpClient compartido + liberación garantizada de `_pendingBytes` → **parcial** (timeouts y sin redirects en el avatar, con S-5; comparten `HttpClient` pendiente).
 4. ✅ S-7 `finally` en el sign-out (Google + cachés se ejecutan siempre).
 
 ## Fase 1 — Frontera de seguridad
@@ -324,7 +324,7 @@ correctas.
 6. ✅ S-2 deep links (scheme propio). S-4 release keystore → **vetoado por el propietario**.
 7. ✅ **S-3 sesión en Keystore/Keychain + `allowBackup="false"`.**
 8. ⏳ C-3 ✅ + C-4 invertir casts `::text` en las 8 políticas de storage.
-9. ⏳ S-5 allowlist de host en `avatar_url` · S-6 barrido completo de cachés en `signedOut`.
+9. ✅ **S-5 allowlist de host en `avatar_url`** (política en cliente + `CHECK` en `20261112000001`, esta sin aplicar) · ⏳ S-6 barrido completo de cachés en `signedOut`.
 
 ## Fase 2 — Escala de datos
 

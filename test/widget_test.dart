@@ -1075,28 +1075,28 @@ void main() {
     );
   });
 
-  testWidgets('avatar_url tiene prioridad sobre el avatar local', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: ProfileAvatarView(
-            avatarKey: 'avatar_02',
-            avatarUrl: 'https://example.com/custom-avatar.jpg',
+  testWidgets(
+    'avatar_url sin provider descarga por la caché y cae al placeholder',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ProfileAvatarView(
+              avatarKey: 'avatar_02',
+              avatarUrl: 'https://example.com/custom-avatar.jpg',
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final image = tester.widget<Image>(find.byType(Image));
-    expect(image.image, isA<NetworkImage>());
-    expect(image.fit, BoxFit.cover);
-    expect(
-      (image.image as NetworkImage).url,
-      'https://example.com/custom-avatar.jpg',
-    );
-  });
+      // S-5: no NetworkImage fallback in the widget. With a remote avatar and
+      // no injected provider the view must not fall back to the local stock
+      // catalogue either (the URL wins over avatar_02).
+      expect(find.byType(Image), findsNothing);
+      expect(find.byIcon(Icons.person_outline), findsOneWidget);
+      expect(find.byIcon(Icons.person), findsNothing);
+    },
+  );
 
   testWidgets('elegir avatar local limpia avatar_url', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1400));

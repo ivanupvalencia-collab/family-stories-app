@@ -4,6 +4,7 @@ import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/question_request.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/family_member_photo_service.dart';
+import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/received_request_details_service.dart';
 import 'package:family_stories_app/services/visible_account_avatar_service.dart';
@@ -16,7 +17,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'widget_test.dart' as fixtures;
 
-class _Avatars extends VisibleAccountAvatarService {
+/// Serves the profile's remote URL through a NetworkImage exactly as the real
+/// cache would, without depending on the backend allowlist.
+class _NetworkAvatarImages extends ProfileAvatarImageCache {
+  @override
+  ImageProvider? imageFor(UserProfile profile) {
+    final url = profile.avatarUrl?.trim();
+    return url == null || url.isEmpty ? null : NetworkImage(url);
+  }
+}
+
+class _Avatars extends VisibleAccountAvatarService
+    implements ProfileAvatarImageSource {
+  @override
+  final ProfileAvatarImageCache avatarImages = _NetworkAvatarImages();
   UserProfile? profile = const UserProfile(
     id: 'linked',
     name: 'Claudia',

@@ -9,6 +9,7 @@ import 'package:flutter/painting.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
+import 'avatar_url_policy.dart';
 import 'remote_family_photo_disk_cache.dart';
 
 abstract interface class ProfileAvatarImageSource {
@@ -23,6 +24,7 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     RemoteFamilyPhotoDiskCache? diskCache,
     String? backend,
     String? owner,
+    AvatarUrlPolicy? urlPolicy,
   }) : _client = client,
        _disk =
            diskCache ??
@@ -32,7 +34,10 @@ class ProfileAvatarImageCache extends ChangeNotifier {
                    directoryName: 'remote_account_avatars_v1',
                  )),
        _backend = backend ?? client?.storage.url ?? '',
-       _owner = owner ?? client?.auth.currentUser?.id {
+       _owner = owner ?? client?.auth.currentUser?.id,
+       _urlPolicy =
+           urlPolicy ??
+           AvatarUrlPolicy.forBackend(backend ?? client?.storage.url ?? '') {
     _subscription = client?.auth.onAuthStateChange.listen((event) {
       syncSession();
       if (event.event == AuthChangeEvent.signedOut) clear();
@@ -46,6 +51,7 @@ class ProfileAvatarImageCache extends ChangeNotifier {
   final SupabaseClient? _client;
   final RemoteFamilyPhotoDiskCache? _disk;
   final String _backend;
+  final AvatarUrlPolicy _urlPolicy;
   String? _owner;
   StreamSubscription<AuthState>? _subscription;
   Object _scope = Object();
@@ -180,25 +186,49 @@ class ProfileAvatarImageCache extends ChangeNotifier {
         if (owner != null) bytes = await _disk?.readEntry(_backend, owner, key);
         if (!valid()) throw StateError('Avatar was invalidated');
         if (bytes == null) {
-          final http = HttpClient();
-          try {
-            final response = await (await http.getUrl(Uri.parse(url))).close();
-            if (response.statusCode != 200) {
-              throw NetworkImageLoadException(
-                statusCode: response.statusCode,
-                uri: Uri.parse(url),
-              );
-            }
-            final builder = BytesBuilder(copy: false);
-            await for (final chunk in response) {
-              builder.add(chunk);
-              if (builder.length > 10 * 1024 * 1024) {
-                throw const FormatException('Avatar too large');
+          // S-5: the URL comes from a client-writable column and is fetched
+          // by other people's devices. Never open a socket to anything the
+          // backend itself would not have produced.
+          if (!_urlPolicy.allows(url)) {
+            throw StateError('Avatar URL is not served by the backend');
+          }
+          final http = HttpClient()
+            // C-7: a stalled connection must not pin this future forever.
+            ..connectionTimeout = const Duration(seconds: 10);
+          Future<Uint8List> download() async {
+            try {
+              final uri = Uri.parse(url);
+              final request = await http
+                  .getUrl(uri)
+                  // A redirect could leave the allowed origin behind it.
+                  ..followRedirects = false;
+              final response = await request.close();
+              if (response.statusCode != 200) {
+                throw NetworkImageLoadException(
+                  statusCode: response.statusCode,
+                  uri: uri,
+                );
               }
+              final builder = BytesBuilder(copy: false);
+              await for (final chunk in response) {
+                builder.add(chunk);
+                if (builder.length > 10 * 1024 * 1024) {
+                  throw const FormatException('Avatar too large');
+                }
+              }
+              return builder.takeBytes();
+            } finally {
+              http.close(force: true);
             }
-            bytes = builder.takeBytes();
-          } finally {
+          }
+
+          try {
+            // dart:io has no per-request timeout: bound the whole exchange
+            // (headers + body) and drop the socket when it fires.
+            bytes = await download().timeout(const Duration(seconds: 30));
+          } on TimeoutException {
             http.close(force: true);
+            rethrow;
           }
           await RemoteFamilyPhotoDiskCache.validate(bytes);
           if (!valid()) throw StateError('Avatar was invalidated');

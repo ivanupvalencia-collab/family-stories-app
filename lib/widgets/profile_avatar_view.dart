@@ -31,15 +31,23 @@ class ProfileAvatarView extends StatelessWidget {
     final normalizedUrl = avatarUrl?.trim();
     final avatar = ProfileAvatarCatalog.findByKey(avatarKey);
     final placeholder = fallback ?? _GenericAvatarIcon(radius: radius);
-    final image = normalizedUrl != null && normalizedUrl.isNotEmpty
+    // Only ProfileAvatarImageCache downloads avatars (S-5): there is no
+    // NetworkImage fallback here anymore. A remote avatar with no provider
+    // shows the placeholder instead of falling back to an unrelated stock
+    // face from the local catalogue.
+    final hasRemoteAvatar = normalizedUrl != null && normalizedUrl.isNotEmpty;
+    final provider = hasRemoteAvatar ? imageProvider : null;
+    final image = provider != null
         ? Image(
-            image: imageProvider ?? NetworkImage(normalizedUrl),
+            image: provider,
             fit: BoxFit.cover,
             alignment: alignment,
             loadingBuilder: (context, child, progress) =>
                 progress == null ? child : placeholder,
             errorBuilder: (context, error, stackTrace) => placeholder,
           )
+        : hasRemoteAvatar
+        ? placeholder
         : avatar != null
         ? Image.asset(avatar.assetPath, fit: BoxFit.contain)
         : placeholder;

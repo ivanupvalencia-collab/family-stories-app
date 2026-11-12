@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:family_stories_app/models/user_profile.dart';
+import 'package:family_stories_app/services/avatar_url_policy.dart';
 import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:family_stories_app/services/profile_service.dart';
 import 'package:flutter/painting.dart';
@@ -50,7 +51,9 @@ void main() {
     fail = false;
     revision = 1;
     gate = null;
-    cache = ProfileAvatarImageCache();
+    cache = ProfileAvatarImageCache(
+      urlPolicy: AvatarUrlPolicy.permissive(),
+    );
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       if (request.uri.path == '/avatar') {
@@ -128,7 +131,9 @@ void main() {
       await resolve(first);
       final otherAccount = cache.imageFor(profile(id: 'other'))!;
       expect(otherAccount, isNot(first));
-      final otherBackend = ProfileAvatarImageCache();
+      final otherBackend = ProfileAvatarImageCache(
+        urlPolicy: AvatarUrlPolicy.permissive(),
+      );
       expect(otherBackend.imageFor(profile()), isNot(first));
       otherBackend.clear();
       cache.clear();
@@ -139,6 +144,17 @@ void main() {
       expect(downloads, 2);
     },
   );
+
+  test('S-5: la política estricta rechaza la URL sin abrir conexión', () async {
+    final strict = ProfileAvatarImageCache();
+    final before = downloads;
+    await expectLater(
+      resolve(strict.imageFor(profile())!),
+      throwsA(isA<StateError>()),
+    );
+    expect(downloads, before);
+    strict.clear();
+  });
 
   test(
     'clear during preload prevents a late result being reused by a new session',
@@ -199,7 +215,12 @@ void main() {
       );
     }
 
-    final service = SupabaseProfileService(client: client);
+    final service = SupabaseProfileService(
+      client: client,
+      avatarCache: ProfileAvatarImageCache(
+        urlPolicy: AvatarUrlPolicy.permissive(),
+      ),
+    );
     try {
       await signIn('owner');
       final loaded = await service.loadForUser('owner');
@@ -230,7 +251,12 @@ void main() {
       'test-key',
       authOptions: const AuthClientOptions(autoRefreshToken: false),
     );
-    final service = SupabaseProfileService(client: client);
+    final service = SupabaseProfileService(
+      client: client,
+      avatarCache: ProfileAvatarImageCache(
+        urlPolicy: AvatarUrlPolicy.permissive(),
+      ),
+    );
     try {
       final loaded = await service.loadForUser('owner');
       final image = service.avatarImages.imageFor(loaded)!;
