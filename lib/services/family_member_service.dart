@@ -48,7 +48,7 @@ class SupabaseFamilyMemberService
     SupabaseClient? client,
     RemoteFamilyMemberCache? cache,
   }) : _client = client ?? Supabase.instance.client {
-    _cache = cache ?? (_caches[_client] ??= RemoteFamilyMemberCache());
+    _cache = cache ?? RemoteFamilyMemberCache.forClient(_client);
     _account = _client.auth.currentUser?.id;
     _client.auth.onAuthStateChange.listen((state) {
       final next = state.session?.user.id;
@@ -60,7 +60,6 @@ class SupabaseFamilyMemberService
   }
 
   final SupabaseClient _client;
-  static final _caches = Expando<RemoteFamilyMemberCache>();
   late final RemoteFamilyMemberCache _cache;
   String? _account;
   int _generation = 0;

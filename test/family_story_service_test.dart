@@ -118,6 +118,25 @@ void main() {
     },
   );
 
+  test(
+    'sign-out clears the downloaded audio and its cache entry on its own',
+    () async {
+      final path = await service.localAudioPathFor(story);
+      expect(await File(path).exists(), isTrue);
+      await client.auth.signOut(scope: SignOutScope.local);
+      final end = DateTime.now().add(const Duration(seconds: 5));
+      while (await File(path).exists()) {
+        if (DateTime.now().isAfter(end)) {
+          fail('Downloaded audio survives sign-out');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      // The files are gone; only the (now empty) cache directory may remain.
+      final remaining = await temporary.list(recursive: true).toList();
+      expect(remaining.whereType<File>(), isEmpty);
+    },
+  );
+
   tearDown(() async {
     await service.clearAudioCache();
     await client.dispose();

@@ -146,7 +146,6 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
   final RemoteFamilyPhotoDiskCache? _diskOverride;
   SupabaseClient get _client => _override ?? Supabase.instance.client;
   static final _caches = Expando<_Cache>();
-  static final _disks = Expando<RemoteFamilyPhotoDiskCache>();
   _Cache get _cache {
     final cache = _caches[_client] ??= _Cache(_client);
     cache.sync();
@@ -155,10 +154,11 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
 
   RemoteFamilyPhotoDiskCache get _disk =>
       _diskOverride ??
-      (_disks[_client] ??= RemoteFamilyPhotoDiskCache(
+      RemoteFamilyPhotoDiskCache.forClient(
+        _client,
         directoryName: 'remote_story_photos_v1',
         allowForeignUploader: true,
-      ));
+      );
   String get _backend => _client.storage.url;
   bool _belongs(FamilyStory story, String path) {
     final parts = path.split('/');

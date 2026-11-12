@@ -195,13 +195,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isWorking = true);
     try {
       await _authService.signOut();
-      _profileService.clearCache();
-      _applyAuthUser(null);
     } catch (_) {
       if (mounted) {
         _showMessage('No se pudo cerrar sesión. Inténtalo de nuevo.');
       }
     } finally {
+      // S-7: cleanup runs even when the sign-out throws. Only the UI follows
+      // a session that is really gone; otherwise the state must match the
+      // session that is still alive.
+      _profileService.clearCache();
+      if (_authService.currentUser == null) _applyAuthUser(null);
       if (mounted) {
         setState(() => _isWorking = false);
       }

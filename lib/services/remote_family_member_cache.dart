@@ -11,6 +11,13 @@ class RemoteFamilyMemberCache {
   RemoteFamilyMemberCache({SharedPreferencesAsync? preferences})
     : _preferences = preferences ?? SharedPreferencesAsync();
 
+  // Shared per client so a logout purge (S-6) queues behind any pending
+  // write instead of racing it.
+  static final _shared = Expando<RemoteFamilyMemberCache>();
+
+  static RemoteFamilyMemberCache forClient(Object client) =>
+      _shared[client] ??= RemoteFamilyMemberCache();
+
   final SharedPreferencesAsync _preferences;
   Future<void> _writes = Future.value();
   int revision = 0;
@@ -90,6 +97,13 @@ class RemoteFamilyMemberCache {
         values.where((v) => jsonDecode(v)['id'] != memberId).toList(),
       );
     });
+  }
+
+  // S-6: the member list is PII (names, relationships, linked accounts) and
+  // must not survive the session that produced it.
+  Future<void> purge(String backend, String owner) {
+    revision++;
+    return _enqueue(() => _preferences.remove(_key(backend, owner)));
   }
 }
 

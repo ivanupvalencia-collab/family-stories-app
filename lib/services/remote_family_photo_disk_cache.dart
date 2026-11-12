@@ -14,6 +14,25 @@ class RemoteFamilyPhotoDiskCache {
     this.allowForeignUploader = false,
   }) : _directoryProvider = directoryProvider ?? getApplicationSupportDirectory;
 
+  // One instance per client and configuration: every reader shares the same
+  // write queue, so a logout purge (S-6) can never race a download that is
+  // still committing its file.
+  static final _shared = Expando<Map<String, RemoteFamilyPhotoDiskCache>>();
+
+  static RemoteFamilyPhotoDiskCache forClient(
+    Object client, {
+    String directoryName = 'remote_family_photos_v1',
+    bool allowForeignUploader = false,
+  }) {
+    final byConfiguration =
+        _shared[client] ??= <String, RemoteFamilyPhotoDiskCache>{};
+    final key = '$directoryName:$allowForeignUploader';
+    return byConfiguration[key] ??= RemoteFamilyPhotoDiskCache(
+      directoryName: directoryName,
+      allowForeignUploader: allowForeignUploader,
+    );
+  }
+
   final Future<Directory> Function() _directoryProvider;
   final String directoryName;
   final bool allowForeignUploader;

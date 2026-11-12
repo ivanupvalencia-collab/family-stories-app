@@ -22,7 +22,17 @@ class SupabaseFamilyStoryService
     SupabaseClient? client,
     StoryWaveformService? waveformService,
   }) : _client = client ?? Supabase.instance.client,
-       _waveformOverride = waveformService;
+       _waveformOverride = waveformService {
+    // S-6: the service must drop its audio map on its own; relying on
+    // HomeScreen being mounted to call clearAudioCache() leaves stale paths
+    // behind. Home constructs this service at start, so the listener always
+    // exists before any download can happen.
+    _client.auth.onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.signedOut) {
+        unawaited(clearAudioCache());
+      }
+    });
+  }
 
   static const audioBucketName = 'story-audio';
 
@@ -30,6 +40,7 @@ class SupabaseFamilyStoryService
   final StoryWaveformService? _waveformOverride;
   final Map<String, ({String path, int size})> _audioCache = {};
   int _cacheGeneration = 0;
+
   @override
   StoryWaveformService get waveforms =>
       _waveformOverride ?? StoryWaveforms.forClient(_client);

@@ -163,9 +163,8 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
   final SupabaseClient? _clientOverride;
   SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
   final RemoteFamilyPhotoDiskCache? _diskOverride;
-  static final _disks = Expando<RemoteFamilyPhotoDiskCache>();
   RemoteFamilyPhotoDiskCache get _disk =>
-      _diskOverride ?? (_disks[_client] ??= RemoteFamilyPhotoDiskCache());
+      _diskOverride ?? RemoteFamilyPhotoDiskCache.forClient(_client);
   String get _backend => _client.storage.url;
   static final _caches = Expando<_RemotePhotoCache>();
   _RemotePhotoCache get _cache {

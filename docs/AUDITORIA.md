@@ -13,11 +13,11 @@ desde entonces.
 |---|---|---|---|
 | S-1 | Frontera de autorización inauditable (esquema + RLS sin versionar) | Alto | ✅ `b878d8c` · `supabase/migrations/` |
 | S-2 | Dominio de deep-link inexistente → App Links no verificables | Alto | ✅ `cd5a1e0` · scheme propio `familystories://` |
-| S-3 | JWT + refresh token + verificador PKCE en SharedPreferences en claro | Alto | ✅ este commit · `secure_session_storage.dart` |
+| S-3 | JWT + refresh token + verificador PKCE en SharedPreferences en claro | Alto | ✅ `d2480e4` · `secure_session_storage.dart` |
 | S-4 | Release firmado con el keystore de debug + `applicationId` placeholder | Medio | ⏳ **veto: no tocar el keystore** |
-| S-5 | `profiles.avatar_url` es URL libre → SSRF on-device / probing de LAN | Medio | ✅ este commit · allowlist en cliente + migración `20261112000001` (**no aplicada**) |
-| S-6 | El logout no limpia fotos/audio/lista remota en disco | Medio | ⏳ abierto |
-| S-7 | `signOut()` sin `finally` | Medio | ⏳ abierto |
+| S-5 | `profiles.avatar_url` es URL libre → SSRF on-device / probing de LAN | Medio | ✅ `b117d89` · allowlist en cliente + migración `20261112000001` (**no aplicada**) |
+| S-6 | El logout no limpia fotos/audio/lista remota en disco | Medio | ✅ este commit · `SessionDataSweeper` (purga solo la cuenta que cierra sesión) |
+| S-7 | `signOut()` sin `finally` | Medio | ✅ este commit · con reserva local; **riesgo residual:** si la revocación en servidor falló, el refresh token de este dispositivo sigue vivo hasta expirar/rotar |
 | S-8 | Flag de borrado remoto activo sin el gate auditado | Medio | ⏳ abierto |
 | S-9 | Tokens de invitación como oráculos de existencia | Medio | ↘️ Bajo (token de 256 bits, `sha256`, 7 días) |
 | S-10 | `onAuthStateChange` sin `onError` en 5 puntos | Bajo | ⏳ abierto |
@@ -316,7 +316,7 @@ correctas.
 1. ✅ C-1 dedup in-flight + `rename()` atómico en descargas de audio.
 2. ✅ C-2 mutex `_enqueue` en `family_story_storage` y `family_member_storage`.
 3. ✅ C-7 timeouts + HttpClient compartido + liberación garantizada de `_pendingBytes` → **parcial** (timeouts y sin redirects en el avatar, con S-5; comparten `HttpClient` pendiente).
-4. ✅ S-7 `finally` en el sign-out (Google + cachés se ejecutan siempre).
+4. ✅ S-7 `finally` en el sign-out (Google + cachés se ejecutan siempre) → hecho en este commit con reserva local de `signOut(scope: local)`; ver riesgo residual en la tabla de estado.
 
 ## Fase 1 — Frontera de seguridad
 
@@ -324,7 +324,7 @@ correctas.
 6. ✅ S-2 deep links (scheme propio). S-4 release keystore → **vetoado por el propietario**.
 7. ✅ **S-3 sesión en Keystore/Keychain + `allowBackup="false"`.**
 8. ⏳ C-3 ✅ + C-4 invertir casts `::text` en las 8 políticas de storage.
-9. ✅ **S-5 allowlist de host en `avatar_url`** (política en cliente + `CHECK` en `20261112000001`, esta sin aplicar) · ⏳ S-6 barrido completo de cachés en `signedOut`.
+9. ✅ **S-5 allowlist de host en `avatar_url`** (política en cliente + `CHECK` en `20261112000001`, esta sin aplicar) · ✅ **S-6 barrido de cachés en `signedOut`** (`SessionDataSweeper`: fotos, lista remota y audio; solo de la cuenta que cierra sesión; comparte las colas de escritura vía `forClient`).
 
 ## Fase 2 — Escala de datos
 

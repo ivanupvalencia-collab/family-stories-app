@@ -23,6 +23,7 @@ import 'services/profile_service.dart';
 import 'services/question_request_service.dart';
 import 'services/received_request_details_service.dart';
 import 'services/secure_session_storage.dart';
+import 'services/session_data_sweeper.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
 const _supabasePublishableKey =
@@ -102,6 +103,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
   late final IncomingLinkService _incomingLinkService;
   late final StreamSubscription<Uri> _linkSubscription;
   late final StreamSubscription<AuthUser?> _authSubscription;
+  SessionDataSweeper? _sessionSweeper;
   String? _pendingInvitationToken;
   String? _activeInvitationToken;
   bool _loginRouteOpen = false;
@@ -122,10 +124,19 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
     );
     unawaited(_handleInitialUri());
     _authSubscription = _authService.authStateChanges.listen(_handleAuthChange);
+    // S-6: one sweeper for the whole app, subscribed before any screen can
+    // download anything. Installations without Supabase.initialize (local-only
+    // and widget tests) have nothing to purge.
+    try {
+      _sessionSweeper = SessionDataSweeper(client: Supabase.instance.client);
+    } catch (_) {
+      _sessionSweeper = null;
+    }
   }
 
   @override
   void dispose() {
+    _sessionSweeper?.dispose();
     _linkSubscription.cancel();
     _authSubscription.cancel();
     super.dispose();

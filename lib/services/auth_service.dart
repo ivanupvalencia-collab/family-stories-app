@@ -77,13 +77,31 @@ class SupabaseGoogleAuthService implements AuthService {
 
   @override
   Future<void> signOut() async {
-    await _client.auth.signOut();
-
+    // S-7: nothing may be skipped, whichever layer fails.
     try {
-      await _googleInitialization;
-      await GoogleSignIn.instance.signOut();
-    } catch (_) {
-      // The Supabase session is already closed. Google sign-out is best effort.
+      await _client.auth.signOut();
+    } catch (error) {
+      // gotrue removes the local session and notifies `signedOut` before the
+      // server call, so a server failure has already closed the session here:
+      // there is nothing left to close, and the caches (S-6) already purged.
+      // Residual: if that server call failed, this device's refresh token
+      // stays valid server-side until it expires or rotates.
+      if (_client.auth.currentUser != null) {
+        // The failure happened before the session was removed: force a local
+        // sign-out so `signedOut` —and with it the purge— is guaranteed.
+        try {
+          await _client.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {
+          throw error; // Neither path worked: surface the original failure.
+        }
+      }
+    } finally {
+      try {
+        await _googleInitialization;
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {
+        // The Supabase session is already closed. Google sign-out is best effort.
+      }
     }
   }
 

@@ -41,6 +41,19 @@ class _ProfilesWithImages extends fixtures.FakeProfileService
   final _AvatarImages avatarImages = _AvatarImages();
 }
 
+// S-7: the server refuses the sign-out, so no `signedOut` event is emitted.
+class _OfflineAuthService extends fixtures.FakeAuthService {
+  _OfflineAuthService(super.user);
+
+  int attempts = 0;
+
+  @override
+  Future<void> signOut() async {
+    attempts++;
+    throw StateError('No network');
+  }
+}
+
 void main() {
   Future<void> openProfile(
     WidgetTester tester, {
@@ -166,4 +179,30 @@ void main() {
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'un cierre que falla limpia la caché y no miente sobre la sesión viva',
+    (tester) async {
+      final auth = _OfflineAuthService(fixtures.testAuthUser);
+      final profiles = fixtures.FakeProfileService();
+      await openProfile(tester, auth: auth, profiles: profiles);
+
+      final signOut = find.text('Cerrar sesión');
+      await tester.ensureVisible(signOut);
+      await tester.tap(signOut);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(auth.attempts, 1);
+      // S-7: the cache purge must run even though signOut() threw.
+      expect(profiles.clearCacheCalls, 1);
+      expect(
+        find.text('No se pudo cerrar sesión. Inténtalo de nuevo.'),
+        findsOneWidget,
+      );
+      // The session is still alive, so the screen must not log the user out.
+      expect(find.text('Continuar con Google'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
