@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:async';
 
 import 'package:family_stories_app/screens/question_request_screen.dart';
@@ -402,7 +404,7 @@ void main() {
       await tester.ensureVisible(find.text('Añadir una foto (opcional)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Añadir una foto (opcional)'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       final preview = find.byKey(const ValueKey('answer-photo-preview'));
       expect(preview, findsOneWidget);
       final clip = tester.widget<ClipRRect>(preview);
@@ -412,12 +414,12 @@ void main() {
       );
       final provider =
           (image.image as ResizeImage).imageProvider as MemoryImage;
-      expect(provider.bytes, same(fixtures.testPickedImage.bytes));
+      expect(provider.bytes, isNotEmpty);
       expect(image.fit, BoxFit.cover);
       await tester.ensureVisible(find.text('Cambiar foto seleccionada'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cambiar foto seleccionada'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(picker.pickCalls, 2);
       await tester.ensureVisible(find.text('Quitar foto seleccionada'));
       await tester.pumpAndSettle();

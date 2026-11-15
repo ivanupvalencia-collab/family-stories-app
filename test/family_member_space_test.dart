@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -634,7 +636,7 @@ void main() {
       await tester.tap(find.byTooltip('Foto de la historia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Añadir foto'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(find.byType(StoryPhotoView), findsOneWidget);
       await tester.scrollUntilVisible(
         find.byTooltip('Reproducir historia'),
@@ -646,7 +648,7 @@ void main() {
       await tester.tap(find.byTooltip('Foto de la historia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cambiar foto'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       await tester.tap(find.byTooltip('Foto de la historia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Eliminar foto'));
@@ -731,7 +733,7 @@ void main() {
           await tester.tap(find.byTooltip('Detener grabación'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('Añadir una foto (opcional)'));
-          await tester.pumpAndSettle();
+          await confirmPhotoCrop(tester);
           await tester.ensureVisible(
             find.text(remote ? 'Enviar respuesta' : 'Guardar historia'),
           );

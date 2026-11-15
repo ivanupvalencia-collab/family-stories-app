@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -1072,6 +1074,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Elegir foto de la galería'));
     await tester.pump();
+    await confirmPhotoCrop(tester);
 
     expect(imagePicker.pickCalls, 1);
     expect(
@@ -1124,6 +1127,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField), 'Nombre pendiente');
     await tester.tap(find.text('Elegir foto de la galería'));
     await tester.pump();
+    await confirmPhotoCrop(tester);
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 

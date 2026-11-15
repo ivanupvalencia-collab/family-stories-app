@@ -14,6 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'jpeg_test_fixture.dart';
+
 final _image = PickedProfileImage(
   bytes: base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -129,6 +131,31 @@ void main() {
       expect(restartedMember.linkedAccountId, 'linked-user');
     });
 
+    test(
+      'JPEG replaces a legacy PNG, survives restart, then removes cleanly',
+      () async {
+        final legacy = await photos.save(_member, _image);
+        final jpeg = await jpegTestPhoto();
+        final updated = await photos.save(legacy, jpeg);
+        expect(updated.photoPath, endsWith('.jpg'));
+        expect(
+          await File('${directory.path}/${legacy.photoPath}').exists(),
+          isFalse,
+        );
+        final restarted = LocalFamilyMemberPhotoService(
+          storage: storage,
+          directoryProvider: () async => directory,
+        );
+        expect(await restarted.load((await storage.load()).single), jpeg.bytes);
+        final removed = await restarted.save(updated, null);
+        expect(removed.photoPath, isNull);
+        expect(
+          await File('${directory.path}/${updated.photoPath}').exists(),
+          isFalse,
+        );
+      },
+    );
+
     test('replacement and removal delete old files only after reference persistence', () async {
       final first = await photos.save(_member, _image);
       final second = await photos.save(first, _image);
@@ -208,6 +235,7 @@ void main() {
     late Map<String, dynamic> memberJson;
     late Set<String> objects;
     late List<({String method, Uri uri, String? auth, dynamic body})> requests;
+    final uploads = <String>[];
     late bool failUpload;
     late bool failUpdate;
     late bool loseUpdateResponse;
@@ -235,6 +263,7 @@ void main() {
         'photo_path': oldPath,
       };
       objects = {oldPath};
+      uploads.clear();
       requests = [];
       failUpload = false;
       failUpdate = false;
@@ -283,6 +312,7 @@ void main() {
         } else if (path == '/auth/v1/logout') {
           request.response.write('{}');
         } else if (request.method == 'POST') {
+          uploads.add(latin1.decode(bytes));
           if (failUpload) {
             request.response.statusCode = 403;
             request.response.write(jsonEncode({'message': 'denied'}));
@@ -533,6 +563,35 @@ void main() {
         await service.warmCachedPhotos([updated]);
         expect(service.cachedPhoto(updated), _image.bytes);
         await photos.save(updated, null);
+        expect(
+          await disk.read(client.storage.url, owner, updated.photoPath!),
+          isNull,
+        );
+      },
+    );
+
+    test(
+      'remote JPEG uses .jpg, preserves bytes in caches and can be removed',
+      () async {
+        final legacy = FamilyMember.fromSupabaseJson(memberJson);
+        await photos.load(legacy);
+        final jpeg = await jpegTestPhoto();
+        final updated = await photos.save(legacy, jpeg);
+        expect(updated.photoPath, endsWith('.jpg'));
+        expect(
+          uploads.single.toLowerCase(),
+          contains('content-type: image/jpeg'),
+        );
+        expect(uploads.single, contains(latin1.decode(jpeg.bytes)));
+        expect(photos.cachedPhoto(updated), jpeg.bytes);
+        expect(
+          await disk.read(client.storage.url, owner, updated.photoPath!),
+          jpeg.bytes,
+        );
+        expect(await disk.read(client.storage.url, owner, oldPath), isNull);
+        expect(objects, contains(updated.photoPath));
+        await photos.save(updated, null);
+        expect(objects, isNot(contains(updated.photoPath)));
         expect(
           await disk.read(client.storage.url, owner, updated.photoPath!),
           isNull,

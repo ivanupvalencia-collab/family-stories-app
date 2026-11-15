@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:typed_data';
 
 import 'package:family_stories_app/design/aritoria_design.dart';
@@ -252,7 +254,7 @@ void main() {
       expect(audio.seeks.single.fraction, closeTo(.75, .02));
       await tester.ensureVisible(find.text('Añadir una foto (opcional)'));
       await tester.tap(find.text('Añadir una foto (opcional)'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(
         find.byKey(const ValueKey('answer-photo-preview')),
         findsOneWidget,

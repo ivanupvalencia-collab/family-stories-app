@@ -10,6 +10,7 @@ import '../services/audio_answer_service.dart';
 import '../services/family_story_storage.dart';
 import '../services/story_photo_service.dart';
 import '../services/profile_image_picker.dart';
+import '../services/photo_selection_service.dart';
 
 enum _RecordingStatus { ready, recording, recorded }
 
@@ -94,6 +95,7 @@ class _QuestionScreenState extends State<QuestionScreen> {
   double? _pendingSeek;
   int _playbackCompletions = 0;
   PickedProfileImage? _photo;
+  bool _pickingPhoto = false;
 
   @override
   void initState() {
@@ -418,12 +420,18 @@ class _QuestionScreenState extends State<QuestionScreen> {
   }
 
   Future<void> _pickPhoto() async {
+    if (_pickingPhoto) return;
+    _pickingPhoto = true;
     try {
-      final image = await (widget.imagePicker ?? DeviceProfileImagePicker())
-          .pickFromGallery();
+      final image = await PhotoSelectionService.pick(
+        context,
+        picker: widget.imagePicker ?? DeviceProfileImagePicker(),
+      );
       if (mounted && image != null) setState(() => _photo = image);
     } catch (_) {
       _showMessage('No se pudo seleccionar la foto. Inténtalo de nuevo.');
+    } finally {
+      _pickingPhoto = false;
     }
   }
 

@@ -4,6 +4,7 @@ import '../design/aritoria_design.dart';
 import '../models/family_member.dart';
 import '../models/family_relationships.dart';
 import '../services/profile_image_picker.dart';
+import '../services/photo_selection_service.dart';
 import '../services/family_member_photo_service.dart';
 import '../widgets/family_member_photo_view.dart';
 import '../widgets/aritoria_footer_wave.dart';
@@ -41,7 +42,10 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
     if (_pickingPhoto) return;
     setState(() => _pickingPhoto = true);
     try {
-      final photo = await widget.imagePicker.pickFromGallery();
+      final photo = await PhotoSelectionService.pick(
+        context,
+        picker: widget.imagePicker,
+      );
       if (photo != null && mounted) setState(() => _photo = photo);
     } catch (_) {
       if (mounted) {
