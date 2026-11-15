@@ -4,8 +4,10 @@ import '../design/aritoria_design.dart';
 import '../models/family_member.dart';
 import '../models/family_story.dart';
 import '../models/question.dart';
+import '../models/profile_avatar.dart';
 import '../services/family_member_photo_service.dart';
 import '../services/story_photo_service.dart';
+import '../services/visible_account_avatar_service.dart';
 import 'family_member_photo_view.dart';
 import 'story_photo_view.dart';
 import 'question_text.dart';
@@ -102,10 +104,12 @@ class FamilyMemberSpaceView extends StatelessWidget {
     required this.failed,
     required this.onRetry,
     this.photosForStory,
+    this.avatars,
     super.key,
   });
   final FamilyMember member;
   final FamilyMemberPhotoService photos;
+  final VisibleAccountAvatarService? avatars;
   final StoryPhotoService storyPhotos;
   final StoryPhotoService Function(FamilyStory)? photosForStory;
   final List<FamilyStory> stories;
@@ -127,83 +131,19 @@ class FamilyMemberSpaceView extends StatelessWidget {
       key: const ValueKey('member-space-scroll'),
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final height = (constraints.maxWidth * .86).clamp(
-              240.0,
-              (MediaQuery.sizeOf(context).height * .48).clamp(240.0, 420.0),
-            );
-            return SizedBox(
-              height: height,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  FamilyMemberPhotoView(
-                    member: member,
-                    photoService: photos,
-                    circular: false,
-                    width: constraints.maxWidth,
-                    height: height,
-                    alignment: const Alignment(0, -.15),
-                    fallback: ColoredBox(
-                      color: AritoriaColors.sand,
-                      child: Center(
-                        child: Text(
-                          member.name.trim().isEmpty
-                              ? '?'
-                              : member.name.trim().characters.first,
-                          style: AritoriaType.brand.copyWith(
-                            fontSize: 72,
-                            color: AritoriaColors.sage,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: SafeArea(
-                      bottom: false,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _PhotoControl(
-                              child: IconButton(
-                                tooltip: 'Atrás',
-                                onPressed: onBack,
-                                icon: const Icon(Icons.arrow_back),
-                              ),
-                            ),
-                            _PhotoControl(child: menu),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: -1,
-                    height: 24,
-                    child: ClipPath(
-                      clipper: _PhotoEdge(),
-                      child: const ColoredBox(color: AritoriaColors.cream),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
+        _MemberHeader(
+          member: member,
+          photos: photos,
+          avatars: avatars,
+          menu: menu,
+          onBack: onBack,
+          onInvite: onInvite,
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _MemberIdentity(member: member, onInvite: onInvite),
-              const SizedBox(height: 32),
               Text(
                 'Conoce su historia',
                 style: AritoriaType.section.copyWith(fontSize: 26),
@@ -249,11 +189,13 @@ class FamilyMemberSpaceView extends StatelessWidget {
                   ],
                 )
               else if (stories.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Text(
-                    'Cada vida guarda recuerdos que merecen escucharse. Empieza con una pregunta.',
-                    style: AritoriaType.body,
+                    'Sus historias irán encontrando su lugar aquí.',
+                    style: AritoriaType.body.copyWith(
+                      color: AritoriaColors.muted,
+                    ),
                   ),
                 )
               else
@@ -288,6 +230,220 @@ class FamilyMemberSpaceView extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+// Reuse the existing account-scoped avatar metadata and image caches. Only
+// the presentation changes when a linked account has an available avatar.
+class _MemberHeader extends StatefulWidget {
+  const _MemberHeader({
+    required this.member,
+    required this.photos,
+    required this.avatars,
+    required this.menu,
+    required this.onBack,
+    required this.onInvite,
+  });
+  final FamilyMember member;
+  final FamilyMemberPhotoService photos;
+  final VisibleAccountAvatarService? avatars;
+  final Widget menu;
+  final VoidCallback onBack, onInvite;
+
+  @override
+  State<_MemberHeader> createState() => _MemberHeaderState();
+}
+
+class _MemberHeaderState extends State<_MemberHeader> {
+  VisibleAccountAvatarService? _avatars;
+  Future<void>? _pending;
+
+  @override
+  void initState() {
+    super.initState();
+    _attach();
+  }
+
+  void _attach() {
+    _avatars = widget.avatars ?? SupabaseVisibleAccountAvatarService.shared;
+    _avatars?.addListener(_changed);
+    _pending = _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    final account = widget.member.linkedAccountId;
+    if (widget.member.photoPath != null || account == null) return;
+    try {
+      await _avatars?.load(account);
+    } catch (_) {
+      // Optional avatar metadata must not prevent opening a member's space.
+    }
+  }
+
+  void _changed() {
+    if (mounted) {
+      setState(() {
+        _pending = _loadAvatar();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MemberHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.avatars != widget.avatars) {
+      _avatars?.removeListener(_changed);
+      _attach();
+    } else if (oldWidget.member.linkedAccountId !=
+            widget.member.linkedAccountId ||
+        oldWidget.member.photoPath != widget.member.photoPath) {
+      _pending = _loadAvatar();
+    }
+  }
+
+  @override
+  void dispose() {
+    _avatars?.removeListener(_changed);
+    super.dispose();
+  }
+
+  Widget _controls() => SafeArea(
+    bottom: false,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _PhotoControl(
+            child: IconButton(
+              tooltip: 'Atrás',
+              onPressed: widget.onBack,
+              icon: const Icon(Icons.arrow_back),
+            ),
+          ),
+          _PhotoControl(child: widget.menu),
+        ],
+      ),
+    ),
+  );
+
+  Widget _photo({required bool large, double? width, double? height}) =>
+      FamilyMemberPhotoView(
+        member: widget.member,
+        photoService: widget.photos,
+        avatarService: _avatars,
+        radius: 32,
+        circular: !large,
+        width: width,
+        height: height,
+        alignment: large ? const Alignment(0, -.15) : Alignment.center,
+        fallback: ColoredBox(
+          color: large ? AritoriaColors.cream : AritoriaColors.softOlive,
+          child: Center(
+            child: Text(
+              widget.member.name.trim().isEmpty
+                  ? '?'
+                  : widget.member.name.trim().characters.first,
+              style: AritoriaType.brand.copyWith(fontSize: 28),
+            ),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<void>(
+    future: _pending,
+    builder: (context, snapshot) {
+      final account = widget.member.linkedAccountId;
+      final profile = account == null ? null : _avatars?.cached(account);
+      final hasPhoto =
+          widget.member.photoPath != null ||
+          (profile?.avatarUrl?.trim().isNotEmpty ?? false) ||
+          ProfileAvatarCatalog.findByKey(profile?.avatarKey) != null;
+      final identity = _MemberIdentity(
+        member: widget.member,
+        onInvite: widget.onInvite,
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final height = hasPhoto
+                  ? (constraints.maxWidth * .86).clamp(
+                      240.0,
+                      (MediaQuery.sizeOf(context).height * .48).clamp(
+                        240.0,
+                        420.0,
+                      ),
+                    )
+                  : (constraints.maxWidth * .46).clamp(
+                      144.0,
+                      (MediaQuery.sizeOf(context).height * .28).clamp(
+                        144.0,
+                        220.0,
+                      ),
+                    );
+              return SizedBox(
+                key: ValueKey(
+                  hasPhoto ? 'member-photo-header' : 'member-initial-header',
+                ),
+                height: height,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (hasPhoto)
+                      _photo(
+                        large: true,
+                        width: constraints.maxWidth,
+                        height: height,
+                      )
+                    else
+                      ColoredBox(
+                        color: AritoriaColors.softOlive,
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              widget.member.name.trim().isEmpty
+                                  ? '?'
+                                  : widget.member.name.trim().characters.first,
+                              style: AritoriaType.brand.copyWith(
+                                fontSize: 84,
+                                color: AritoriaColors.sage,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    Align(alignment: Alignment.topCenter, child: _controls()),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: -1,
+                      height: 24,
+                      child: ClipPath(
+                        clipper: _PhotoEdge(),
+                        child: const ColoredBox(color: AritoriaColors.cream),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              0,
+              24,
+              widget.member.linkedAccountId == null ? 20 : 32,
+            ),
+            child: identity,
+          ),
+        ],
+      );
+    },
   );
 }
 
@@ -363,6 +519,11 @@ class _MemberIdentity extends StatelessWidget {
                 backgroundColor: AritoriaColors.softOlive,
                 foregroundColor: AritoriaColors.moss,
                 shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                minimumSize: const Size(0, 32),
               ),
             );
       if (constraints.maxWidth < 300 ||
@@ -370,7 +531,11 @@ class _MemberIdentity extends StatelessWidget {
           member.linkedAccountId == null) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [identity, const SizedBox(height: 12), status],
+          children: [
+            identity,
+            SizedBox(height: member.linkedAccountId == null ? 6 : 12),
+            status,
+          ],
         );
       }
       return Row(
@@ -390,91 +555,89 @@ class _MomentCard extends StatelessWidget {
   final Question question;
   final VoidCallback onAsk;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: AritoriaColors.card,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0D433B28),
-          blurRadius: 20,
-          offset: Offset(0, 6),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox.square(
-              dimension: 46,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: AritoriaColors.cream,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.spa_outlined,
-                  color: AritoriaColors.moss,
-                  size: 29,
-                ),
+  Widget build(BuildContext context) => CustomPaint(
+    painter: const _MomentCardBackground(),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'PREGUNTA DEL MOMENTO',
+            style: AritoriaType.caption.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: .6,
+              color: AritoriaColors.moss,
+            ),
+          ),
+          const SizedBox(height: 12),
+          QuestionText(question.text, style: AritoriaType.question),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: onAsk,
+              label: const Text('Hacerle esta pregunta'),
+              icon: const Icon(Icons.arrow_forward, size: 18),
+              iconAlignment: IconAlignment.end,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'PREGUNTA DEL MOMENTO',
-                    style: AritoriaType.caption.copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .6,
-                      color: AritoriaColors.moss,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  QuestionText(question.text, style: AritoriaType.question),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        FilledButton(
-          onPressed: onAsk,
-          style: FilledButton.styleFrom(
-            backgroundColor: AritoriaColors.moss,
-            foregroundColor: AritoriaColors.onPhoto,
-            minimumSize: const Size(0, 50),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: const StadiumBorder(),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  'Pregúntale',
-                  style: AritoriaType.body.copyWith(
-                    fontSize: 17,
-                    color: AritoriaColors.onPhoto,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Icon(Icons.arrow_forward, size: 20),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
+}
+
+class _MomentCardBackground extends CustomPainter {
+  const _MomentCardBackground();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(20),
+    );
+    canvas.drawRRect(
+      bounds,
+      Paint()
+        ..color = Color.lerp(
+          AritoriaColors.cream,
+          AritoriaColors.softOlive,
+          .65,
+        )!,
+    );
+    final curve = Path()
+      ..moveTo(size.width * .62, size.height)
+      ..cubicTo(
+        size.width * .72,
+        size.height * .87,
+        size.width * .9,
+        size.height * .99,
+        size.width,
+        size.height * .56,
+      )
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.save();
+    canvas.clipRRect(bounds);
+    canvas.drawPath(
+      curve,
+      Paint()
+        ..color = Color.lerp(
+          AritoriaColors.softOlive,
+          AritoriaColors.sage,
+          .2,
+        )!,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_MomentCardBackground oldDelegate) => false;
 }
 
 class _PhotoControl extends StatelessWidget {

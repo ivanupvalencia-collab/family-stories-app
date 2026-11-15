@@ -420,33 +420,32 @@ void main() {
     },
   );
 
-  testWidgets(
-    'guest fallback and missing private images remain safe',
-    (tester) async {
-      final photos = _Photos();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: FamilyMemberPhotoView(member: _member, photoService: photos),
+  testWidgets('guest fallback and missing private images remain safe', (
+    tester,
+  ) async {
+    final photos = _Photos();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FamilyMemberPhotoView(member: _member, photoService: photos),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(photos.loadedPaths, isEmpty);
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+    photos.loadError = Exception('file missing');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FamilyMemberPhotoView(
+          member: _member.withPhotoPath('own/member/missing.png'),
+          photoService: photos,
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(photos.loadedPaths, isEmpty);
-      expect(find.byIcon(Icons.person_outline), findsOneWidget);
-      photos.loadError = Exception('file missing');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: FamilyMemberPhotoView(
-            member: _member.withPhotoPath('own/member/missing.png'),
-            photoService: photos,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.person_outline), findsOneWidget);
-      expect(find.textContaining('file missing'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+    expect(find.textContaining('file missing'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('changing session hides remote photo and disables editing', (
     tester,
@@ -462,13 +461,8 @@ void main() {
     await tester.pumpAndSettle();
     await auth.signOut();
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FamilyMemberPhotoView>(find.byType(FamilyMemberPhotoView))
-          .member
-          .photoPath,
-      isNull,
-    );
+    expect(find.byType(FamilyMemberPhotoView), findsNothing);
+    expect(find.byKey(const ValueKey('member-initial-header')), findsOneWidget);
     expect(
       tester
           .widget<PopupMenuButton<String>>(find.byType(PopupMenuButton<String>))

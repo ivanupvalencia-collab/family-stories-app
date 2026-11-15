@@ -47,6 +47,9 @@ void main() {
     expect(app.theme!.colorScheme.primary, AritoriaColors.olive);
     expect(app.theme!.colorScheme.surface, AritoriaColors.cream);
     expect(app.theme!.scaffoldBackgroundColor, AritoriaColors.cream);
+    expect(app.theme!.appBarTheme.backgroundColor, AritoriaColors.cream);
+    expect(app.theme!.appBarTheme.surfaceTintColor, Colors.transparent);
+    expect(app.theme!.appBarTheme.scrolledUnderElevation, 0);
     expect(app.theme!.progressIndicatorTheme.color, AritoriaColors.olive);
     expect(
       AritoriaDesign.theme().progressIndicatorTheme.color,
@@ -1375,9 +1378,7 @@ void main() {
     expect(find.text('Ver todas las preguntas'), findsOneWidget);
     expect(find.text('Sus historias'), findsOneWidget);
     expect(
-      find.text(
-        'Cada vida guarda recuerdos que merecen escucharse. Empieza con una pregunta.',
-      ),
+      find.text('Sus historias irán encontrando su lugar aquí.'),
       findsOneWidget,
     );
 
