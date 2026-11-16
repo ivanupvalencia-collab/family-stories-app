@@ -31,9 +31,9 @@ desde entonces.
 | S-25 | `question_text` sin límite superior | Medio | ✅ `b878d8c` · `0007` |
 | S-26 | PII en comentario de una función | Bajo | ✅ `b878d8c` · `0003` |
 | S-27 | `updated_at` sin trigger en 4 tablas | Bajo | ✅ este commit · triggers en `20261114000001` (**no aplicada**) + gate S-27 en `lint_rls.sh` · `stories`/`question_requests` sin columna (fuera de alcance) |
-| S-28 | `get_family_invitation_preview` hace `FOR UPDATE` en una lectura | Medio | ⏳ documentado en `0003` |
-| S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ⏳ abierto |
-| S-30 | Política muerta en `family_invitations` | Bajo | ⏳ documentado en `0002` |
+| S-28 | `get_family_invitation_preview` hace `FOR UPDATE` en una lectura | Medio | ✅ este commit · lectura sin lock en `0003` + gate S-28 en `lint_rls.sh` |
+| S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ✅ este commit · política own-folder en `20261115000001` (**no aplicada**) + gate S-29 |
+| S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
 | C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ ver plan por fases |

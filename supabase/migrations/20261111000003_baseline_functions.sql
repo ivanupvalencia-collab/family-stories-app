@@ -126,13 +126,16 @@ begin
     'hex'
   );
 
-  -- S-28: FOR UPDATE en lo que es una lectura. Serializa previews
-  -- concurrentes y puede escribir (marcar expired). Se conserva fiel.
+  -- S-28: antes era FOR UPDATE en lo que es una lectura: serializaba
+  -- previews concurrentes y permitia escribir desde una RPC de lectura.
+  -- Ahora es una lectura pura; la marca lazy a 'expired' de abajo esta
+  -- protegida por su propio WHERE (status = 'pending'), por lo que es
+  -- idempotente incluso con previews concurrentes (la segunda no encuentra
+  -- 'pending' y actualiza 0 filas).
   select fi.*
   into v_invitation
   from public.family_invitations as fi
-  where fi.token_hash = v_token_hash
-  for update;
+  where fi.token_hash = v_token_hash;
 
   if not found or v_invitation.status <> 'pending' then
     return;

@@ -302,6 +302,56 @@ for t in profiles family_members; do
   fi
 done
 
+# -----------------------------------------------------------------------------
+# S-28: get_family_invitation_preview es una lectura; no puede tomar locks
+# (FOR UPDATE). Los FOR UPDATE de rutas de escritura (accept, set_story_photo,
+# prepare/finish...) son legitimos y quedan fuera de esta comprobacion.
+# -----------------------------------------------------------------------------
+section "Preview de invitacion sin FOR UPDATE (S-28)"
+PREVIEW_BODY=$(awk '
+  /^create or replace function public\.get_family_invitation_preview\(/ { in_fn=1 }
+  in_fn { print }
+  in_fn && /^\$function\$;/ { exit }
+' "$REPO_ROOT"/supabase/migrations/*.sql)
+if [ -z "$PREVIEW_BODY" ]; then
+  fail "get_family_invitation_preview no encontrada en migrations/ (S-28)"
+elif printf '%s\n' "$PREVIEW_BODY" | sed -E 's/^[[:space:]]*--.*$//' | grep -qiE "for[[:space:]]+update"; then
+  fail "get_family_invitation_preview usa FOR UPDATE en una lectura (S-28)"
+else
+  pass "get_family_invitation_preview presente y sin FOR UPDATE"
+fi
+
+# -----------------------------------------------------------------------------
+# S-29: el bucket avatars necesita su politica DELETE own-folder (habilita la
+# retencion cuando la app implemente el borrado; ver 20261115000001).
+# -----------------------------------------------------------------------------
+section "Politica DELETE propia en el bucket avatars (S-29)"
+if grep -qE 'create policy "Users can delete their own avatar"' "$REPO_ROOT/supabase/migrations"/*.sql 2>/dev/null; then
+  pass "Politica de DELETE own-folder en avatars presente en migrations/"
+else
+  fail "Falta la politica DELETE own-folder de avatars en migrations/ (S-29)"
+fi
+
+# -----------------------------------------------------------------------------
+# S-30: la politica muerta "Inviters can view their own invitations" debe
+# quedar eliminada por una migracion versionada (jamas se evaluo; 0005 no da
+# grants sobre family_invitations a authenticated).
+# La baseline 0002 contiene drop+create (patron if exists); por eso se
+# comprueba que la ULTIMA aparicion en orden de migracion sea un drop y no un
+# create: si alguien vuelve a crearla al final, el gate falla.
+# -----------------------------------------------------------------------------
+section "Politica muerta de family_invitations eliminada (S-30)"
+LAST_STMT=$(grep -hE '(create|drop) policy.*"Inviters can view their own invitations"' \
+  "$REPO_ROOT"/supabase/migrations/*.sql 2>/dev/null | tail -n 1 || true)
+if [ -z "$LAST_STMT" ]; then
+  fail "Ninguna referencia a la politica muerta en migrations/ (S-30)"
+elif printf '%s' "$LAST_STMT" | grep -qE '^[[:space:]]*drop policy'; then
+  pass "Ultima aparicion de la politica en migrations/ es un DROP"
+else
+  printf '%s\n' "$LAST_STMT" | sed 's/^/      /'
+  fail "La politica muerta se recrea tras el drop (la ultima aparicion es un CREATE) (S-30)"
+fi
+
 printf '\n'
 if [ "$FAILURES" -gt 0 ]; then
   printf 'LINT FALLIDO: %d problema(s).\n' "$FAILURES"
