@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_member.dart';
 import '../models/local_id.dart';
+import 'auth_stream.dart';
 import 'family_member_service.dart';
 import 'family_member_storage.dart';
 import 'profile_image_picker.dart';
@@ -115,7 +116,8 @@ class LocalFamilyMemberPhotoService extends FamilyMemberPhotoService {
 // Entries and pending downloads belong to a single authenticated session.
 class _RemotePhotoCache extends ChangeNotifier {
   _RemotePhotoCache(this.client) : account = client.auth.currentUser?.id {
-    client.auth.onAuthStateChange.listen((state) {
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    listenAuthSafely(client.auth.onAuthStateChange, (state) {
       final next = state.session?.user.id;
       if (next != account || state.event == AuthChangeEvent.signedOut) {
         reset(next);

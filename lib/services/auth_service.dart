@@ -1,6 +1,8 @@
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth_stream.dart';
+
 const _googleWebClientId =
     '922531861898-dv4srvf7daasfmiheuk2e5b2fdcse2pt.apps.googleusercontent.com';
 
@@ -10,6 +12,17 @@ class AuthUser {
   final String id;
   final String email;
 }
+
+// S-10: the app-facing auth stream. Refresh failures arrive as stream errors;
+// they are reported and swallowed here so no listener can turn a flaky network
+// into an unhandled exception. Extracted as a top-level function so tests can
+// feed it a failing source directly.
+Stream<AuthUser?> authUserChanges(
+  Stream<AuthState> source,
+  AuthUser? Function(User? user) toAuthUser,
+) => source
+    .handleError(handleAuthStreamError)
+    .map((state) => toAuthUser(state.session?.user));
 
 abstract class AuthService {
   AuthUser? get currentUser;
@@ -38,9 +51,8 @@ class SupabaseGoogleAuthService implements AuthService {
   AuthUser? get currentUser => _toAuthUser(_client.auth.currentUser);
 
   @override
-  Stream<AuthUser?> get authStateChanges => _client.auth.onAuthStateChange.map(
-    (state) => _toAuthUser(state.session?.user),
-  );
+  Stream<AuthUser?> get authStateChanges =>
+      authUserChanges(_client.auth.onAuthStateChange, _toAuthUser);
 
   @override
   Future<AuthUser> signInWithGoogle() async {

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
+import 'auth_stream.dart';
 import 'story_waveform_service.dart';
 import 'persistent_story_waveform_service.dart';
 
@@ -27,7 +28,8 @@ class SupabaseFamilyStoryService
     // HomeScreen being mounted to call clearAudioCache() leaves stale paths
     // behind. Home constructs this service at start, so the listener always
     // exists before any download can happen.
-    _client.auth.onAuthStateChange.listen((state) {
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    listenAuthSafely(_client.auth.onAuthStateChange, (state) {
       if (state.event == AuthChangeEvent.signedOut) {
         unawaited(clearAudioCache());
       }

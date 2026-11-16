@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
 import '../models/local_id.dart';
+import 'auth_stream.dart';
 import 'family_story_storage.dart';
 import 'private_photo_service.dart';
 import 'profile_image_picker.dart';
@@ -105,7 +106,8 @@ class _Entry {
 
 class _Cache extends ChangeNotifier {
   _Cache(this.client) : account = client.auth.currentUser?.id {
-    client.auth.onAuthStateChange.listen((state) {
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    listenAuthSafely(client.auth.onAuthStateChange, (state) {
       final next = state.session?.user.id;
       if (next != account || state.event == AuthChangeEvent.signedOut) {
         reset(next);

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
+import 'auth_stream.dart';
 import 'story_waveform_service.dart';
 
 const _format = 'audio_waveforms-2.0.2-rms256-peak-v1';
@@ -306,7 +307,8 @@ class PersistentStoryWaveformService extends StoryWaveformService {
 class _RemoteBinding {
   _RemoteBinding(this.client, this.disk, this.factory) {
     sync();
-    client.auth.onAuthStateChange.listen((_) => sync());
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    listenAuthSafely(client.auth.onAuthStateChange, (_) => sync());
   }
   final SupabaseClient client;
   final StoryWaveformDiskCache disk;

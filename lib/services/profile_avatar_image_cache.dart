@@ -9,6 +9,7 @@ import 'package:flutter/painting.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
+import 'auth_stream.dart';
 import 'avatar_url_policy.dart';
 import 'remote_family_photo_disk_cache.dart';
 
@@ -38,11 +39,15 @@ class ProfileAvatarImageCache extends ChangeNotifier {
        _urlPolicy =
            urlPolicy ??
            AvatarUrlPolicy.forBackend(backend ?? client?.storage.url ?? '') {
-    _subscription = client?.auth.onAuthStateChange.listen((event) {
-      syncSession();
-      if (event.event == AuthChangeEvent.signedOut) clear();
-      notifyListeners();
-    });
+    // S-10: errors (e.g. refresh failures) must not become unhandled. The
+    // client is optional here (local-only installations), so no subscription.
+    _subscription = client == null
+        ? null
+        : listenAuthSafely(client.auth.onAuthStateChange, (event) {
+            syncSession();
+            if (event.event == AuthChangeEvent.signedOut) clear();
+            notifyListeners();
+          });
   }
   static final _shared = Expando<ProfileAvatarImageCache>();
   static ProfileAvatarImageCache forClient(SupabaseClient client) =>

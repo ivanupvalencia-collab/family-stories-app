@@ -20,7 +20,7 @@ desde entonces.
 | S-7 | `signOut()` sin `finally` | Medio | ✅ este commit · con reserva local; **riesgo residual:** si la revocación en servidor falló, el refresh token de este dispositivo sigue vivo hasta expirar/rotar |
 | S-8 | Flag de borrado remoto activo sin el gate auditado | Medio | ✅ este commit · gate = `deletion_sql_gate_test.dart` + `lint_rls.sh` (flag ↔ RPCs versionadas) |
 | S-9 | Tokens de invitación como oráculos de existencia | Medio | ↘️ Bajo (token de 256 bits, `sha256`, 7 días) |
-| S-10 | `onAuthStateChange` sin `onError` en 5 puntos | Bajo | ⏳ abierto |
+| S-10 | `onAuthStateChange` sin `onError` en 5 puntos | Bajo | ✅ este commit |
 | S-11 | `detectSessionInUri` en `true` por defecto | Bajo | ✅ `cd5a1e0` |
 | S-12/13/14/15 | Content-type por nombre · sin `maxLength` · `.gitignore` sin `.env*`/keystores · PII en docs | Bajo | ⏳ abierto |
 | S-16 | Enlace inicial (`getInitialUri`) no capturado | Bajo | ✅ `cd5a1e0` |
@@ -316,7 +316,7 @@ correctas.
 1. ✅ C-1 dedup in-flight + `rename()` atómico en descargas de audio.
 2. ✅ C-2 mutex `_enqueue` en `family_story_storage` y `family_member_storage`.
 3. ✅ C-7 timeouts + HttpClient compartido + liberación garantizada de `_pendingBytes` → **parcial** (timeouts y sin redirects en el avatar, con S-5; comparten `HttpClient` pendiente).
-4. ✅ S-7 `finally` en el sign-out (Google + cachés se ejecutan siempre) → hecho en este commit con reserva local de `signOut(scope: local)`; ver riesgo residual en la tabla de estado.
+4. ✅ S-7 `finally` en el sign-out (Google + cachés se ejecutan siempre) → hecho en este commit con reserva local de `signOut(scope: local)`; ver riesgo residual en la tabla de estado. También **S-10**: los errores del stream de auth (fallos de refresh) ya no pueden romper la app — módulo `auth_stream.dart` (`handleAuthStreamError` + `listenAuthSafely`) usado por los 8 servicios que se suscribían directamente y por `authUserChanges()` en `auth_service.dart`, sin tocar nunca el estado de sesión.
 
 ## Fase 1 — Frontera de seguridad
 

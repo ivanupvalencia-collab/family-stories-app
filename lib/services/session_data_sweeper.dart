@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth_stream.dart';
 import 'remote_family_member_cache.dart';
 import 'remote_family_photo_disk_cache.dart';
 
@@ -49,7 +50,8 @@ class SessionDataSweeper {
        _temporaryDirectoryProvider =
            temporaryDirectoryProvider ?? getTemporaryDirectory,
        _owner = client.auth.currentUser?.id {
-    _subscription = client.auth.onAuthStateChange.listen((state) {
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    _subscription = listenAuthSafely(client.auth.onAuthStateChange, (state) {
       final next = state.session?.user.id;
       final previous = _owner;
       _owner = next;

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_member.dart';
+import 'auth_stream.dart';
 import 'remote_family_member_cache.dart';
 
 abstract interface class FamilyMemberInfoEditor {
@@ -50,7 +51,8 @@ class SupabaseFamilyMemberService
   }) : _client = client ?? Supabase.instance.client {
     _cache = cache ?? RemoteFamilyMemberCache.forClient(_client);
     _account = _client.auth.currentUser?.id;
-    _client.auth.onAuthStateChange.listen((state) {
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    listenAuthSafely(_client.auth.onAuthStateChange, (state) {
       final next = state.session?.user.id;
       if (next != _account || state.event == AuthChangeEvent.signedOut) {
         _generation++;

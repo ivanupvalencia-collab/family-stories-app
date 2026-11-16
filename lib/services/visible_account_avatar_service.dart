@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
+import 'auth_stream.dart';
 import 'profile_avatar_image_cache.dart';
 
 /// Display-only account metadata, separate from owned FamilyMember photos.
@@ -22,7 +23,8 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
     _owner = _client.auth.currentUser?.id;
     avatarImages = avatarCache ?? ProfileAvatarImageCache.forClient(_client);
     avatarImages.addListener(_imagesChanged);
-    _subscription = _client.auth.onAuthStateChange.listen((event) {
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    _subscription = listenAuthSafely(_client.auth.onAuthStateChange, (event) {
       final changed = _syncAccount();
       if (!changed && event.event == AuthChangeEvent.signedOut) _clear();
       // A getter may already have synchronized the account before this event.
