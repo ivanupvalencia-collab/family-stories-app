@@ -258,6 +258,21 @@ else
   fi
 fi
 
+# -----------------------------------------------------------------------------
+# S-17: ninguna politica se reescribe de forma dinamica. format('alter policy')
+# barria pg_policy y alteraba politicas ajenas sin lista blanca ni registro.
+# Aplica a ambos modos (comprueba los .sql del repo, no la BD).
+# -----------------------------------------------------------------------------
+section "Reescritura dinamica de politicas ajenas (S-17)"
+HITS=$(grep -rniE "format[[:space:]]*\(.{0,60}alter[[:space:]]+policy" "$REPO_ROOT/supabase" --include='*.sql' 2>/dev/null \
+    | sed -E 's/^[^:]*:[0-9]+:[[:space:]]*--.*$//' | grep -v '^[[:space:]]*$' || true)
+if [ -n "$HITS" ]; then
+  printf '%s\n' "$HITS" | sed 's/^/      /'
+  fail "format('alter policy ...'): usa ALTER explicitos por politica (S-17)"
+else
+  pass "Sin alter policy dinamico en supabase/"
+fi
+
 printf '\n'
 if [ "$FAILURES" -gt 0 ]; then
   printf 'LINT FALLIDO: %d problema(s).\n' "$FAILURES"

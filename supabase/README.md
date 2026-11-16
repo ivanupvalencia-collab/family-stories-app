@@ -76,6 +76,7 @@ afectan a este directorio.
 | S-5 | `profiles.avatar_url` es URL libre → SSRF on-device | ✅ allowlist en la app · `20261112000001` **pendiente de aplicar** |
 | S-8 | Flag de borrado remoto activo sin gate auditado | ✅ gate en `test/deletion_sql_gate_test.dart` + `tool/lint_rls.sh`: flag `true` ⇒ RPCs `prepare`/`finish_family_member_delete` en `migrations/` |
 | S-13 | `family_members.name` sin límite (el alta va por INSERT directo) | ✅ `maxLength` 200 en la UI · `20261113000001` **pendiente de aplicar** |
+| S-17 | `manual/07` reescribía políticas ajenas con `execute format('alter policy ...')` | ✅ 3 `alter policy` explícitos en `07` · gate S-17 en `tool/lint_rls.sh` (ambos modos) |
 | S-19 | `get_story_photo_metadata` devuelve `can_edit` siempre `true` | ⏳ documentado en `0003` |
 | S-23 | Buckets sin límite de tipo/tamaño | ✅ `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | ✅ `0007` |

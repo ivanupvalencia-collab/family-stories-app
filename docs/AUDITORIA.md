@@ -24,7 +24,7 @@ desde entonces.
 | S-11 | `detectSessionInUri` en `true` por defecto | Bajo | ✅ `cd5a1e0` |
 | S-12/13/14/15 | Content-type por nombre · sin `maxLength` · `.gitignore` sin `.env*`/keystores · PII en docs | Bajo | ✅ este commit · sniffing de magic bytes + `maxLength` 200/500/280 + CHECK `family_members.name` en `20261113000001` (sin aplicar) + nombres sanitizados en docs/tests |
 | S-16 | Enlace inicial (`getInitialUri`) no capturado | Bajo | ✅ `cd5a1e0` |
-| S-17 | SQL reescribe políticas ajenas con `alter policy ... format(...)` | Medio | ⏳ documentado |
+| S-17 | SQL reescribe políticas ajenas con `alter policy ... format(...)` | Medio | ✅ este commit · `07` usa 3 `alter policy` explícitos + gate S-17 en `lint_rls.sh` (ambos modos) |
 | S-19 | `get_story_metadata` devuelve `can_edit` siempre `true` | Medio | ⏳ documentado en `0003` |
 | S-23 | Buckets sin límite de tipo/tamaño | Medio | ✅ `b878d8c` · `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | Alto | ✅ `b878d8c` · `0007` |
@@ -131,7 +131,7 @@ incompatible con no filtrar la sesión en claro.
 | S-7 | `signOut()` con `await` sin `finally`: si falla la llamada al servidor se saltan el sign-out de Google y `clearCache()` | Medio | `auth_service.dart:79-88`, `profile_screen.dart:194-209` |
 | S-8 | Flag `familyMemberRemoteDeletionEnabled = true` activo con el esquema sin versionar | Medio | `family_member_deletion_service.dart:5-6` |
 | S-9 | Los tokens de invitación son oráculos de existencia (preview devuelve nombres) sin rate-limit visible | Medio → **Bajo** | `invitation_service.dart:39-62` |
-| S-17 | SQL reescribe dinámicamente políticas ajenas con `execute format('alter policy ... or ...')` sobre `storage.objects` | Medio | `07_...sql:239-249` |
+| S-17 | SQL reescribe dinámicamente políticas ajenas con `execute format('alter policy ... or ...')` sobre `storage.objects` | Medio | ✅ `07_...sql:239-249` → 3 `alter policy` literales (Family photos require their owner / Story photo read guard / Story photo delete guard) + gate `lint_rls.sh` que prohíbe `format('alter policy` en `supabase/` |
 | S-10 | `onAuthStateChange` suscrito sin `onError` en 5 puntos | Bajo | `main.dart:105`, `home_screen.dart:130`, `profile_screen.dart:65`, `answer_screen.dart:56`, `family_member_screen.dart:120` |
 | S-11 | `detectSessionInUri` en default `true` | Bajo | `main.dart:32-35` |
 | S-12/13/14/15 | Content-type por nombre de archivo sin sniffing · sin `maxLength` en alta de familiar/pregunta/invitación · `.gitignore` sin `.env*`/keystores · PII real (nombres) en docs del repo público | Bajo | varios |

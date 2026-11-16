@@ -236,17 +236,32 @@ create policy "Owner deletion plan removes resources" on storage.objects for del
 -- safeguards. Add an exception ONLY for this owner's authoritative snapshot.
 -- Restrictive policies otherwise veto the new narrow permissive policies.
 -- Does not replace helpers/RPCs from FINAL or expand general story SELECT.
-do $$ declare p record; begin
-  for p in select pol.polname,pg_get_expr(pol.polqual,pol.polrelid) expr
-      from pg_catalog.pg_policy pol
-      where pol.polrelid = 'storage.objects'::regclass and not pol.polpermissive
-        and pol.polcmd in ('r','d','*') and pol.polqual is not null
-        and (0::oid = any(pol.polroles) or 'authenticated'::regrole::oid = any(pol.polroles)) loop
-    if position('family_delete_object_allowed' in p.expr) = 0 then
-      execute format('alter policy %I on storage.objects using ((%s) or public.family_delete_object_allowed(bucket_id,storage.objects.name))',p.polname,p.expr);
-    end if;
-  end loop;
-end $$;
+--
+-- S-17: antes este script barria pg_policy y reescribia TODAS las politicas
+-- restrictivas ajenas con format('alter policy ...'), sin lista blanca ni
+-- registro de lo que cambiaba. Ahora solo se alteran, una a una y con nombre
+-- explicito, las tres politicas que este script necesita (las mismas que el
+-- loop original recalculaba: restrictive, cmd r/d/*, roles public o
+-- authenticated) y cuyo estado instalado garantizan 01 y 03:
+--   - "Family photos require their owner"  -> 01_family_member_photos.sql
+--   - "Story photo read guard"             -> 03_story_photos_FINAL.sql
+--   - "Story photo delete guard"           -> 03_story_photos_FINAL.sql
+-- Requiere 01 y 03 instalados: ALTER falla si la politica no existe.
+-- (En instalados por migraciones versionadas, 0002 ya hornea esta excepcion
+-- estaticamente y estos ALTER son un no-op semantico.)
+alter policy "Family photos require their owner" on storage.objects
+  using ((bucket_id <> 'family-member-photos' or (
+    (storage.foldername(storage.objects.name))[1] = (select auth.uid())::text
+    and exists (select 1 from public.family_members fm
+      where fm.id::text = (storage.foldername(storage.objects.name))[2]
+        and fm.owner_id = (select auth.uid()))
+  )) or public.family_delete_object_allowed(bucket_id,storage.objects.name));
+alter policy "Story photo read guard" on storage.objects
+  using ((bucket_id <> 'story-photos' or public.story_photo_allowed(storage.objects.name,'read'))
+    or public.family_delete_object_allowed(bucket_id,storage.objects.name));
+alter policy "Story photo delete guard" on storage.objects
+  using ((bucket_id <> 'story-photos' or public.story_photo_allowed(storage.objects.name,'delete'))
+    or public.family_delete_object_allowed(bucket_id,storage.objects.name));
 drop policy if exists "Pending family deletion blocks uploads" on storage.objects;
 create policy "Pending family deletion blocks uploads" on storage.objects as restrictive for insert to authenticated
   with check (public.family_delete_storage_write_allowed(bucket_id,storage.objects.name));
