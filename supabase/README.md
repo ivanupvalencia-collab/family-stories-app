@@ -25,6 +25,7 @@ Exportado completo desde el proyecto remoto el 2026-11-11 mediante `pg_class`,
 000007_hardening.sql            ⚠️ SÍ cambia estado: S-23, S-24, S-25, S-31
 20261112000001_avatar_url_allowlist.sql  ⚠️ SÍ cambia estado: CHECK en profiles.avatar_url (S-5) · NO aplicado
 20261113000001_text_limits.sql            ⚠️ SÍ cambia estado: CHECK en family_members.name ≤ 200 (S-13) · NO aplicado
+20261114000001_updated_at_triggers.sql    ⚠️ SÍ cambia estado: triggers set_updated_at en profiles/family_members (S-27) · NO aplicado
 ```
 
 **0001–0006 son un no-op** sobre el proyecto vivo: reproducen el estado actual
@@ -34,7 +35,9 @@ límite de `question_text`. **0008 (S-5) añade un `CHECK` a `profiles.avatar_ur
 y todavía NO se ha aplicado a producción**: incluye un `select` de pre-chequeo
 que debe devolver 0 filas antes del `add constraint`. **0009 (S-13) añade el
 `CHECK` de `family_members.name`** (NOT VALID + validate con aviso, igual que
-el de `question_text`) y tampoco se ha aplicado.
+el de `question_text`) y tampoco se ha aplicado. **0010 (S-27) crea los
+triggers de `updated_at`** en `profiles`/`family_members` y tampoco se ha
+aplicado.
 
 ### Correcciones sobre el volcado crudo
 
@@ -81,7 +84,7 @@ afectan a este directorio.
 | S-23 | Buckets sin límite de tipo/tamaño | ✅ `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | ✅ `0007` |
 | S-25 | `question_text` sin límite superior | ✅ `0007` |
-| S-27 | `updated_at` sin trigger en 4 tablas | ⏳ documentado en `0004` |
+| S-27 | `updated_at` sin trigger (solo `family_invitations` lo tenía) | ✅ `20261114000001` **pendiente de aplicar** (triggers en `profiles`/`family_members`) · gate S-27 en `tool/lint_rls.sh` |
 | S-28 | `get_family_invitation_preview` hace `FOR UPDATE` en una lectura | ⏳ documentado en `0003` |
 | S-29 | Bucket `avatars` sin política `DELETE` | ⏳ abierto |
 | S-30 | Política muerta en `family_invitations` | ⏳ documentado en `0002` |

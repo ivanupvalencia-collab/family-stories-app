@@ -30,7 +30,7 @@ desde entonces.
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | Alto | ✅ `b878d8c` · `0007` |
 | S-25 | `question_text` sin límite superior | Medio | ✅ `b878d8c` · `0007` |
 | S-26 | PII en comentario de una función | Bajo | ✅ `b878d8c` · `0003` |
-| S-27 | `updated_at` sin trigger en 4 tablas | Bajo | ⏳ documentado en `0004` |
+| S-27 | `updated_at` sin trigger en 4 tablas | Bajo | ✅ este commit · triggers en `20261114000001` (**no aplicada**) + gate S-27 en `lint_rls.sh` · `stories`/`question_requests` sin columna (fuera de alcance) |
 | S-28 | `get_family_invitation_preview` hace `FOR UPDATE` en una lectura | Medio | ⏳ documentado en `0003` |
 | S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ⏳ abierto |
 | S-30 | Política muerta en `family_invitations` | Bajo | ⏳ documentado en `0002` |

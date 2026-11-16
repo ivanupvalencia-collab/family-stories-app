@@ -289,6 +289,19 @@ else
   pass "can_edit calculado (sin literal true) en migrations/"
 fi
 
+# -----------------------------------------------------------------------------
+# S-27: profiles y family_members tienen columna updated_at y deben mantener
+# su trigger; family_invitations ya lo tiene desde el baseline (0004).
+# -----------------------------------------------------------------------------
+section "Trigger de updated_at en profiles y family_members (S-27)"
+for t in profiles family_members; do
+  if grep -qE "create trigger ${t}_set_updated_at" "$REPO_ROOT/supabase/migrations"/*.sql 2>/dev/null; then
+    pass "${t}_set_updated_at presente en migrations/"
+  else
+    fail "Falta trigger ${t}_set_updated_at en migrations/ (S-27)"
+  fi
+done
+
 printf '\n'
 if [ "$FAILURES" -gt 0 ]; then
   printf 'LINT FALLIDO: %d problema(s).\n' "$FAILURES"

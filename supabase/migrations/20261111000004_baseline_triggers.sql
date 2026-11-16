@@ -74,6 +74,9 @@ create trigger family_delete_child_guard
 -- ---------------------------------------------------------------------------
 -- NOTA (S-27): tampoco hay set_updated_at en family_members, profiles,
 -- stories ni question_requests. Solo family_invitations lo tiene.
+-- RESUELTO en 20261114000001_updated_at_triggers.sql: triggers genericos
+-- sobre profiles y family_members (las unicas con columna; stories y
+-- question_requests no tienen updated_at). Este baseline se conserva fiel.
 
 -- ---------------------------------------------------------------------------
 -- Event trigger: auto-activa RLS en tablas nuevas de public.
