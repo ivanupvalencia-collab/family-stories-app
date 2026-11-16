@@ -214,7 +214,7 @@ void main() {
           members: [
             const FamilyMember(
               id: 'member',
-              name: 'Pepe',
+              name: 'Usuario B',
               relationship: 'Otro',
             ),
           ],
@@ -244,8 +244,8 @@ void main() {
       await File('${memberPhotos.path}/photo.png').writeAsBytes([1]);
       final members = fixtures.MemoryFamilyMemberStorage(
         members: [
-          const FamilyMember(id: 'member', name: 'Pepe', relationship: 'Otro'),
-          const FamilyMember(id: 'other', name: 'Ana', relationship: 'Otro'),
+          const FamilyMember(id: 'member', name: 'Usuario B', relationship: 'Otro'),
+          const FamilyMember(id: 'other', name: 'Usuario E', relationship: 'Otro'),
         ],
       );
       await storage.deleteFamily('member', members);

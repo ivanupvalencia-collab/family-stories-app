@@ -20,8 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'widget_test.dart' as fixtures;
 
 const _member = FamilyMember(
-  id: 'mavi',
-  name: 'Mavi',
+  id: 'usuario_f',
+  name: 'Usuario F',
   relationship: 'Abuelo/a',
 );
 const _question = Question(
@@ -180,13 +180,13 @@ void main() {
           find.text('Graba la respuesta en este dispositivo'),
           findsOneWidget,
         );
-        await tester.scrollUntilVisible(find.text('Enviar a Mavi'), 160);
+        await tester.scrollUntilVisible(find.text('Enviar a Usuario F'), 160);
         expect(
           find.text('Para que responda desde su dispositivo'),
           findsOneWidget,
         );
-        await tester.ensureVisible(find.text('Enviar a Mavi'));
-        await tester.tap(find.text('Enviar a Mavi'));
+        await tester.ensureVisible(find.text('Enviar a Usuario F'));
+        await tester.tap(find.text('Enviar a Usuario F'));
         await tester.pumpAndSettle();
         expect(find.text('Necesitas iniciar sesión'), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -223,7 +223,7 @@ void main() {
       expect(audio.starts, 0);
       expect(find.byType(QuestionScreen), findsOneWidget);
       expect(find.byType(QuestionAnswerView), findsOneWidget);
-      expect(find.text('Para Mavi'), findsOneWidget);
+      expect(find.text('Para Usuario F'), findsOneWidget);
       expect(find.textContaining('Pendiente'), findsNothing);
       await tester.tap(find.text('Grabar respuesta'));
       await tester.pumpAndSettle();

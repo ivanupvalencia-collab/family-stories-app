@@ -33,7 +33,7 @@ import 'widget_test.dart' as fixtures;
 class _Avatars extends VisibleAccountAvatarService {
   UserProfile? profile = const UserProfile(
     id: 'linked',
-    name: 'Mavi',
+    name: 'Usuario F',
     avatarKey: 'avatar_01',
   );
   @override
@@ -187,7 +187,7 @@ void main() {
         _space(
           FamilyMember(
             id: 'member',
-            name: 'Mavi',
+            name: 'Usuario F',
             relationship: 'Abuela',
             photoPath: photo ? 'owner/member/photo.png' : null,
           ),
@@ -262,7 +262,7 @@ void main() {
             body: FamilyMemberSpaceView(
               member: const FamilyMember(
                 id: 'member',
-                name: 'Mavi',
+                name: 'Usuario F',
                 relationship: 'Abuela',
                 linkedAccountId: 'linked',
               ),
@@ -306,7 +306,7 @@ void main() {
       (tester) async {
         const member = FamilyMember(
           id: 'member',
-          name: 'Mavi',
+          name: 'Usuario F',
           relationship: 'Abuelo/a',
         );
         final local = FamilyStory(
@@ -376,7 +376,7 @@ void main() {
     (tester) async {
       const member = FamilyMember(
         id: 'member',
-        name: 'Pepe',
+        name: 'Usuario B',
         relationship: 'Otro',
       );
       final deletion = _Deletion();
@@ -447,7 +447,7 @@ void main() {
               'bucket': 'family-member-photos',
               'path': 'owner/member/photo.png',
             },
-            {'bucket': 'story-photos', 'path': 'pepe/story/photo.png'},
+            {'bucket': 'story-photos', 'path': 'usuario_b/story/photo.png'},
             {'bucket': 'story-audio', 'path': 'request/audio.m4a'},
           ],
           'story_ids': ['story'],
@@ -457,7 +457,7 @@ void main() {
       expect(deletion.calls, 2);
       expect(members.forgotten, ['member']);
       expect(photos.forgotten, ['owner/member/photo.png']);
-      expect(storyPhotos.forgotten, ['pepe/story/photo.png']);
+      expect(storyPhotos.forgotten, ['usuario_b/story/photo.png']);
       expect(find.byType(FamilyMemberScreen), findsNothing);
       expect(find.text('Lista'), findsOneWidget);
     },
@@ -471,7 +471,7 @@ void main() {
           addTearDown(() => tester.binding.setSurfaceSize(null));
           final member = FamilyMember(
             id: 'member',
-            name: 'María de los Ángeles y sus recuerdos',
+            name: 'Usuario J con un nombre largo y sus recuerdos',
             relationship: 'Abuela',
             linkedAccountId: linked ? 'linked' : null,
             photoPath: linked ? 'owner/member/photo.png' : null,
@@ -530,7 +530,7 @@ void main() {
         _space(
           const FamilyMember(
             id: 'member',
-            name: 'Mavi',
+            name: 'Usuario F',
             relationship: 'Abuela',
           ),
           [for (var i = 0; i < 8; i++) _story(i, photo: i.isEven)],
@@ -558,7 +558,7 @@ void main() {
     (tester) async {
       const member = FamilyMember(
         id: 'member',
-        name: 'Mavi',
+        name: 'Usuario F',
         relationship: 'Mi relación antigua',
         linkedAccountId: 'linked',
         photoPath: 'owner/member/photo.png',
@@ -571,10 +571,10 @@ void main() {
       await tester.tap(find.text('Editar información'));
       await tester.pumpAndSettle();
       expect(find.text('Mi relación antigua'), findsOneWidget);
-      await tester.enterText(find.byType(TextFormField), 'María');
+      await tester.enterText(find.byType(TextFormField), 'Usuario I');
       await tester.tap(find.text('Guardar cambios'));
       await tester.pumpAndSettle();
-      expect(members.members.single.name, 'María');
+      expect(members.members.single.name, 'Usuario I');
       expect(members.members.single.linkedAccountId, 'linked');
       expect(members.members.single.photoPath, member.photoPath);
     },
@@ -584,7 +584,7 @@ void main() {
     (tester) async {
       const member = FamilyMember(
         id: 'member',
-        name: 'Pepe',
+        name: 'Usuario B',
         relationship: 'Otro',
       );
       final members = fixtures.MemoryFamilyMemberStorage(members: [member]);
@@ -706,7 +706,7 @@ void main() {
                             : QuestionScreen(
                                 familyMember: const FamilyMember(
                                   id: 'member',
-                                  name: 'Pepe',
+                                  name: 'Usuario B',
                                   relationship: 'Otro',
                                 ),
                                 question: const Question('Un recuerdo'),
@@ -785,7 +785,7 @@ void main() {
         child: _space(
           const FamilyMember(
             id: 'member',
-            name: 'Mavi',
+            name: 'Usuario F',
             relationship: 'Abuela',
             linkedAccountId: 'linked',
           ),

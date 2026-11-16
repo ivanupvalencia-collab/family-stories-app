@@ -26,8 +26,8 @@ class _Members extends fixtures.FakeFamilyMemberService
 }
 
 const _member = FamilyMember(
-  id: 'pepe',
-  name: 'Pepe',
+  id: 'usuario_b',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
 );
 const _secondUser = AuthUser(id: 'account-b', email: 'b@example.com');
@@ -67,10 +67,10 @@ void main() {
       expect(view(tester).memberStatus, isNull);
       expect(members.requestedOwnerIds, [owner]);
       members.remote[owner]!.complete([
-        const FamilyMember(id: 'ana', name: 'Ana', relationship: 'Otro'),
+        const FamilyMember(id: 'usuario_e', name: 'Usuario E', relationship: 'Otro'),
       ]);
       await tester.pump();
-      expect(view(tester).members.single.name, 'Ana');
+      expect(view(tester).members.single.name, 'Usuario E');
       expect(view(tester).memberStatus, isNull);
       questions.complete([]);
       answers.complete([]);
@@ -136,7 +136,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(view(tester).members.single.name, 'Pepe');
+      expect(view(tester).members.single.name, 'Usuario B');
       auth.setUser(_secondUser);
       await tester.pump();
       expect(view(tester).members, isEmpty);

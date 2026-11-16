@@ -24,7 +24,7 @@ final _image = PickedProfileImage(
 );
 const _member = FamilyMember(
   id: 'member-id',
-  name: 'Pepe',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
   linkedAccountId: 'linked-user',
 );
@@ -76,7 +76,7 @@ void main() {
       expect(
         FamilyMember.fromJson({
           'id': 'old',
-          'name': 'Pepe',
+          'name': 'Usuario B',
           'relationship': 'Otro',
         }).photoPath,
         isNull,
@@ -84,7 +84,7 @@ void main() {
       expect(
         FamilyMember.fromSupabaseJson({
           'id': 'old',
-          'name': 'Pepe',
+          'name': 'Usuario B',
           'relationship': 'Otro',
           'linked_account_id': 'linked',
         }).photoPath,
@@ -257,7 +257,7 @@ void main() {
       );
       memberJson = {
         'id': id,
-        'name': 'Pepe',
+        'name': 'Usuario B',
         'relationship': 'Padre/Madre',
         'linked_account_id': 'linked-user',
         'photo_path': oldPath,

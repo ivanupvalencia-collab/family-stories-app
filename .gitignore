@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Secrets (S-14): nunca al repo, aunque aparezcan en un commit futuro
+.env*
+*.jks
+*.keystore
+key.properties
+*.p12
+*.pem
+*.p8
+*.mobileprovision

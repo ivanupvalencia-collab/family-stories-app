@@ -22,7 +22,7 @@ desde entonces.
 | S-9 | Tokens de invitación como oráculos de existencia | Medio | ↘️ Bajo (token de 256 bits, `sha256`, 7 días) |
 | S-10 | `onAuthStateChange` sin `onError` en 5 puntos | Bajo | ✅ este commit |
 | S-11 | `detectSessionInUri` en `true` por defecto | Bajo | ✅ `cd5a1e0` |
-| S-12/13/14/15 | Content-type por nombre · sin `maxLength` · `.gitignore` sin `.env*`/keystores · PII en docs | Bajo | ⏳ abierto |
+| S-12/13/14/15 | Content-type por nombre · sin `maxLength` · `.gitignore` sin `.env*`/keystores · PII en docs | Bajo | ✅ este commit · sniffing de magic bytes + `maxLength` 200/500/280 + CHECK `family_members.name` en `20261113000001` (sin aplicar) + nombres sanitizados en docs/tests |
 | S-16 | Enlace inicial (`getInitialUri`) no capturado | Bajo | ✅ `cd5a1e0` |
 | S-17 | SQL reescribe políticas ajenas con `alter policy ... format(...)` | Medio | ⏳ documentado |
 | S-19 | `get_story_metadata` devuelve `can_edit` siempre `true` | Medio | ⏳ documentado en `0003` |
@@ -324,7 +324,7 @@ correctas.
 6. ✅ S-2 deep links (scheme propio). S-4 release keystore → **vetoado por el propietario**.
 7. ✅ **S-3 sesión en Keystore/Keychain + `allowBackup="false"`.**
 8. ⏳ C-3 ✅ + C-4 invertir casts `::text` en las 8 políticas de storage.
-9. ✅ **S-5 allowlist de host en `avatar_url`** (política en cliente + `CHECK` en `20261112000001`, esta sin aplicar) · ✅ **S-6 barrido de cachés en `signedOut`** (`SessionDataSweeper`: fotos, lista remota y audio; solo de la cuenta que cierra sesión; comparte las colas de escritura vía `forClient`) · ✅ **S-8 gate del flag de borrado remoto** (la confirmación "instalado" deja de ser un comentario: `test/deletion_sql_gate_test.dart` + `tool/lint_rls.sh` exigen que flag `true` ⇒ ambas RPCs con revoke/grant en `migrations/`, en ambos modos del lint).
+9. ✅ **S-5 allowlist de host en `avatar_url`** (política en cliente + `CHECK` en `20261112000001`, esta sin aplicar) · ✅ **S-6 barrido de cachés en `signedOut`** (`SessionDataSweeper`: fotos, lista remota y audio; solo de la cuenta que cierra sesión; comparte las colas de escritura vía `forClient`) · ✅ **S-8 gate del flag de borrado remoto** (la confirmación "instalado" deja de ser un comentario: `test/deletion_sql_gate_test.dart` + `tool/lint_rls.sh` exigen que flag `true` ⇒ ambas RPCs con revoke/grant en `migrations/`, en ambos modos del lint). También **S-12/13/14/15**: el content-type de las fotos sale del sniffing de magic bytes (`sniffImageContentType`, sin fallback al nombre), `maxLength` 200/500/280 en alta de familiar/pregunta/código de invitación con `CHECK` de respaldo en `20261113000001` (NOT VALID, sin aplicar), `.gitignore` raíz con `.env*`/keystores, y PII (nombres reales) fuera de docs, migraciones y tests.
 
 ## Fase 2 — Escala de datos
 

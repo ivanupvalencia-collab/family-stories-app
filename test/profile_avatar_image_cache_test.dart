@@ -23,7 +23,7 @@ void main() {
 
   UserProfile profile({String id = 'owner', int version = 1}) => UserProfile(
     id: id,
-    name: 'Pepe',
+    name: 'Usuario B',
     avatarUrl: 'http://127.0.0.1:${server.port}/avatar?v=$version',
   );
 
@@ -77,7 +77,7 @@ void main() {
         request.response.write(
           jsonEncode({
             'id': 'owner',
-            'name': 'Pepe',
+            'name': 'Usuario B',
             'avatar_url': profile(version: revision).avatarUrl,
           }),
         );
@@ -117,7 +117,7 @@ void main() {
     final second = cache.imageFor(profile(version: 2))!;
     expect(
       cache.imageFor(
-        const UserProfile(id: 'owner', name: 'Pepe', avatarKey: 'avatar_01'),
+        const UserProfile(id: 'owner', name: 'Usuario B', avatarKey: 'avatar_01'),
       ),
       isNull,
     );
@@ -268,7 +268,7 @@ void main() {
       revision = 2;
       final updated = await service.updateProfile(
         userId: 'owner',
-        name: 'Pepe',
+        name: 'Usuario B',
         avatarKey: null,
         avatarUrl: profile(version: 2).avatarUrl,
       );

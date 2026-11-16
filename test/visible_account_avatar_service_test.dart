@@ -65,7 +65,7 @@ void main() {
             for (final id in ids.where((id) => id != 'hidden'))
               {
                 'id': id,
-                'name': 'Claudia',
+                'name': 'Usuario C',
                 'avatar_key': 'avatar_01',
                 'avatar_url': 'https://example.test/avatar.png',
               },

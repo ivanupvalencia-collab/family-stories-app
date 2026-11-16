@@ -32,7 +32,7 @@ class _ProfilesWithImages extends fixtures.FakeProfileService
     : super(
         profile: const UserProfile(
           id: 'google-user-id',
-          name: 'Ana García',
+          name: 'Usuario D',
           avatarUrl: 'https://aritoria.test/avatars/own-profile?v=1',
         ),
       );
@@ -131,8 +131,8 @@ void main() {
     );
     expect(avatar.avatarUrl, fixtures.testUserProfile.avatarUrl);
     expect(avatar.avatarKey, fixtures.testUserProfile.avatarKey);
-    expect(find.text('Ana García'), findsOneWidget);
-    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('Usuario D'), findsOneWidget);
+    expect(find.text('usuario-e@example.com'), findsOneWidget);
     await tester.tap(find.byTooltip('Editar foto de perfil'));
     await tester.pumpAndSettle();
     expect(find.byType(EditProfileScreen), findsOneWidget);

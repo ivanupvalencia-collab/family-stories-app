@@ -176,7 +176,7 @@ void main() {
                 details: {
                   for (final request in answers)
                     request.id: const ReceivedRequestDetails(
-                      senderName: 'Iván',
+                      senderName: 'Usuario A',
                       durationSeconds: 65,
                     ),
                 },
@@ -200,7 +200,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(service.requestedAnswerStoryIds, ['answer-0', 'answer-1']);
         expect(find.text('Historia 2'), findsNothing);
-        expect(find.text('Para Iván · 17/10/2026 · 1:05'), findsNWidgets(2));
+        expect(find.text('Para Usuario A · 17/10/2026 · 1:05'), findsNWidgets(2));
         final rows = find.byType(ReceivedRequestRow);
         expect(rows, findsNWidgets(3));
         final questionTile = tester.widget<ListTile>(

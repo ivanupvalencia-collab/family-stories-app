@@ -266,7 +266,7 @@ void main() {
     final other = _Extractor()..samples = [.8, .1];
     expect(
       await cache(
-        account: 'pepe',
+        account: 'usuarioB',
         native: other,
       ).loadForStory(_story(), resolve),
       other.samples,
@@ -384,21 +384,21 @@ void main() {
         'test-key',
         authOptions: const AuthClientOptions(autoRefreshToken: false),
       );
-      await _login(client, 'ivan');
-      final ivan = StoryWaveforms.forClient(
+      await _login(client, 'usuarioA');
+      final usuarioA = StoryWaveforms.forClient(
         client,
         diskCache: disk,
         extractorFactory: () => extractor,
       );
-      await ivan.loadForStory(_story(), resolve);
-      await _login(client, 'pepe');
-      final pepe = StoryWaveforms.forClient(client);
-      expect(ivan.cachedForStory(_story()), isNull);
-      await expectLater(ivan.loadForStory(_story(), resolve), throwsStateError);
-      await pepe.loadForStory(_story(), resolve);
+      await usuarioA.loadForStory(_story(), resolve);
+      await _login(client, 'usuarioB');
+      final usuarioB = StoryWaveforms.forClient(client);
+      expect(usuarioA.cachedForStory(_story()), isNull);
+      await expectLater(usuarioA.loadForStory(_story(), resolve), throwsStateError);
+      await usuarioB.loadForStory(_story(), resolve);
       expect(extractor.calls, 2);
-      // Return to Ivan: old disk entries must already have been removed.
-      await _login(client, 'ivan');
+      // Return to Usuario A: old disk entries must already have been removed.
+      await _login(client, 'usuarioA');
       await StoryWaveforms.forClient(client).loadForStory(_story(), resolve);
       expect(extractor.calls, 3);
       await (StoryWaveforms.forClient(client) as PersistentStoryWaveformService)

@@ -24,14 +24,14 @@ Las imágenes de avatar reutilizan Image.network y la caché de Flutter.
 ## Prueba manual
 
 1. Instalar únicamente 08; iniciar sesión de nuevo/reiniciar la app.
-2. Claudia envía una pregunta a Pepe. Pepe ve en Home su avatar a la
+2. Usuario C envía una pregunta a Usuario B. Usuario B ve en Home su avatar a la
    izquierda, pregunta, remitente/fecha y chevron. Pulsar sigue abriendo
    la respuesta. Probar tanto foto subida como avatar de catálogo.
 3. Con una cuenta sin avatar, comprobar su inicial; si una imagen falla,
    también debe aparecer la inicial sin bloquear la pregunta.
-4. Iván abre un familiar vinculado a Pepe sin foto propia: se muestra
-   el avatar de Pepe en Home y en el perfil. Añadir foto propia: tiene
-   prioridad. Eliminarla: vuelve el avatar de Pepe. Sin vinculación ni
+4. Usuario A abre un familiar vinculado a Usuario B sin foto propia: se muestra
+   el avatar de Usuario B en Home y en el perfil. Añadir foto propia: tiene
+   prioridad. Eliminarla: vuelve el avatar de Usuario B. Sin vinculación ni
    avatar: se conserva el fallback anterior. Probar también sin sesión.
 5. Navegar Home/perfil y cerrar sesión/cambiar de cuenta: no debe mostrarse
    el avatar de una sesión anterior durante la nueva carga.

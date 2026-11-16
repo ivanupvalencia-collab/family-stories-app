@@ -23,12 +23,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'widget_test.dart' as fixtures;
 
-const _pepe = FamilyMember(
-  id: 'pepe',
-  name: 'Pepe',
+const _usuarioB = FamilyMember(
+  id: 'usuario_b',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
 );
-const _ana = FamilyMember(id: 'ana', name: 'Ana', relationship: 'Abuelo/a');
+const _usuarioE = FamilyMember(id: 'usuario_e', name: 'Usuario E', relationship: 'Abuelo/a');
 
 Finder _heroTitle(String name) => find.byWidgetPredicate(
   (widget) =>
@@ -67,7 +67,7 @@ class _Details implements ReceivedRequestDetailsService {
     return {
       for (final id in ids)
         id: const ReceivedRequestDetails(
-          senderName: 'Iván',
+          senderName: 'Usuario A',
           durationSeconds: 75,
         ),
     };
@@ -120,7 +120,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pregunta 5'));
       await tester.pumpAndSettle();
-      expect(find.text('Enviada por Iván · Pendiente'), findsOneWidget);
+      expect(find.text('Enviada por Usuario A · Pendiente'), findsOneWidget);
     },
   );
 
@@ -183,20 +183,20 @@ void main() {
   }
   test('hero keeps first-member fallback and prefers an own photo without avatar metadata', () {
     expect(selectHomeHero([]), isNull);
-    expect(selectHomeHero([_pepe, _ana]), same(_pepe));
-    final photographed = _ana.withPhotoPath('own/ana/photo.png');
-    expect(selectHomeHero([_pepe, photographed]), same(photographed));
-    expect(selectHomeHero([_pepe, photographed]), same(photographed));
+    expect(selectHomeHero([_usuarioB, _usuarioE]), same(_usuarioB));
+    final photographed = _usuarioE.withPhotoPath('own/usuario_e/photo.png');
+    expect(selectHomeHero([_usuarioB, photographed]), same(photographed));
+    expect(selectHomeHero([_usuarioB, photographed]), same(photographed));
   });
 
   testWidgets(
     'hero opens the existing questions flow with the current palette',
     (tester) async {
       await tester.pumpWidget(
-        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
+        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_usuarioB])),
       );
       await tester.pumpAndSettle();
-      expect(_heroTitle('Pepe'), findsOneWidget);
+      expect(_heroTitle('Usuario B'), findsOneWidget);
       await tester.tap(find.text('Conoce su historia'));
       await tester.pumpAndSettle();
       expect(find.byType(QuestionsScreen), findsOneWidget);
@@ -249,7 +249,7 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         fixtures.testApp(
-          fixtures.MemoryFamilyMemberStorage(members: [_pepe, _ana]),
+          fixtures.MemoryFamilyMemberStorage(members: [_usuarioB, _usuarioE]),
         ),
       );
       await tester.pumpAndSettle();
@@ -261,7 +261,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(BottomSheet),
-            matching: find.text('Pepe'),
+            matching: find.text('Usuario B'),
           ),
         );
         await tester.pumpAndSettle();
@@ -276,12 +276,12 @@ void main() {
     'navigation switches roots without duplicate stacks and Android back returns Home',
     (tester) async {
       await tester.pumpWidget(
-        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
+        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_usuarioB])),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Familia'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Pepe'));
+      await tester.tap(find.text('Usuario B'));
       await tester.pumpAndSettle();
       expect(find.byType(FamilyMemberScreen), findsOneWidget);
       await tester.tap(find.byTooltip('Atrás'));
@@ -328,7 +328,7 @@ void main() {
       expect(find.text('Historia 5'), findsOneWidget);
       expect(find.text('Historia 4'), findsOneWidget);
       expect(find.text('Historia 3'), findsNothing);
-      expect(find.text('Para Iván · 05/10/2026 · 1:15'), findsOneWidget);
+      expect(find.text('Para Usuario A · 05/10/2026 · 1:15'), findsOneWidget);
       await tester.ensureVisible(find.text('Ver todas').last);
       await tester.tap(find.text('Ver todas').last);
       await tester.pumpAndSettle();
@@ -429,13 +429,13 @@ void main() {
       await tester.pumpWidget(
         fixtures.testApp(
           fixtures.MemoryFamilyMemberStorage(
-            members: [_pepe, _ana.withPhotoPath('own/ana/photo.png')],
+            members: [_usuarioB, _usuarioE.withPhotoPath('own/usuario_e/photo.png')],
           ),
           familyMemberPhotoService: photos,
         ),
       );
       await tester.pumpAndSettle();
-      expect(_heroTitle('Ana'), findsOneWidget);
+      expect(_heroTitle('Usuario E'), findsOneWidget);
       expect(photos.paths, isEmpty);
       expect(find.byType(FamilyMemberPhotoView), findsNWidgets(3));
     },
@@ -488,8 +488,8 @@ void main() {
             fixtures.MemoryFamilyMemberStorage(
               members: [
                 dimensions == null
-                    ? _pepe
-                    : _pepe.withPhotoPath('own/pepe/photo.png'),
+                    ? _usuarioB
+                    : _usuarioB.withPhotoPath('own/usuario_b/photo.png'),
               ],
             ),
             familyMemberPhotoService: photos,
@@ -498,7 +498,7 @@ void main() {
         await tester.pumpAndSettle();
         final hero = find.byKey(const ValueKey('home-hero'));
         final size = tester.getSize(hero);
-        final titleHeight = tester.getSize(_heroTitle('Pepe')).height;
+        final titleHeight = tester.getSize(_heroTitle('Usuario B')).height;
         final oldHeight =
             (titleHeight + 145 + AritoriaSpace.lg * 2 + AritoriaSpace.md + 48)
                 .clamp(350.0, double.infinity);
@@ -520,7 +520,7 @@ void main() {
   }
 
   for (final width in [320.0, 390.0]) {
-    for (final name in ['Mavi', 'Pepe', 'María José']) {
+    for (final name in ['Usuario F', 'Usuario B', 'Usuario G']) {
       testWidgets('hero avoids isolated solo at $width px for $name', (
         tester,
       ) async {
@@ -651,10 +651,10 @@ void main() {
       RepaintBoundary(
         key: key,
         child: fixtures.testApp(
-          fixtures.MemoryFamilyMemberStorage(members: [_pepe, _ana]),
+          fixtures.MemoryFamilyMemberStorage(members: [_usuarioB, _usuarioE]),
           authService: fixtures.FakeAuthService(fixtures.testAuthUser),
           familyMemberService: fixtures.FakeFamilyMemberService(
-            members: [_pepe, _ana],
+            members: [_usuarioB, _usuarioE],
           ),
           questionRequestService: _requests(),
           receivedRequestDetailsService: _Details(),

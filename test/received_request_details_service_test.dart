@@ -36,7 +36,7 @@ void main() {
             for (final id in ids)
               {
                 'request_id': id,
-                'sender_name': id == 'unnamed' ? '  ' : ' Iván ',
+                'sender_name': id == 'unnamed' ? '  ' : ' Usuario A ',
                 'duration_seconds': id == 'unnamed' ? null : 75,
               },
           ]),
@@ -77,7 +77,7 @@ void main() {
     expect(requests.single.path, '/rest/v1/rpc/get_received_request_details');
     expect(requests.single.authorization, 'Bearer test-user-token');
     expect(requests.single.ids, ['answered', 'unnamed']);
-    expect(details['answered']!.senderName, 'Iván');
+    expect(details['answered']!.senderName, 'Usuario A');
     expect(details['answered']!.durationSeconds, 75);
     expect(details['unnamed']!.senderName, isNull);
     expect(details['unnamed']!.durationSeconds, isNull);

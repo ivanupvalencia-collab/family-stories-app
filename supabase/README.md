@@ -24,6 +24,7 @@ Exportado completo desde el proyecto remoto el 2026-11-11 mediante `pg_class`,
 000006_indexes.sql              A: 16 índices existentes · B: 6 índices nuevos (C-3)
 000007_hardening.sql            ⚠️ SÍ cambia estado: S-23, S-24, S-25, S-31
 20261112000001_avatar_url_allowlist.sql  ⚠️ SÍ cambia estado: CHECK en profiles.avatar_url (S-5) · NO aplicado
+20261113000001_text_limits.sql            ⚠️ SÍ cambia estado: CHECK en family_members.name ≤ 200 (S-13) · NO aplicado
 ```
 
 **0001–0006 son un no-op** sobre el proyecto vivo: reproducen el estado actual
@@ -31,7 +32,9 @@ Exportado completo desde el proyecto remoto el 2026-11-11 mediante `pg_class`,
 **0007 sí modifica el proyecto**: revoca `TRUNCATE`, limita buckets y añade el
 límite de `question_text`. **0008 (S-5) añade un `CHECK` a `profiles.avatar_url`
 y todavía NO se ha aplicado a producción**: incluye un `select` de pre-chequeo
-que debe devolver 0 filas antes del `add constraint`.
+que debe devolver 0 filas antes del `add constraint`. **0009 (S-13) añade el
+`CHECK` de `family_members.name`** (NOT VALID + validate con aviso, igual que
+el de `question_text`) y tampoco se ha aplicado.
 
 ### Correcciones sobre el volcado crudo
 
@@ -72,6 +75,7 @@ afectan a este directorio.
 | S-3 | Sesión Supabase en SharedPreferences en claro | ✅ resuelto en la app (`secure_session_storage.dart`) |
 | S-5 | `profiles.avatar_url` es URL libre → SSRF on-device | ✅ allowlist en la app · `20261112000001` **pendiente de aplicar** |
 | S-8 | Flag de borrado remoto activo sin gate auditado | ✅ gate en `test/deletion_sql_gate_test.dart` + `tool/lint_rls.sh`: flag `true` ⇒ RPCs `prepare`/`finish_family_member_delete` en `migrations/` |
+| S-13 | `family_members.name` sin límite (el alta va por INSERT directo) | ✅ `maxLength` 200 en la UI · `20261113000001` **pendiente de aplicar** |
 | S-19 | `get_story_photo_metadata` devuelve `can_edit` siempre `true` | ⏳ documentado en `0003` |
 | S-23 | Buckets sin límite de tipo/tamaño | ✅ `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | ✅ `0007` |

@@ -22,7 +22,7 @@ Si todavía no está instalada, falta el perfil o no tiene nombre, se muestra
 «Para quien te preguntó» y se omite la duración desconocida. Las preguntas,
 respuestas, Realtime y reproducción siguen disponibles.
 
-Comprobación manual: con Pepe autenticado, los IDs de solicitudes recibidas por
-Pepe deben devolver el nombre de su remitente. Los IDs de solicitudes recibidas
+Comprobación manual: con Usuario B autenticado, los IDs de solicitudes recibidas por
+Usuario B deben devolver el nombre de su remitente. Los IDs de solicitudes recibidas
 por otra cuenta deben devolver cero filas. Prueba después Inicio → Preguntas →
 Historias que has contado y abre una respuesta para verificar el audio existente.

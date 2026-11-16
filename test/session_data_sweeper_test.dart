@@ -147,7 +147,7 @@ void main() {
     await members.replace(backend, owner, const [
       FamilyMember(
         id: _memberId,
-        name: 'Pepe',
+        name: 'Usuario B',
         relationship: 'Padre/Madre',
       ),
     ]);

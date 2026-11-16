@@ -31,7 +31,7 @@ void main() {
   late SupabaseFamilyMemberDeletionService service;
   final calls = <String>[];
   List<Map<String, String>> resources = [];
-  String owner = 'ivan';
+  String owner = 'usuario_a';
   String? failBucket;
   bool missing = false, phantom = false, finishFailure = false;
   int prepareCalls = 0, finishCalls = 0;
@@ -40,11 +40,11 @@ void main() {
   setUp(() async {
     calls.clear();
     resources = [
-      {'bucket': 'family-member-photos', 'path': 'ivan/member/photo.png'},
-      {'bucket': 'story-photos', 'path': 'pepe/story/photo.png'},
+      {'bucket': 'family-member-photos', 'path': 'usuario_a/member/photo.png'},
+      {'bucket': 'story-photos', 'path': 'usuario_b/story/photo.png'},
       {'bucket': 'story-audio', 'path': 'request/actual-response.m4a'},
     ];
-    owner = 'ivan';
+    owner = 'usuario_a';
     failBucket = null;
     missing = phantom = finishFailure = false;
     prepareCalls = finishCalls = 0;
@@ -112,7 +112,7 @@ void main() {
       'test-key',
       authOptions: const AuthClientOptions(autoRefreshToken: false),
     );
-    await _login(client, 'ivan');
+    await _login(client, 'usuario_a');
     service = SupabaseFamilyMemberDeletionService(
       client: client,
       enabled: true,
@@ -123,7 +123,7 @@ void main() {
     await client.dispose();
     await server.close(force: true);
   });
-  Future<FamilyMemberDeletionPlan> remove({String account = 'ivan'}) =>
+  Future<FamilyMemberDeletionPlan> remove({String account = 'usuario_a'}) =>
       service.delete(ownerId: account, familyMemberId: 'member');
 
   test(
@@ -131,7 +131,7 @@ void main() {
     () async {
       final enabled = SupabaseFamilyMemberDeletionService(client: client);
       expect(enabled.enabled, isTrue);
-      await enabled.delete(ownerId: 'ivan', familyMemberId: 'member');
+      await enabled.delete(ownerId: 'usuario_a', familyMemberId: 'member');
       expect(finishCalls, 1);
     },
   );
@@ -147,7 +147,7 @@ void main() {
       expect(calls.where((c) => c.endsWith('/family_members')), isEmpty);
     },
   );
-  for (final account in ['outsider', 'pepe-linked-recorder']) {
+  for (final account in ['outsider', 'usuario_b-linked-recorder']) {
     test(
       '$account is rejected by owner RPC before Storage or DB deletion',
       () async {
@@ -162,7 +162,7 @@ void main() {
     );
   }
   test('mismatched client owner/session never reaches RPC', () async {
-    await expectLater(remove(account: 'pepe'), throwsStateError);
+    await expectLater(remove(account: 'usuario_b'), throwsStateError);
     expect(calls, isEmpty);
   });
   test('no photos or audio still finalizes', () async {
@@ -227,7 +227,7 @@ void main() {
       while (prepareCalls == 0) {
         await Future<void>.delayed(const Duration(milliseconds: 5));
       }
-      await _login(client, 'pepe');
+      await _login(client, 'usuario_b');
       gate!.complete();
       gate = null;
       await assertion;

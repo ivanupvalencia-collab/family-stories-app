@@ -31,7 +31,7 @@ void main() {
   String getUrl(int v) => 'http://127.0.0.1:${server.port}/avatar?v=$v';
   Map<String, dynamic> jsonProfile(String id) => {
     'id': id,
-    'name': 'Pepe',
+    'name': 'Usuario B',
     'avatar_url': getUrl(revision),
   };
 
@@ -319,7 +319,7 @@ void main() {
     await first.remember(profile);
     await resolve(first.imageFor(profile)!);
     await first.remember(
-      const UserProfile(id: 'owner', name: 'Pepe', avatarKey: 'avatar_01'),
+      const UserProfile(id: 'owner', name: 'Usuario B', avatarKey: 'avatar_01'),
     );
     first.clear();
     final next = newImages(client);

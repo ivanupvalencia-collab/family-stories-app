@@ -239,10 +239,12 @@ class _AddFamilyMemberScreenState extends State<AddFamilyMemberScreen> {
                               label: 'Nombre',
                               child: TextFormField(
                                 controller: _nameController,
+                                // S-13: same ceiling as the edit RPC (200).
+                                maxLength: 200,
                                 textCapitalization: TextCapitalization.words,
                                 style: AritoriaType.body,
                                 decoration: inputDecoration.copyWith(
-                                  hintText: 'Ej. Abuela Carmen',
+                                  hintText: 'Ej. Nombre de la abuela',
                                   prefixIcon: const Icon(
                                     Icons.person_outline_rounded,
                                     color: AritoriaColors.olive,

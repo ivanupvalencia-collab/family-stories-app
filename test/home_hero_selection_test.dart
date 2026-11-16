@@ -14,16 +14,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'widget_test.dart' as fixtures;
 
-const first = FamilyMember(id: 'first', name: 'Ana', relationship: 'Abuelo/a');
+const first = FamilyMember(id: 'first', name: 'Usuario E', relationship: 'Abuelo/a');
 const linked = FamilyMember(
   id: 'linked',
-  name: 'Pepe',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
   linkedAccountId: 'account',
 );
 const account = UserProfile(
   id: 'account',
-  name: 'Cuenta de Pepe',
+  name: 'Cuenta de Usuario B',
   avatarKey: 'avatar_01',
 );
 
@@ -119,7 +119,7 @@ void main() {
         [first, linked],
         linkedProfile: (_) => const UserProfile(
           id: 'account',
-          name: 'Pepe',
+          name: 'Usuario B',
           avatarUrl: 'https://example.test/photo.png',
         ),
       ),
@@ -130,7 +130,7 @@ void main() {
         [first, linked],
         linkedProfile: (_) => const UserProfile(
           id: 'account',
-          name: 'Pepe',
+          name: 'Usuario B',
           avatarUrl: '  ',
           avatarKey: 'unknown',
         ),
@@ -141,7 +141,7 @@ void main() {
       selectHomeHero([
         linked,
         own,
-      ], linkedProfile: (_) => const UserProfile(id: 'account', name: 'Pepe')),
+      ], linkedProfile: (_) => const UserProfile(id: 'account', name: 'Usuario B')),
       same(own),
     );
   });

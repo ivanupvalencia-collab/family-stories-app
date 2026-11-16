@@ -63,7 +63,7 @@ class _CachedPhotos extends _Photos {
 
 const _member = FamilyMember(
   id: 'member',
-  name: 'Pepe',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
   linkedAccountId: 'linked-account',
 );
@@ -113,7 +113,7 @@ Future<void> _choosePhoto(
 }
 
 Future<void> _fillCreateForm(WidgetTester tester) async {
-  await tester.enterText(find.byType(TextFormField), 'Pepe');
+  await tester.enterText(find.byType(TextFormField), 'Usuario B');
   await tester.tap(find.byType(DropdownButtonFormField<String>));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Padre/Madre').last);
@@ -143,7 +143,7 @@ void main() {
       expect(find.text('Actualizar familiar'), findsNothing);
       await tester.tap(find.text('Editar información'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField), 'Pepe actualizado');
+      await tester.enterText(find.byType(TextFormField), 'Usuario B actualizado');
       await tester.tap(find.text('Cambiar foto'));
       await confirmPhotoCrop(tester);
       expect(storage.members.single.photoPath, 'own/member/1.png');
@@ -152,14 +152,14 @@ void main() {
             .widget<TextFormField>(find.byType(TextFormField))
             .controller!
             .text,
-        'Pepe actualizado',
+        'Usuario B actualizado',
       );
       await tester.tap(find.text('Eliminar foto'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Guardar cambios'));
       await tester.tap(find.text('Guardar cambios'));
       await tester.pumpAndSettle();
-      expect(storage.members.single.name, 'Pepe actualizado');
+      expect(storage.members.single.name, 'Usuario B actualizado');
       expect(storage.members.single.photoPath, isNull);
       expect(storage.members.single.linkedAccountId, original.linkedAccountId);
       expect(tester.takeException(), isNull);
@@ -218,7 +218,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Guardar'));
       await tester.pumpAndSettle();
-      expect(storage.members.single.name, 'Pepe');
+      expect(storage.members.single.name, 'Usuario B');
       expect(storage.members.single.relationship, 'Padre/Madre');
       expect(storage.members.single.photoPath, isNotNull);
       expect(photos.savedImages.single!.contentType, 'image/jpeg');
@@ -288,7 +288,7 @@ void main() {
       await tester.tap(find.text('Guardar'));
       await tester.pumpAndSettle();
       expect(storage.members.single.photoPath, isNull);
-      expect(storage.members.single.name, 'Pepe');
+      expect(storage.members.single.name, 'Usuario B');
       expect(photos.savedImages, isEmpty);
     },
   );
@@ -373,7 +373,7 @@ void main() {
         expect(find.byIcon(Icons.person_outline), findsOneWidget);
         await tester.pageBack();
         await tester.pumpAndSettle();
-        expect(find.text('P'), findsOneWidget);
+        expect(find.text('U'), findsOneWidget);
         expect(
           (remote ? members.members : storage.members).single.photoPath,
           isNull,

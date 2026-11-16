@@ -195,7 +195,7 @@ void main() {
     const linkedAccountId = '33333333-3333-4333-8333-333333333333';
     final member = FamilyMember.fromSupabaseJson(const {
       'id': memberId,
-      'name': 'Ana',
+      'name': 'Usuario E',
       'relationship': 'Abuelo/a',
       'linked_account_id': linkedAccountId,
     });
@@ -204,7 +204,7 @@ void main() {
     expect(member.linkedAccountId, linkedAccountId);
     expect(member.toSupabaseInsert(ownerId: ownerId), const {
       'owner_id': ownerId,
-      'name': 'Ana',
+      'name': 'Usuario E',
       'relationship': 'Abuelo/a',
       'linked_account_id': linkedAccountId,
     });
@@ -323,13 +323,13 @@ void main() {
     localStorage.members = const [
       FamilyMember(
         id: 'local-member',
-        name: 'Carmen',
+        name: 'Usuario M',
         relationship: 'Abuelo/a',
       ),
     ];
     await tester.drag(find.byType(ListView), const Offset(0, 350));
     await tester.pumpAndSettle();
-    expect(find.text('Carmen'), findsOneWidget);
+    expect(find.text('Usuario M'), findsOneWidget);
     expect(questionRequestService.requestedRecipientIds, isEmpty);
   });
 
@@ -566,7 +566,7 @@ void main() {
       testQuestionRequest(
         id: 'request-a',
         recipientId: testAuthUser.id,
-        questionText: 'Pregunta antigua de Ana',
+        questionText: 'Pregunta antigua de Usuario E',
       ),
     ]);
     await tester.pumpAndSettle();
@@ -576,7 +576,7 @@ void main() {
       secondUser.id,
     ]);
     expect(find.text('Pregunta para Bruno'), findsOneWidget);
-    expect(find.text('Pregunta antigua de Ana'), findsNothing);
+    expect(find.text('Pregunta antigua de Usuario E'), findsNothing);
     expect(storyService.clearAudioCacheCalls, 1);
   });
 
@@ -800,8 +800,8 @@ void main() {
     expect(authService.signInCalls, 1);
     expect(profileService.requestedUserIds, isNotEmpty);
     expect(profileService.requestedUserIds, everyElement('google-user-id'));
-    expect(find.text('Ana García'), findsOneWidget);
-    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('Usuario D'), findsOneWidget);
+    expect(find.text('usuario-e@example.com'), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsOneWidget);
   });
 
@@ -817,8 +817,8 @@ void main() {
     await tester.tap(find.byTooltip('Perfil'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ana García'), findsOneWidget);
-    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('Usuario D'), findsOneWidget);
+    expect(find.text('usuario-e@example.com'), findsOneWidget);
 
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pump();
@@ -848,21 +848,21 @@ void main() {
 
       expect(
         profileService.cachedForUser('google-user-id')?.name,
-        'Ana García',
+        'Usuario D',
       );
 
       await tester.tap(find.byTooltip('Perfil'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ana García'), findsOneWidget);
+      expect(find.text('Usuario D'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
       refreshCompleter.complete(
-        const UserProfile(id: 'google-user-id', name: 'Ana actualizada'),
+        const UserProfile(id: 'google-user-id', name: 'Usuario E actualizada'),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Ana actualizada'), findsOneWidget);
+      expect(find.text('Usuario E actualizada'), findsOneWidget);
     },
   );
 
@@ -884,7 +884,7 @@ void main() {
     await tester.tap(find.byTooltip('Perfil'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ana García'), findsOneWidget);
+    expect(find.text('Usuario D'), findsOneWidget);
 
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
@@ -903,7 +903,7 @@ void main() {
 
     expect(find.text('Bruno Pérez'), findsOneWidget);
     expect(find.text('bruno@example.com'), findsOneWidget);
-    expect(find.text('Ana García'), findsNothing);
+    expect(find.text('Usuario D'), findsNothing);
   });
 
   testWidgets('mantiene disponible el perfil si falla su carga', (
@@ -925,7 +925,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No se pudo cargar tu perfil.'), findsOneWidget);
-    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('usuario-e@example.com'), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsOneWidget);
 
     await tester.tap(find.text('Reintentar'));
@@ -954,19 +954,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Editar perfil'), findsOneWidget);
-    expect(find.text('Ana García'), findsOneWidget);
+    expect(find.text('Usuario D'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField), '  María López  ');
+    await tester.enterText(find.byType(TextFormField), '  Usuario H  ');
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 
     expect(profileService.updatedUserIds, ['google-user-id']);
-    expect(profileService.updatedNames, ['María López']);
+    expect(profileService.updatedNames, ['Usuario H']);
     expect(profileService.updatedAvatarKeys, [null]);
     expect(profileService.updatedAvatarUrls, [null]);
-    expect(profileService.cachedForUser('google-user-id')?.name, 'María López');
-    expect(find.text('María López'), findsOneWidget);
-    expect(find.text('Ana García'), findsNothing);
+    expect(profileService.cachedForUser('google-user-id')?.name, 'Usuario H');
+    expect(find.text('Usuario H'), findsOneWidget);
+    expect(find.text('Usuario D'), findsNothing);
   });
 
   testWidgets('selecciona, guarda y muestra un avatar predefinido', (
@@ -1109,7 +1109,7 @@ void main() {
     final profileService = FakeProfileService(
       profile: const UserProfile(
         id: 'google-user-id',
-        name: 'Ana García',
+        name: 'Usuario D',
         avatarUrl: 'https://example.com/old-avatar.jpg',
       ),
     );
@@ -1140,7 +1140,7 @@ void main() {
     final profileService = FakeProfileService(
       profile: const UserProfile(
         id: 'google-user-id',
-        name: 'Ana García',
+        name: 'Usuario D',
         avatarKey: 'avatar_02',
       ),
     );
@@ -1193,7 +1193,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const originalProfile = UserProfile(
       id: 'google-user-id',
-      name: 'Ana García',
+      name: 'Usuario D',
       avatarKey: 'avatar_04',
     );
     final profileService = FakeProfileService(profile: originalProfile);
@@ -1254,7 +1254,7 @@ void main() {
     expect(find.text('Nombre'), findsOneWidget);
     expect(find.text('Relación contigo'), findsOneWidget);
 
-    await tester.enterText(find.byType(EditableText), 'Ana');
+    await tester.enterText(find.byType(EditableText), 'Usuario E');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abuelo/a').last);
@@ -1262,7 +1262,7 @@ void main() {
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ana'), findsOneWidget);
+    expect(find.text('Usuario E'), findsOneWidget);
     await tester.tap(find.text('Familia'));
     await tester.pumpAndSettle();
     expect(find.text('Abuelo/a'), findsOneWidget);
@@ -1270,7 +1270,7 @@ void main() {
       find.text('Las historias de tu familia empiezan aquí'),
       findsNothing,
     );
-    expect(storage.members.single.name, 'Ana');
+    expect(storage.members.single.name, 'Usuario E');
     expect(storage.saveCalls, 1);
   });
 
@@ -1368,7 +1368,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(EditableText), 'Elena');
+    await tester.enterText(find.byType(EditableText), 'Usuario K');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hermano/a').last);
@@ -1376,9 +1376,9 @@ void main() {
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Elena'), findsOneWidget);
+    expect(find.text('Usuario K'), findsOneWidget);
     expect(remoteService.createdOwnerIds, ['google-user-id']);
-    expect(remoteService.createdNames, ['Elena']);
+    expect(remoteService.createdNames, ['Usuario K']);
     expect(remoteService.createdRelationships, ['Hermano/a']);
     expect(storage.saveCalls, 0);
   });
@@ -1458,7 +1458,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(EditableText), 'Ana');
+    await tester.enterText(find.byType(EditableText), 'Usuario E');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abuelo/a').last);
@@ -1466,7 +1466,7 @@ void main() {
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Ana'));
+    await tester.tap(find.text('Usuario E'));
     await tester.pumpAndSettle();
 
     expect(find.text('Conoce su historia'), findsOneWidget);
@@ -1503,9 +1503,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Responder ahora'), findsOneWidget);
-    expect(find.text('Enviar a Ana'), findsOneWidget);
+    expect(find.text('Enviar a Usuario E'), findsOneWidget);
 
-    await tester.tap(find.text('Enviar a Ana'));
+    await tester.tap(find.text('Enviar a Usuario E'));
     await tester.pumpAndSettle();
     expect(
       find.text(
@@ -1519,7 +1519,7 @@ void main() {
     await tester.tap(find.text('Responder ahora'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Para Ana'), findsOneWidget);
+    expect(find.text('Para Usuario E'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
 
     expect(find.text('Grabar historia'), findsOneWidget);
@@ -1530,7 +1530,7 @@ void main() {
   ) async {
     const familyMember = FamilyMember(
       id: '11111111-1111-4111-8111-111111111111',
-      name: 'Pepe',
+      name: 'Usuario B',
       relationship: 'Padre/Madre',
     );
     final invitationService = FakeInvitationService();
@@ -1547,7 +1547,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pumpAndSettle();
     final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
     expect(dialog.backgroundColor, AritoriaColors.cream);
@@ -1559,9 +1559,9 @@ void main() {
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();
     expect(invitationService.createdFamilyMemberIds, isEmpty);
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Invitar a Pepe'));
+    await tester.tap(find.text('Invitar a Usuario B'));
     await tester.pumpAndSettle();
 
     expect(invitationService.createdFamilyMemberIds, [familyMember.id]);
@@ -1582,7 +1582,7 @@ void main() {
       invitationOptionsApp(
         familyMember: const FamilyMember(
           id: '11111111-1111-4111-8111-111111111111',
-          name: 'Pepe',
+          name: 'Usuario B',
           relationship: 'Padre/Madre',
           linkedAccountId: 'second-user-id',
         ),
@@ -1593,7 +1593,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pumpAndSettle();
 
     expect(questionRequestService.familyMemberIds, [
@@ -1602,7 +1602,7 @@ void main() {
     expect(questionRequestService.questionTexts, [
       '¿Cuál es tu primer recuerdo?',
     ]);
-    expect(find.text('Pregunta enviada a Pepe'), findsOneWidget);
+    expect(find.text('Pregunta enviada a Usuario B'), findsOneWidget);
     expect(invitationService.createdFamilyMemberIds, isEmpty);
   });
 
@@ -1611,14 +1611,14 @@ void main() {
   ) async {
     const staleFamilyMember = FamilyMember(
       id: '11111111-1111-4111-8111-111111111111',
-      name: 'Pepe',
+      name: 'Usuario B',
       relationship: 'Padre/Madre',
     );
     final familyMemberService = FakeFamilyMemberService(
       members: const [
         FamilyMember(
           id: '11111111-1111-4111-8111-111111111111',
-          name: 'Pepe',
+          name: 'Usuario B',
           relationship: 'Padre/Madre',
           linkedAccountId: 'second-user-id',
         ),
@@ -1637,7 +1637,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pumpAndSettle();
 
     expect(familyMemberService.requestedOwnerIds, [testAuthUser.id]);
@@ -1656,7 +1656,7 @@ void main() {
       invitationOptionsApp(
         familyMember: const FamilyMember(
           id: '11111111-1111-4111-8111-111111111111',
-          name: 'Pepe',
+          name: 'Usuario B',
           relationship: 'Padre/Madre',
           linkedAccountId: 'second-user-id',
         ),
@@ -1667,18 +1667,18 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pump();
     await tester.pump();
 
     expect(find.text('Enviando pregunta...'), findsOneWidget);
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pump();
     expect(questionRequestService.familyMemberIds, hasLength(1));
 
     completer.complete('55555555-5555-4555-8555-555555555555');
     await tester.pumpAndSettle();
-    expect(find.text('Pregunta enviada a Pepe'), findsOneWidget);
+    expect(find.text('Pregunta enviada a Usuario B'), findsOneWidget);
   });
 
   testWidgets('muestra un error comprensible si falla el envío', (
@@ -1691,7 +1691,7 @@ void main() {
       invitationOptionsApp(
         familyMember: const FamilyMember(
           id: '11111111-1111-4111-8111-111111111111',
-          name: 'Pepe',
+          name: 'Usuario B',
           relationship: 'Padre/Madre',
           linkedAccountId: 'second-user-id',
         ),
@@ -1702,7 +1702,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pumpAndSettle();
 
     expect(
@@ -1720,7 +1720,7 @@ void main() {
       invitationOptionsApp(
         familyMember: const FamilyMember(
           id: 'local-id',
-          name: 'Pepe',
+          name: 'Usuario B',
           relationship: 'Padre/Madre',
         ),
         authService: FakeAuthService(),
@@ -1729,7 +1729,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Enviar a Pepe'));
+    await tester.tap(find.text('Enviar a Usuario B'));
     await tester.pumpAndSettle();
 
     expect(find.text('Necesitas iniciar sesión'), findsOneWidget);
@@ -1750,7 +1750,7 @@ void main() {
 
     expect(invitationService.previewedTokens, [testInvitationToken]);
     expect(
-      find.text('Ana García te invita a conectarte como Pepe.'),
+      find.text('Usuario D te invita a conectarte como Usuario B.'),
       findsOneWidget,
     );
     expect(find.text('Aceptar'), findsOneWidget);
@@ -1779,7 +1779,7 @@ void main() {
       find.text('El código no es válido o ya no está disponible.'),
       findsOneWidget,
     );
-    expect(find.text('Pepe'), findsNothing);
+    expect(find.text('Usuario B'), findsNothing);
   });
 
   testWidgets('rechaza en el cliente un código con formato inválido', (
@@ -1826,7 +1826,7 @@ void main() {
     // The RPC receives the bare token, not the full URI.
     expect(invitationService.previewedTokens, [testInvitationToken]);
     expect(
-      find.text('Ana García te invita a conectarte como Pepe.'),
+      find.text('Usuario D te invita a conectarte como Usuario B.'),
       findsOneWidget,
     );
     expect(find.text('Aceptar'), findsOneWidget);
@@ -1924,7 +1924,7 @@ void main() {
 
     expect(invitationService.previewedTokens, [testInvitationToken]);
     expect(
-      find.text('Ana García te invita a conectarte como Pepe.'),
+      find.text('Usuario D te invita a conectarte como Usuario B.'),
       findsOneWidget,
     );
   });
@@ -2023,14 +2023,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Añadir ser querido').last);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(EditableText), 'Ana');
+    await tester.enterText(find.byType(EditableText), 'Usuario E');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abuelo/a').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Ana'));
+    await tester.tap(find.text('Usuario E'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ver todas las preguntas'));
     await tester.pumpAndSettle();
@@ -2038,7 +2038,7 @@ void main() {
     await tester.tap(find.text('Escribir mi propia pregunta'));
     await tester.pumpAndSettle();
 
-    expect(find.text('¿Qué quieres preguntarle a Ana?'), findsOneWidget);
+    expect(find.text('¿Qué quieres preguntarle a Usuario E?'), findsOneWidget);
 
     await tester.tap(find.text('Continuar'));
     await tester.pump();
@@ -2056,12 +2056,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Responder ahora'), findsOneWidget);
-    expect(find.text('Enviar a Ana'), findsOneWidget);
+    expect(find.text('Enviar a Usuario E'), findsOneWidget);
 
     await tester.tap(find.text('Responder ahora'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Para Ana'), findsOneWidget);
+    expect(find.text('Para Usuario E'), findsOneWidget);
     expect(find.text('Grabar respuesta'), findsOneWidget);
   });
 
@@ -2071,8 +2071,8 @@ void main() {
     final storage = MemoryFamilyMemberStorage(
       members: const [
         FamilyMember(
-          id: 'carlos-id',
-          name: 'Carlos',
+          id: 'usuario-l-id',
+          name: 'Usuario L',
           relationship: 'Padre/Madre',
         ),
       ],
@@ -2081,7 +2081,7 @@ void main() {
     await tester.pumpWidget(testApp(storage));
     await tester.pumpAndSettle();
 
-    expect(find.text('Carlos'), findsOneWidget);
+    expect(find.text('Usuario L'), findsOneWidget);
     await tester.tap(find.text('Familia'));
     await tester.pumpAndSettle();
     expect(find.text('Padre/Madre'), findsOneWidget);
@@ -2090,7 +2090,7 @@ void main() {
     await tester.pumpWidget(testApp(storage));
     await tester.pumpAndSettle();
 
-    expect(find.text('Carlos'), findsOneWidget);
+    expect(find.text('Usuario L'), findsOneWidget);
   });
 
   testWidgets('recorre los estados de grabación y reproducción', (
@@ -2101,8 +2101,8 @@ void main() {
       MaterialApp(
         home: QuestionScreen(
           familyMember: const FamilyMember(
-            id: 'ana-id',
-            name: 'Ana',
+            id: 'usuario-e-id',
+            name: 'Usuario E',
             relationship: 'Abuelo/a',
           ),
           question: const Question('¿Cuál es tu primer recuerdo?'),
@@ -2156,8 +2156,8 @@ void main() {
                   MaterialPageRoute(
                     builder: (context) => QuestionScreen(
                       familyMember: const FamilyMember(
-                        id: 'ana-id',
-                        name: 'Ana',
+                        id: 'usuario-e-id',
+                        name: 'Usuario E',
                         relationship: 'Abuelo/a',
                       ),
                       question: const Question('¿Cuál es tu primer recuerdo?'),
@@ -2186,21 +2186,21 @@ void main() {
 
     expect(find.text('Abrir pregunta'), findsOneWidget);
     expect(storyStorage.stories, hasLength(1));
-    expect(storyStorage.stories.single.familyMemberId, 'ana-id');
+    expect(storyStorage.stories.single.familyMemberId, 'usuario-e-id');
     expect(storyStorage.stories.single.duration, const Duration(seconds: 2));
   });
 
   testWidgets('muestra las historias guardadas del familiar', (tester) async {
     final familyMember = const FamilyMember(
-      id: 'ana-id',
-      name: 'Ana',
+      id: 'usuario-e-id',
+      name: 'Usuario E',
       relationship: 'Abuelo/a',
     );
     final storyStorage = MemoryFamilyStoryStorage(
       stories: [
         FamilyStory(
           id: 'story-1',
-          familyMemberId: 'ana-id',
+          familyMemberId: 'usuario-e-id',
           question: '¿Cuál es tu primer recuerdo?',
           audioPath: '/persistent/story.m4a',
           duration: const Duration(seconds: 42),
@@ -2226,7 +2226,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Familia'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Ana'));
+    await tester.tap(find.text('Usuario E'));
     await tester.pumpAndSettle();
 
     expect(find.text('¿Cuál es tu primer recuerdo?'), findsOneWidget);
@@ -2240,7 +2240,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const familyMember = FamilyMember(
       id: 'remote-family-id',
-      name: 'Pepe',
+      name: 'Usuario B',
       relationship: 'Padre/Madre',
     );
     final storyService = FakeFamilyStoryService(
@@ -2280,7 +2280,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pepe'));
+    await tester.tap(find.text('Usuario B'));
     await tester.pumpAndSettle();
 
     expect(storyService.requestedFamilyMemberIds, [familyMember.id]);
@@ -2369,7 +2369,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const familyMember = FamilyMember(
       id: 'remote-family-id',
-      name: 'Pepe',
+      name: 'Usuario B',
       relationship: 'Padre/Madre',
     );
     await tester.pumpWidget(
@@ -2383,7 +2383,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pepe'));
+    await tester.tap(find.text('Usuario B'));
     await tester.pumpAndSettle();
 
     expect(find.text('No se pudieron cargar sus historias.'), findsOneWidget);
@@ -2432,8 +2432,8 @@ void main() {
       MaterialApp(
         home: QuestionScreen(
           familyMember: const FamilyMember(
-            id: 'ana-id',
-            name: 'Ana',
+            id: 'usuario-e-id',
+            name: 'Usuario E',
             relationship: 'Abuelo/a',
           ),
           question: const Question('¿Cuál es tu primer recuerdo?'),
@@ -2794,9 +2794,9 @@ void main() {
   });
 }
 
-const testAuthUser = AuthUser(id: 'google-user-id', email: 'ana@example.com');
+const testAuthUser = AuthUser(id: 'google-user-id', email: 'usuario-e@example.com');
 
-const testUserProfile = UserProfile(id: 'google-user-id', name: 'Ana García');
+const testUserProfile = UserProfile(id: 'google-user-id', name: 'Usuario D');
 
 const testInvitationToken =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -2808,8 +2808,8 @@ final testFamilyInvitation = FamilyInvitation(
 );
 
 final testInvitationPreview = InvitationPreview(
-  familyMemberName: 'Pepe',
-  inviterName: 'Ana García',
+  familyMemberName: 'Usuario B',
+  inviterName: 'Usuario D',
   expiresAt: DateTime.utc(2026, 10, 11),
 );
 

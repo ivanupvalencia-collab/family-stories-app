@@ -258,28 +258,28 @@ void main() {
     (tester) async {
       final audio = _SeekingAudio();
       await tester.pumpWidget(
-        _app(senderName: '  Iván Fernández  ', audio: audio),
+        _app(senderName: '  Usuario A  ', audio: audio),
       );
       await tester.tap(find.text('Abrir pregunta recibida'));
       await tester.pumpAndSettle();
       expect(
-        find.text('Enviada por Iván Fernández · Pendiente'),
+        find.text('Enviada por Usuario A · Pendiente'),
         findsOneWidget,
       );
       await tester.tap(find.text('Grabar respuesta'));
       await tester.pumpAndSettle();
       expect(
-        find.text('Enviada por Iván Fernández · Pendiente'),
+        find.text('Enviada por Usuario A · Pendiente'),
         findsOneWidget,
       );
       expect(
-        find.text('Enviada por Iván Fernández · Pendiente'),
+        find.text('Enviada por Usuario A · Pendiente'),
         findsOneWidget,
       );
       await tester.tap(find.byTooltip('Detener grabación'));
       await tester.pumpAndSettle();
       expect(
-        find.text('Enviada por Iván Fernández · Pendiente'),
+        find.text('Enviada por Usuario A · Pendiente'),
         findsOneWidget,
       );
       await tester.pumpWidget(const SizedBox());

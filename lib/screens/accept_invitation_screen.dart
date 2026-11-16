@@ -164,6 +164,9 @@ class _AcceptInvitationScreenState extends State<AcceptInvitationScreen> {
                         key: _formKey,
                         child: TextFormField(
                           controller: _tokenController,
+                          // S-13: token (<=256) plus the familystories://
+                          // invite/ prefix (24) when the whole link is pasted.
+                          maxLength: 280,
                           enabled: !_isChecking && !_isAccepting,
                           autocorrect: false,
                           enableSuggestions: false,

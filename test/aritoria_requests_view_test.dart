@@ -21,7 +21,7 @@ class _Avatars extends VisibleAccountAvatarService {
   @override
   UserProfile? cached(String id) => const UserProfile(
     id: 'sender-user-id',
-    name: 'Iván Fernández Ariza',
+    name: 'Usuario A',
     avatarKey: 'avatar_01',
   );
   @override
@@ -68,11 +68,11 @@ Widget _app({
           avatarService: avatars,
           details: const {
             'q0': ReceivedRequestDetails(
-              senderName: 'Iván Fernández Ariza',
+              senderName: 'Usuario A',
               durationSeconds: 75,
             ),
             'q1': ReceivedRequestDetails(
-              senderName: 'Ana',
+              senderName: 'Usuario E',
               durationSeconds: 90,
             ),
           },
@@ -116,7 +116,7 @@ void main() {
       expect(question.style!.fontFamily, 'Lora');
       expect(question.data, contains('pequeño\u2060/\u2060a'));
       expect(question.semanticsLabel, _requests().first.questionText);
-      expect(find.text('De Iván Fernández Ariza · 04/10/2026'), findsOneWidget);
+      expect(find.text('De Usuario A · 04/10/2026'), findsOneWidget);
       await tester.tap(find.textContaining('casa'));
       expect(opened!.id, 'q0');
       expect(opened!.questionText, _requests().first.questionText);
@@ -139,7 +139,7 @@ void main() {
       expect(find.byType(AccountAvatarView), findsNothing);
       expect(find.byIcon(Icons.play_arrow_rounded), findsNWidgets(2));
       expect(
-        find.text('Para Iván Fernández Ariza · 05/10/2026\u00a0·\u00a01:15'),
+        find.text('Para Usuario A · 05/10/2026\u00a0·\u00a01:15'),
         findsOneWidget,
       );
       await tester.tap(find.textContaining('casa'));
@@ -219,13 +219,13 @@ void main() {
         (widget) =>
             widget is Text &&
             widget.semanticsLabel ==
-                'Para Iván Fernández Ariza · 05/10/2026 · 1:15',
+                'Para Usuario A · 05/10/2026 · 1:15',
       );
       final metadata = tester.widget<Text>(metadataFinder).data!;
       if (width == 320) {
         expect(
           metadata,
-          'Para Iván Fernández Ariza\n05/10/2026\u00a0·\u00a01:15',
+          'Para Usuario A\n05/10/2026\u00a0·\u00a01:15',
         );
       }
       final paragraph = tester.renderObject<RenderParagraph>(
@@ -250,7 +250,7 @@ void main() {
       expect(date.single.top, duration.single.top);
       expect(
         tester.widget<Text>(find.text(metadata)).semanticsLabel,
-        'Para Iván Fernández Ariza · 05/10/2026 · 1:15',
+        'Para Usuario A · 05/10/2026 · 1:15',
       );
       expect(tester.takeException(), isNull);
     });

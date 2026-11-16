@@ -13,8 +13,8 @@
 --                    igualmente como hallazgo informativo.
 --
 -- SANITIZACION: el comentario original de complete_question_request contenia
--- un nombre personal real ("Iván"). Sustituido por un comentario generico.
--- Sin cambio semantico.
+-- un nombre personal real (ya no aparece en el repo). Sustituido por un
+-- comentario generico. Sin cambio semantico.
 --
 -- Todas las SECURITY DEFINER llevan SET search_path TO '' (verificado).
 -- =============================================================================
