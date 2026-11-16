@@ -25,7 +25,7 @@ desde entonces.
 | S-12/13/14/15 | Content-type por nombre · sin `maxLength` · `.gitignore` sin `.env*`/keystores · PII en docs | Bajo | ✅ este commit · sniffing de magic bytes + `maxLength` 200/500/280 + CHECK `family_members.name` en `20261113000001` (sin aplicar) + nombres sanitizados en docs/tests |
 | S-16 | Enlace inicial (`getInitialUri`) no capturado | Bajo | ✅ `cd5a1e0` |
 | S-17 | SQL reescribe políticas ajenas con `alter policy ... format(...)` | Medio | ✅ este commit · `07` usa 3 `alter policy` explícitos + gate S-17 en `lint_rls.sh` (ambos modos) |
-| S-19 | `get_story_metadata` devuelve `can_edit` siempre `true` | Medio | ⏳ documentado en `0003` |
+| S-19 | `get_story_metadata` devuelve `can_edit` siempre `true` | Medio | ✅ este commit · `can_edit` calculado (owner/recorder) en `0003` + gate S-19 en `lint_rls.sh` + test de contrato |
 | S-23 | Buckets sin límite de tipo/tamaño | Medio | ✅ `b878d8c` · `0007` |
 | S-24 | `TRUNCATE` para `anon`/`authenticated` | Alto | ✅ `b878d8c` · `0007` |
 | S-25 | `question_text` sin límite superior | Medio | ✅ `b878d8c` · `0007` |

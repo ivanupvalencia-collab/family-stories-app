@@ -273,6 +273,22 @@ else
   pass "Sin alter policy dinamico en supabase/"
 fi
 
+# -----------------------------------------------------------------------------
+# S-19: can_edit en get_story_photo_metadata debe calcularse con el mismo
+# predicado que set_story_photo (owner o recorded_by), no con un literal
+# true. Solo se comprueban las migraciones versionadas: supabase/manual/04 es
+# un script historico instalado que se conserva tal cual (decision registrada).
+# -----------------------------------------------------------------------------
+section "can_edit calculado en get_story_photo_metadata (S-19)"
+HITS=$(grep -rniE "'can_edit'[[:space:]]*,[[:space:]]*true" "$REPO_ROOT/supabase/migrations" --include='*.sql' 2>/dev/null \
+    | sed -E 's/^[^:]*:[0-9]+:[[:space:]]*--.*$//' | grep -v '^[[:space:]]*$' || true)
+if [ -n "$HITS" ]; then
+  printf '%s\n' "$HITS" | sed 's/^/      /'
+  fail "'can_edit' literal true: usa el predicado owner/recorder (S-19)"
+else
+  pass "can_edit calculado (sin literal true) en migrations/"
+fi
+
 printf '\n'
 if [ "$FAILURES" -gt 0 ]; then
   printf 'LINT FALLIDO: %d problema(s).\n' "$FAILURES"

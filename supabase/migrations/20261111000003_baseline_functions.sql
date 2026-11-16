@@ -696,9 +696,11 @@ as $function$
     'audio_path', s.audio_path, 'duration_seconds', s.duration_seconds,
     'created_at', s.created_at, 'question_request_id', s.question_request_id,
     'recorded_by', s.recorded_by, 'photo_path', s.photo_path,
-    -- S-19: can_edit se devuelve siempre true. La autorizacion real la aplica
-    -- set_story_photo. Solo afecta a lo que la UI muestra.
-    'can_edit', true)
+    -- S-19: can_edit refleja el mismo predicado que set_story_photo (owner
+    -- del familiar o recorded_by). Con el WHERE de esta consulta siempre
+    -- evalua true para las filas devueltas; queda conectado a la authz real
+    -- para no divergir si el WHERE o las reglas de edicion cambian.
+    'can_edit', (fm.owner_id = auth.uid() or s.recorded_by = auth.uid()))
   from public.stories s
   join public.family_members fm on fm.id = s.family_member_id
   where s.id = p_story_id
