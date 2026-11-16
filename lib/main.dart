@@ -268,6 +268,7 @@ class _FamilyStoriesAppState extends State<FamilyStoriesApp> {
       theme: ThemeData(
         colorScheme: AritoriaDesign.theme().colorScheme,
         scaffoldBackgroundColor: AritoriaColors.cream,
+        appBarTheme: AritoriaDesign.theme().appBarTheme,
         progressIndicatorTheme: const ProgressIndicatorThemeData(
           color: AritoriaColors.olive,
         ),

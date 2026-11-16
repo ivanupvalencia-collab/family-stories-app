@@ -12,6 +12,7 @@ import '../services/story_photo_service.dart';
 import '../services/story_waveform_service.dart';
 import '../services/persistent_story_waveform_service.dart';
 import '../services/profile_image_picker.dart';
+import '../services/photo_selection_service.dart';
 import '../widgets/story_photo_view.dart';
 
 class StoryScreen extends StatefulWidget {
@@ -174,8 +175,10 @@ class _StoryScreenState extends State<StoryScreen> {
     try {
       final image = remove
           ? null
-          : await (widget.imagePicker ?? DeviceProfileImagePicker())
-                .pickFromGallery();
+          : await PhotoSelectionService.pick(
+              context,
+              picker: widget.imagePicker ?? DeviceProfileImagePicker(),
+            );
       if (!mounted || (!remove && image == null)) return;
       final updated = await _photos.save(_story, image);
       if (mounted) setState(() => _story = updated);

@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:typed_data';
 
 import 'package:family_stories_app/models/family_member.dart';
@@ -92,7 +94,10 @@ Widget _profile({
   ),
 );
 
-Future<void> _choosePhoto(WidgetTester tester) async {
+Future<void> _choosePhoto(
+  WidgetTester tester, {
+  bool cancelledGallery = false,
+}) async {
   if (find.byTooltip('Opciones del ser querido').evaluate().isNotEmpty) {
     await tester.tap(find.byTooltip('Opciones del ser querido'));
     await tester.pumpAndSettle();
@@ -100,7 +105,11 @@ Future<void> _choosePhoto(WidgetTester tester) async {
     await tester.pumpAndSettle();
   }
   await tester.tap(find.text('Cambiar foto'));
-  await tester.pumpAndSettle();
+  if (cancelledGallery) {
+    await tester.pumpAndSettle();
+  } else {
+    await confirmPhotoCrop(tester);
+  }
 }
 
 Future<void> _fillCreateForm(WidgetTester tester) async {
@@ -136,7 +145,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), 'Pepe actualizado');
       await tester.tap(find.text('Cambiar foto'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(storage.members.single.photoPath, 'own/member/1.png');
       expect(
         tester
@@ -203,7 +212,7 @@ void main() {
       await tester.pumpAndSettle();
       await _fillCreateForm(tester);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(find.text('Quitar foto seleccionada'), findsOneWidget);
       await tester.ensureVisible(find.text('Guardar'));
       await tester.pumpAndSettle();
@@ -212,7 +221,7 @@ void main() {
       expect(storage.members.single.name, 'Pepe');
       expect(storage.members.single.relationship, 'Padre/Madre');
       expect(storage.members.single.photoPath, isNotNull);
-      expect(photos.savedImages, [fixtures.testPickedImage]);
+      expect(photos.savedImages.single!.contentType, 'image/jpeg');
       expect(avatar.uploadedImages, isEmpty);
     },
   );
@@ -240,7 +249,7 @@ void main() {
     await tester.pumpAndSettle();
     await _fillCreateForm(tester);
     await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
-    await tester.pumpAndSettle();
+    await confirmPhotoCrop(tester);
     await tester.ensureVisible(find.text('Guardar'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar'));
@@ -271,7 +280,7 @@ void main() {
       await tester.pumpAndSettle();
       await _fillCreateForm(tester);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       await tester.tap(find.text('Quitar foto seleccionada'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Guardar'));
@@ -306,7 +315,7 @@ void main() {
       await tester.pumpAndSettle();
       await _fillCreateForm(tester);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       await tester.ensureVisible(find.text('Guardar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Guardar'));
@@ -390,7 +399,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await _choosePhoto(tester);
+      await _choosePhoto(tester, cancelledGallery: true);
       expect(photos.savedImages, isEmpty);
       expect(
         tester
@@ -421,32 +430,68 @@ void main() {
   );
 
   testWidgets(
-    'guest fallback and missing private images remain safe',
+    'cancelling the crop preserves the current photo and edit draft',
     (tester) async {
-      final photos = _Photos();
+      final original = _member.withPhotoPath('own/member/original.png');
+      final storage = fixtures.MemoryFamilyMemberStorage(members: [original]);
+      final photos = _Photos(storage: storage);
       await tester.pumpWidget(
-        MaterialApp(
-          home: FamilyMemberPhotoView(member: _member, photoService: photos),
+        _profile(
+          member: original,
+          photos: photos,
+          auth: fixtures.FakeAuthService(),
         ),
       );
       await tester.pumpAndSettle();
-      expect(photos.loadedPaths, isEmpty);
-      expect(find.byIcon(Icons.person_outline), findsOneWidget);
-      photos.loadError = Exception('file missing');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: FamilyMemberPhotoView(
-            member: _member.withPhotoPath('own/member/missing.png'),
-            photoService: photos,
-          ),
-        ),
-      );
+      await tester.tap(find.byTooltip('Opciones del ser querido'));
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.person_outline), findsOneWidget);
-      expect(find.textContaining('file missing'), findsNothing);
-      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Editar información'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Nombre pendiente');
+      await tester.tap(find.text('Cambiar foto'));
+      await waitForPhotoEditor(tester);
+      await tester.ensureVisible(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(photos.savedImages, isEmpty);
+      expect(storage.members.single.photoPath, original.photoPath);
+      expect(
+        tester
+            .widget<TextFormField>(find.byType(TextFormField))
+            .controller!
+            .text,
+        'Nombre pendiente',
+      );
     },
   );
+
+  testWidgets('guest fallback and missing private images remain safe', (
+    tester,
+  ) async {
+    final photos = _Photos();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FamilyMemberPhotoView(member: _member, photoService: photos),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(photos.loadedPaths, isEmpty);
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+    photos.loadError = Exception('file missing');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FamilyMemberPhotoView(
+          member: _member.withPhotoPath('own/member/missing.png'),
+          photoService: photos,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+    expect(find.textContaining('file missing'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('changing session hides remote photo and disables editing', (
     tester,
@@ -462,13 +507,8 @@ void main() {
     await tester.pumpAndSettle();
     await auth.signOut();
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FamilyMemberPhotoView>(find.byType(FamilyMemberPhotoView))
-          .member
-          .photoPath,
-      isNull,
-    );
+    expect(find.byType(FamilyMemberPhotoView), findsNothing);
+    expect(find.byKey(const ValueKey('member-initial-header')), findsOneWidget);
     expect(
       tester
           .widget<PopupMenuButton<String>>(find.byType(PopupMenuButton<String>))

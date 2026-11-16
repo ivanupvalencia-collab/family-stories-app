@@ -126,6 +126,7 @@ abstract final class AritoriaDesign {
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: AritoriaColors.cream,
+      surfaceTintColor: Colors.transparent,
       foregroundColor: AritoriaColors.ink,
       elevation: 0,
       scrolledUnderElevation: 0,

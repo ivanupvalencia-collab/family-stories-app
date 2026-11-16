@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'widget_test.dart' as fixtures;
+import 'jpeg_test_fixture.dart';
 
 class _Preferences implements SharedPreferencesAsync {
   final values = <String, List<String>>{};
@@ -182,6 +183,26 @@ void main() {
       );
       expect(await photos.load(first), fixtures.testPickedImage.bytes);
     });
+
+    test('local JPEG uses .jpg across restart, replacement and removal without altering audio', () async {
+      final original = await recording();
+      final legacy = await photos.save(original, fixtures.testPickedImage);
+      final jpeg = await jpegTestPhoto();
+      final updated = await photos.save(legacy, jpeg);
+      expect(updated.photoPath, endsWith('.jpg'));
+      final restarted = LocalStoryPhotoService(
+        storage: storage,
+        directoryProvider: () async => directory,
+      );
+      expect(await restarted.load(updated), jpeg.bytes);
+      final removed = await restarted.save(updated, null);
+      expect(removed.photoPath, isNull);
+      expect(removed.audioPath, original.audioPath);
+      expect(
+        await File('${directory.path}/${updated.photoPath}').exists(),
+        isFalse,
+      );
+    });
     test(
       'failed member deletion restores story references and keeps files',
       () async {
@@ -249,6 +270,7 @@ void main() {
     late SupabaseStoryPhotoService photos;
     late RemoteFamilyPhotoDiskCache disk;
     final requests = <({String method, String path, dynamic body})>[];
+    final uploads = <String>[];
     bool forbidden = false, lostCommit = false, failCommit = false;
     Completer<void>? gate;
     setUp(() async {
@@ -257,6 +279,7 @@ void main() {
       failCommit = false;
       gate = null;
       requests.clear();
+      uploads.clear();
       directory = await Directory.systemTemp.createTemp('remote_story_photos_');
       disk = RemoteFamilyPhotoDiskCache(
         directoryProvider: () async => directory,
@@ -287,6 +310,10 @@ void main() {
           path: request.uri.path,
           body: body,
         ));
+        if (request.method == 'POST' &&
+            request.uri.path.startsWith('/storage/')) {
+          uploads.add(latin1.decode(bytes));
+        }
         request.response.headers.contentType = ContentType.json;
         if (request.uri.path == '/auth/v1/logout') {
           request.response.write('{}');
@@ -435,6 +462,36 @@ void main() {
         isNull,
       );
     });
+
+    test(
+      'remote JPEG uses .jpg in metadata, memory and disk, then removes safely',
+      () async {
+        final original = story();
+        await photos.load(original);
+        final jpeg = await jpegTestPhoto();
+        final updated = await photos.save(original, jpeg);
+        expect(updated.photoPath, endsWith('.jpg'));
+        expect(
+          uploads.single.toLowerCase(),
+          contains('content-type: image/jpeg'),
+        );
+        expect(uploads.single, contains(latin1.decode(jpeg.bytes)));
+        expect(row['photo_path'], updated.photoPath);
+        expect(photos.cachedPhoto(updated), jpeg.bytes);
+        expect(
+          await disk.read(client.storage.url, owner, updated.photoPath!),
+          jpeg.bytes,
+        );
+        expect(await disk.read(client.storage.url, owner, oldPath), isNull);
+        final removed = await photos.save(updated, null);
+        expect(removed.photoPath, isNull);
+        expect(removed.audioPath, original.audioPath);
+        expect(
+          await disk.read(client.storage.url, owner, updated.photoPath!),
+          isNull,
+        );
+      },
+    );
     test('lost commit response confirms metadata and never deletes the active upload', () async {
       lostCommit = true;
       final updated = await photos.save(story(), fixtures.testPickedImage);

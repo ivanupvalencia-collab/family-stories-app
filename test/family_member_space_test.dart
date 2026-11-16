@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -9,6 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/models/question.dart';
+import 'package:family_stories_app/models/user_profile.dart';
+import 'package:family_stories_app/design/aritoria_design.dart';
+import 'package:family_stories_app/screens/answer_options_screen.dart';
 import 'package:family_stories_app/screens/family_member_screen.dart';
 import 'package:family_stories_app/screens/story_screen.dart';
 import 'package:family_stories_app/screens/question_screen.dart';
@@ -19,10 +24,28 @@ import 'package:family_stories_app/services/family_member_service.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
 import 'package:family_stories_app/services/story_photo_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
+import 'package:family_stories_app/services/visible_account_avatar_service.dart';
 import 'package:family_stories_app/widgets/family_member_space_view.dart';
 import 'package:family_stories_app/widgets/story_photo_view.dart';
 
 import 'widget_test.dart' as fixtures;
+
+class _Avatars extends VisibleAccountAvatarService {
+  UserProfile? profile = const UserProfile(
+    id: 'linked',
+    name: 'Mavi',
+    avatarKey: 'avatar_01',
+  );
+  @override
+  UserProfile? cached(String accountId) => profile;
+  @override
+  Future<UserProfile?> load(String accountId) async => profile;
+
+  void clear() {
+    profile = null;
+    notifyListeners();
+  }
+}
 
 class _MemberPhotos extends FamilyMemberPhotoService {
   final forgotten = <String>[];
@@ -154,6 +177,129 @@ Widget _space(
 );
 
 void main() {
+  for (final photo in [false, true]) {
+    testWidgets('calm member space retains question action, photo=$photo', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _space(
+          FamilyMember(
+            id: 'member',
+            name: 'Mavi',
+            relationship: 'Abuela',
+            photoPath: photo ? 'owner/member/photo.png' : null,
+          ),
+          [],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(
+          ValueKey(photo ? 'member-photo-header' : 'member-initial-header'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          ValueKey(photo ? 'member-initial-header' : 'member-photo-header'),
+        ),
+        findsNothing,
+      );
+      final headerHeight = tester
+          .getSize(
+            find.byKey(
+              ValueKey(photo ? 'member-photo-header' : 'member-initial-header'),
+            ),
+          )
+          .height;
+      if (photo) {
+        expect(headerHeight, inInclusiveRange(240, 420));
+      } else {
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('member-initial-header')))
+              .height,
+          inInclusiveRange(144, 220),
+        );
+      }
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.byIcon(Icons.spa_outlined), findsNothing);
+      expect(find.text('Pregúntale'), findsNothing);
+      await tester.ensureVisible(find.text('Hacerle esta pregunta'));
+      await tester.pumpAndSettle();
+      final selected = tester
+          .widget<FamilyMemberSpaceView>(find.byType(FamilyMemberSpaceView))
+          .question;
+      await tester.tap(find.text('Hacerle esta pregunta'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AnswerOptionsScreen>(find.byType(AnswerOptionsScreen))
+            .question,
+        selected,
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.text('Sus historias irán encontrando su lugar aquí.'),
+      );
+      expect(find.byType(FilledButton), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'linked avatar uses the photo header and clearing it restores the shorter initial hero',
+    (tester) async {
+      final avatars = _Avatars();
+      addTearDown(avatars.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AritoriaDesign.theme(),
+          home: Scaffold(
+            body: FamilyMemberSpaceView(
+              member: const FamilyMember(
+                id: 'member',
+                name: 'Mavi',
+                relationship: 'Abuela',
+                linkedAccountId: 'linked',
+              ),
+              photos: _MemberPhotos(),
+              avatars: avatars,
+              storyPhotos: _StoryPhotos(),
+              stories: const [],
+              question: const Question('Un recuerdo'),
+              menu: const Icon(Icons.more_horiz),
+              onBack: () {},
+              onInvite: () {},
+              onAsk: () {},
+              onQuestions: () {},
+              onStory: (_) {},
+              onAllStories: () {},
+              onRefresh: () async {},
+              loading: false,
+              failed: false,
+              onRetry: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('member-photo-header')), findsOneWidget);
+      avatars.clear();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('member-photo-header')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('member-initial-header')),
+        findsOneWidget,
+      );
+      expect(find.text('Vinculada'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final offline in [false, true]) {
     testWidgets(
       'remote profile retains local recordings with local photos, offline=$offline',
@@ -350,11 +496,12 @@ void main() {
           );
           final selected = view.question.text;
           expect(view.stories.length, count);
-          expect(find.byType(StoryMemoryRow), findsNWidgets(count.clamp(0, 3)));
           expect(
             find.text(linked ? 'Vinculada' : 'Invitar a ${member.name}'),
             findsOneWidget,
           );
+          await tester.scrollUntilVisible(find.text('Sus historias'), 200);
+          expect(find.byType(StoryMemoryRow), findsNWidgets(count.clamp(0, 3)));
           await tester.drag(
             find.byKey(const ValueKey('member-space-scroll')),
             const Offset(0, -700),
@@ -489,7 +636,7 @@ void main() {
       await tester.tap(find.byTooltip('Foto de la historia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Añadir foto'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(find.byType(StoryPhotoView), findsOneWidget);
       await tester.scrollUntilVisible(
         find.byTooltip('Reproducir historia'),
@@ -501,7 +648,7 @@ void main() {
       await tester.tap(find.byTooltip('Foto de la historia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cambiar foto'));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       await tester.tap(find.byTooltip('Foto de la historia'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Eliminar foto'));
@@ -586,7 +733,7 @@ void main() {
           await tester.tap(find.byTooltip('Detener grabación'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('Añadir una foto (opcional)'));
-          await tester.pumpAndSettle();
+          await confirmPhotoCrop(tester);
           await tester.ensureVisible(
             find.text(remote ? 'Enviar respuesta' : 'Guardar historia'),
           );

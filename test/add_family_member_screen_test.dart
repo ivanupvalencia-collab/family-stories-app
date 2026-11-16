@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'package:family_stories_app/screens/add_family_member_screen.dart';
 import 'package:family_stories_app/services/family_member_photo_service.dart';
 import 'package:family_stories_app/widgets/family_member_photo_view.dart';
@@ -68,12 +70,12 @@ void main() {
       expect(find.text('Añadir foto'), findsNothing);
       expect(tester.testTextInput.isVisible, isFalse);
       await tester.tap(find.byKey(const ValueKey('pick_family_member_photo')));
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(picker.pickCalls, 1);
       final photo = tester.widget<FamilyMemberPhotoView>(
         find.byType(FamilyMemberPhotoView),
       );
-      expect(photo.previewBytes, fixtures.testPickedImage.bytes);
+      expect(photo.previewBytes, isNotEmpty);
       expect(
         find.descendant(
           of: find.byType(FamilyMemberPhotoView),
@@ -85,7 +87,7 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('pick_family_member_photo_add')),
       );
-      await tester.pumpAndSettle();
+      await confirmPhotoCrop(tester);
       expect(picker.pickCalls, 2);
       await tester.tap(find.text('Quitar foto seleccionada'));
       await tester.pumpAndSettle();

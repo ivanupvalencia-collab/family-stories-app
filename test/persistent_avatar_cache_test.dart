@@ -104,6 +104,16 @@ void main() {
     }
   }
 
+  Future<void> waitForAsync(Future<bool> Function() condition) async {
+    final end = DateTime.now().add(const Duration(seconds: 5));
+    while (!await condition()) {
+      if (DateTime.now().isAfter(end)) {
+        fail('Expected asynchronous disk cleanup');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+  }
+
   void release(Completer<void>? gate) {
     if (gate != null && !gate.isCompleted) gate.complete();
   }
@@ -350,6 +360,17 @@ void main() {
       visibleServices.add(next);
       await next.load('sender');
       await waitFor(() => next.cached('sender') == null);
+      // Metadata disappears immediately; byte eviction intentionally finishes
+      // asynchronously. Wait for the disk operation, not just the memory event.
+      await waitForAsync(
+        () async =>
+            await disk.readEntry(
+              client.storage.url,
+              'owner',
+              'avatar:sender:${getUrl(1)}',
+            ) ==
+            null,
+      );
       expect(
         await disk.readEntry(
           client.storage.url,

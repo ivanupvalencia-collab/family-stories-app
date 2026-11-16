@@ -4,6 +4,7 @@ import '../models/profile_avatar.dart';
 import '../models/user_profile.dart';
 import '../services/avatar_storage_service.dart';
 import '../services/profile_image_picker.dart';
+import '../services/photo_selection_service.dart';
 import '../services/profile_service.dart';
 import '../services/profile_avatar_image_cache.dart';
 import '../widgets/profile_avatar_view.dart';
@@ -35,6 +36,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _avatarUrl;
   PickedProfileImage? _selectedPhoto;
   bool _isSaving = false;
+  bool _pickingPhoto = false;
 
   @override
   void initState() {
@@ -45,8 +47,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickPhoto() async {
+    if (_pickingPhoto || _isSaving) return;
+    _pickingPhoto = true;
     try {
-      final photo = await widget.profileImagePicker.pickFromGallery();
+      final photo = await PhotoSelectionService.pick(
+        context,
+        picker: widget.profileImagePicker,
+      );
       if (photo == null || !mounted) {
         return;
       }
@@ -60,6 +67,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) {
         _showMessage('No se pudo elegir la foto. Inténtalo de nuevo.');
       }
+    } finally {
+      _pickingPhoto = false;
     }
   }
 

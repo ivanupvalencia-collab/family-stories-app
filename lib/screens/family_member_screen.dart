@@ -20,6 +20,7 @@ import '../services/family_member_deletion_service.dart';
 import '../services/family_member_storage.dart';
 import '../services/family_member_photo_service.dart';
 import '../services/profile_image_picker.dart';
+import '../services/photo_selection_service.dart';
 import '../services/family_story_storage.dart';
 import '../services/family_story_service.dart';
 import '../services/invitation_service.dart';
@@ -167,8 +168,10 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
     try {
       final image = remove
           ? null
-          : await (widget.imagePicker ?? DeviceProfileImagePicker())
-                .pickFromGallery();
+          : await PhotoSelectionService.pick(
+              context,
+              picker: widget.imagePicker ?? DeviceProfileImagePicker(),
+            );
       if (!mounted || !_canManagePhoto || (!remove && image == null)) {
         return null;
       }

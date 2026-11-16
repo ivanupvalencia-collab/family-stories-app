@@ -1,3 +1,5 @@
+import 'photo_editor_test_support.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -47,6 +49,9 @@ void main() {
     expect(app.theme!.colorScheme.primary, AritoriaColors.olive);
     expect(app.theme!.colorScheme.surface, AritoriaColors.cream);
     expect(app.theme!.scaffoldBackgroundColor, AritoriaColors.cream);
+    expect(app.theme!.appBarTheme.backgroundColor, AritoriaColors.cream);
+    expect(app.theme!.appBarTheme.surfaceTintColor, Colors.transparent);
+    expect(app.theme!.appBarTheme.scrolledUnderElevation, 0);
     expect(app.theme!.progressIndicatorTheme.color, AritoriaColors.olive);
     expect(
       AritoriaDesign.theme().progressIndicatorTheme.color,
@@ -1160,6 +1165,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Elegir foto de la galería'));
     await tester.pump();
+    await confirmPhotoCrop(tester);
 
     expect(imagePicker.pickCalls, 1);
     expect(
@@ -1212,6 +1218,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField), 'Nombre pendiente');
     await tester.tap(find.text('Elegir foto de la galería'));
     await tester.pump();
+    await confirmPhotoCrop(tester);
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
 
@@ -1466,9 +1473,7 @@ void main() {
     expect(find.text('Ver todas las preguntas'), findsOneWidget);
     expect(find.text('Sus historias'), findsOneWidget);
     expect(
-      find.text(
-        'Cada vida guarda recuerdos que merecen escucharse. Empieza con una pregunta.',
-      ),
+      find.text('Sus historias irán encontrando su lugar aquí.'),
       findsOneWidget,
     );
 

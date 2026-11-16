@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'profile_image_picker.dart';
+import 'private_photo_service.dart';
 
 abstract class AvatarStorageService {
   Future<String> uploadAvatar({
@@ -22,7 +23,7 @@ class SupabaseAvatarStorageService implements AvatarStorageService {
     required String userId,
     required PickedProfileImage image,
   }) async {
-    final objectPath = '$userId/profile';
+    final objectPath = '$userId/profile.${privatePhotoExtension(image)}';
     final bucket = _client.storage.from(bucketName);
 
     await bucket.uploadBinary(
