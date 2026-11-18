@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ ver plan por fases |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: **C-4 ✅** (1/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -253,20 +253,50 @@ falta aplicarlo aquí.
 fila.
 
 **Fix parcial:** `0006_indexes.sql` añade los 6 índices compuestos (C-3). El
-casteado en políticas sigue abierto (C-4).
+casteado en políticas se resolvió en **C-4** (helpers en `0003`).
 
-## 🔴 C-4 · Las políticas de storage derrotan el índice PK con casts `::text` (Alto)
+## ✅ C-4 · Las políticas de storage derrotaban el índice PK con casts `::text` (Alto) — resuelto
 
 ```sql
--- 01_family_member_photos.sql:41 (×7 políticas, + 07_...sql:39)
-where fm.id::text = (storage.foldername(storage.objects.name))[2]
+-- antes en 0002 (×10: 7 en family-member-photos, 3 en story-audio)
+where (fm.id)::text = (storage.foldername(objects.name))[2]
 ```
 
-Castea el uuid PK a texto → no puede usar `family_members_pkey`; y
-`storage.foldername()` se re-evalúa dos veces por política por fila.
+Casteaba el uuid PK a texto → no podía usar `family_members_pkey` (seq scan);
+y `storage.foldername()` se reevaluaba dos veces por política por fila.
 
-**Fix:** invertir el cast (`[2]::uuid` con guarda de regex previa) y calcular
-`foldername` una sola vez.
+**Fix (este commit):** los 10 `exists` inline de `0002` se sustituyen por dos
+helpers nuevos en `0003`, con el patrón de `story_photo_allowed`:
+
+- `family_member_photo_allowed(name)` → las 7 de `family-member-photos`:
+  `foldername` calculado **una sola vez**, guarda regex + `exception when
+  invalid_text_representation` antes del cast (una ruta malformada se deniega,
+  nunca error de política) y `fm.id = <uuid>` → usa `family_members_pkey`.
+- `response_audio_allowed(name, <modo>)` → las 3 de `story-audio` (modos
+  `owner-read`, `responder-read`, `responder-insert`), ídem con
+  `question_requests_pkey`.
+- `SECURITY INVOKER` a propósito: la consulta a `family_members` /
+  `question_requests` sigue evaluándose con las RLS del usuario — misma
+  semántica que el `exists` inline que sustituye.
+- Grants al estilo del volcado: `revoke … from public, anon` +
+  `grant execute … to authenticated`.
+- **Gate C-4** en `tool/lint_rls.sh` (ambos modos): prohíbe
+  `id::text … = … foldername` en `migrations/`, ignorando comentarios;
+  `manual/` queda exento (histórico, decisión previa).
+
+**Verificación en Postgres local (docker `postgres:15-alpine`, NO producción):**
+
+| Comprobación | ANTES | DESPUÉS |
+|---|---|---|
+| Plan de las políticas | `Seq Scan on family_members` / `question_requests` | `Index Scan using family_members_pkey` / `question_requests_pkey` (auto_explain dentro de los helpers; cero seq scan) |
+| Comportamiento RLS | — | idéntico: owner ve/sube su objeto, otros no, ruta malformada denegada **sin error**, audio con `status='pending'` para subir y bloqueado al `answered` |
+| Llamadas a `foldername` (barrido de fotos) | 10 | 5 (ahora exactamente 1 por evaluación de política; antes 2) |
+
+**Salvedades:** (1) `create policy` resuelve las funciones al crearse — en una
+BD nueva, `0002` exige que `0003` exista previamente; es una condición
+**preexistente** (el volcado ya usaba `story_photo_allowed` de `0003`) y C-4
+sigue el mismo patrón. (2) **Pendiente de prueba en vivo al aplicar a
+producción** (el harness local cubre el comportamiento, no el proyecto real).
 
 ## 🔴 C-5 · N+1 de RPC por cuenta en avatares (Alto)
 
@@ -323,7 +353,7 @@ correctas.
 5. ✅ S-1 versionar esquema base + `pg_policies` → `supabase/migrations/`, y lint de políticas.
 6. ✅ S-2 deep links (scheme propio). S-4 release keystore → **vetoado por el propietario**.
 7. ✅ **S-3 sesión en Keystore/Keychain + `allowBackup="false"`.**
-8. ⏳ C-3 ✅ + C-4 invertir casts `::text` en las 8 políticas de storage.
+8. ✅ C-3 + C-4 invertir casts `::text` en las políticas de storage (10 expresiones de `0002` → helpers en `0003` · gate C-4 · verificado en Postgres local con docker).
 9. ✅ **S-5 allowlist de host en `avatar_url`** (política en cliente + `CHECK` en `20261112000001`, esta sin aplicar) · ✅ **S-6 barrido de cachés en `signedOut`** (`SessionDataSweeper`: fotos, lista remota y audio; solo de la cuenta que cierra sesión; comparte las colas de escritura vía `forClient`) · ✅ **S-8 gate del flag de borrado remoto** (la confirmación "instalado" deja de ser un comentario: `test/deletion_sql_gate_test.dart` + `tool/lint_rls.sh` exigen que flag `true` ⇒ ambas RPCs con revoke/grant en `migrations/`, en ambos modos del lint). También **S-12/13/14/15**: el content-type de las fotos sale del sniffing de magic bytes (`sniffImageContentType`, sin fallback al nombre), `maxLength` 200/500/280 en alta de familiar/pregunta/código de invitación con `CHECK` de respaldo en `20261113000001` (NOT VALID, sin aplicar), `.gitignore` raíz con `.env*`/keystores, y PII (nombres reales) fuera de docs, migraciones y tests.
 
 ## Fase 2 — Escala de datos

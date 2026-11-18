@@ -352,6 +352,28 @@ else
   fail "La politica muerta se recrea tras el drop (la ultima aparicion es un CREATE) (S-30)"
 fi
 
+# -----------------------------------------------------------------------------
+# C-4: las politicas de storage no pueden comparar ids en texto contra
+# storage.foldername (derrota family_members_pkey / question_requests_pkey y
+# reevalua foldername). Fix: helpers family_member_photo_allowed /
+# response_audio_allowed en 0003, con cast a uuid guardado por regex.
+# Solo se examina Codigo (los comentarios -- se ignoran) y solo migrations/
+# (manual/ es historico y queda exento por decision).
+# -----------------------------------------------------------------------------
+section "Politicas de storage sin casts de id a texto (C-4)"
+C4_HITS=$(awk '{
+  line = $0
+  sub(/--.*/, "", line)
+  if (line ~ /\.id\)?::text[[:space:]]*=[[:space:]]*\(?(storage\.)?foldername/)
+    print FILENAME ":" FNR
+}' "$REPO_ROOT"/supabase/migrations/*.sql 2>/dev/null)
+if [ -n "$C4_HITS" ]; then
+  printf '%s\n' "$C4_HITS" | sed 's/^/      /'
+  fail "Comparacion id::text = storage.foldername en migrations/ (C-4)"
+else
+  pass "Sin casts de id a texto contra storage.foldername en migrations/"
+fi
+
 printf '\n'
 if [ "$FAILURES" -gt 0 ]; then
   printf 'LINT FALLIDO: %d problema(s).\n' "$FAILURES"

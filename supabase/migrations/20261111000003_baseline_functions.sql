@@ -764,6 +764,93 @@ end;
 $function$;
 
 -- ---------------------------------------------------------------------------
+-- Predicados de politica para storage (C-4)
+-- Sustituyen los exists inline con casteo a texto de 0002: el uuid PK se
+-- compara en uuid (usable por family_members_pkey / question_requests_pkey) y
+-- storage.foldername() se calcula una sola vez por evaluacion de politica
+-- (antes: 2 llamadas por politica en family-member-photos).
+-- Un uuid malformado se rechaza con guarda previa + excepcion: nunca provoca
+-- un error de politica. SECURITY INVOKER a proposito: la consulta sobre las
+-- tablas publicas se evalua con las mismas RLS del usuario que consulta,
+-- identico a la subconsulta inline que sustituye.
+-- ---------------------------------------------------------------------------
+create or replace function public.family_member_photo_allowed(
+  p_name text
+)
+returns boolean
+language plpgsql
+set search_path to ''
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_parts text[];
+begin
+  if v_user is null or p_name is null then
+    return false;
+  end if;
+  v_parts := storage.foldername(p_name);
+  -- Ruta esperada: <uid>/<uuid-del-familiar>/<fichero>
+  if coalesce(array_length(v_parts, 1), 0) < 2
+    or v_parts[1] is distinct from v_user::text
+    or v_parts[2] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return false;
+  end if;
+  begin
+    return exists (select 1 from public.family_members fm
+      where fm.id = v_parts[2]::uuid
+        and fm.owner_id = v_user);
+  exception when invalid_text_representation then
+    return false;
+  end;
+end;
+$function$;
+
+create or replace function public.response_audio_allowed(
+  p_name text,
+  p_operation text
+)
+returns boolean
+language plpgsql
+set search_path to ''
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_parts text[];
+begin
+  if v_user is null or p_name is null or p_operation is null then
+    return false;
+  end if;
+  v_parts := storage.foldername(p_name);
+  -- Ruta esperada: <uuid-de-la-solicitud>/<fichero>
+  if coalesce(array_length(v_parts, 1), 0) < 1
+    or v_parts[1] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return false;
+  end if;
+  begin
+    if p_operation = 'owner-read' then
+      return exists (select 1
+        from public.question_requests qr
+        join public.family_members fm on fm.id = qr.family_member_id
+        where qr.id = v_parts[1]::uuid
+          and fm.owner_id = v_user);
+    elsif p_operation = 'responder-read' then
+      return exists (select 1 from public.question_requests qr
+        where qr.id = v_parts[1]::uuid
+          and qr.recipient_id = v_user);
+    elsif p_operation = 'responder-insert' then
+      return exists (select 1 from public.question_requests qr
+        where qr.id = v_parts[1]::uuid
+          and qr.recipient_id = v_user
+          and qr.status = 'pending');
+    end if;
+  exception when invalid_text_representation then
+    return false;
+  end;
+  return false;
+end;
+$function$;
+
+-- ---------------------------------------------------------------------------
 -- Borrado en dos fases de un familiar
 -- ---------------------------------------------------------------------------
 create or replace function public.family_delete_object_allowed(
@@ -1153,6 +1240,8 @@ revoke all on function public.set_family_member_photo(uuid, text, text) from pub
 revoke all on function public.set_story_photo(uuid, text, text) from public, anon;
 revoke all on function public.get_story_photo_metadata(uuid) from public, anon;
 revoke all on function public.story_photo_allowed(text, text) from public, anon;
+revoke all on function public.family_member_photo_allowed(text) from public, anon;
+revoke all on function public.response_audio_allowed(text, text) from public, anon;
 revoke all on function public.family_delete_object_allowed(text, text) from public, anon;
 revoke all on function public.family_delete_storage_write_allowed(text, text) from public, anon;
 revoke all on function public.prepare_family_member_delete(uuid) from public, anon;
@@ -1180,6 +1269,8 @@ grant execute on function public.set_family_member_photo(uuid, text, text) to au
 grant execute on function public.set_story_photo(uuid, text, text) to authenticated;
 grant execute on function public.get_story_photo_metadata(uuid) to authenticated;
 grant execute on function public.story_photo_allowed(text, text) to authenticated;
+grant execute on function public.family_member_photo_allowed(text) to authenticated;
+grant execute on function public.response_audio_allowed(text, text) to authenticated;
 grant execute on function public.family_delete_object_allowed(text, text) to authenticated;
 grant execute on function public.family_delete_storage_write_allowed(text, text) to authenticated;
 grant execute on function public.prepare_family_member_delete(uuid) to authenticated;

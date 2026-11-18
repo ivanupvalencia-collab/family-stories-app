@@ -32,10 +32,15 @@ Exportado completo desde el proyecto remoto el 2026-11-11 mediante `pg_class`,
 
 **0001–0006 son un no-op** sobre el proyecto vivo: reproducen el estado actual
 (`create or replace`, `drop policy if exists`, `create index if not exists`),
-**con dos excepciones puntuales ya corregidas en el propio volcado**: el cuerpo
-de `get_story_photo_metadata` (`can_edit` calculado, S-19) y el de
-`get_family_invitation_preview` (sin `FOR UPDATE`, S-28); al aplicarlos con
-`create or replace` cambian esos dos cuerpos de función con resultado acotado.
+**con tres excepciones puntuales ya corregidas en el propio volcado**: el cuerpo
+de `get_story_photo_metadata` (`can_edit` calculado, S-19), el de
+`get_family_invitation_preview` (sin `FOR UPDATE`, S-28) y las 10 políticas de
+storage de `0002`, que ahora delegan en los helpers `family_member_photo_allowed`
+y `response_audio_allowed` de `0003` (C-4: mismo comportamiento RLS, plan con
+índice; como ya ocurría con `story_photo_allowed`, `create policy` resuelve la
+función al crearse, por lo que en una BD nueva tienen que existir previamente);
+al aplicarlos con `create or replace`/`drop policy if exists` cambian esos
+cuerpos y políticas con resultado acotado.
 **0007 sí modifica el proyecto**: revoca `TRUNCATE`, limita buckets y añade el
 límite de `question_text`. **0008 (S-5) añade un `CHECK` a `profiles.avatar_url`
 y todavía NO se ha aplicado a producción**: incluye un `select` de pre-chequeo
@@ -95,7 +100,7 @@ afectan a este directorio.
 | S-28 | `get_family_invitation_preview` hace `FOR UPDATE` en una lectura | ✅ lectura sin lock en `0003` · gate S-28 en `tool/lint_rls.sh` |
 | S-29 | Bucket `avatars` sin política `DELETE` (fail-closed; huérfanos públicos al revertir a catálogo) | ✅ `20261115000001` **pendiente de aplicar** (own-folder) · gate S-29 |
 | S-30 | Política muerta `Inviters can view their own invitations` | ✅ `20261116000001` **pendiente de aplicar** (drop sin efecto observable) · gate S-30 |
-| C-4 | Casts `fm.id::text` bloquean el índice en políticas de storage | ⏳ abierto (requiere prueba en vivo) |
+| C-4 | Casts `fm.id::text` bloquean el índice en políticas de storage | ✅ 10 expresiones de `0002` → helpers `family_member_photo_allowed`/`response_audio_allowed` en `0003` · gate C-4 · verificado en Postgres local (docker): de seq scan a `Index Scan using …_pkey`; **pendiente de prueba en producción** |
 
 ## manual/
 

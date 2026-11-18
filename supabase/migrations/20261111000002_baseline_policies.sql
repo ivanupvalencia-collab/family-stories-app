@@ -145,45 +145,30 @@ create policy "Owners read family member photos"
   on storage.objects for select
   to authenticated
   using ((bucket_id = 'family-member-photos'::text)
-    and ((storage.foldername(name))[1] = ((select auth.uid())::text))
-    and exists (select 1 from public.family_members fm
-      where (fm.id)::text = (storage.foldername(objects.name))[2]
-        and fm.owner_id = (select auth.uid())));
+    and family_member_photo_allowed(name));
 
 drop policy if exists "Owners upload family member photos" on storage.objects;
 create policy "Owners upload family member photos"
   on storage.objects for insert
   to authenticated
   with check ((bucket_id = 'family-member-photos'::text)
-    and ((storage.foldername(name))[1] = ((select auth.uid())::text))
-    and exists (select 1 from public.family_members fm
-      where (fm.id)::text = (storage.foldername(objects.name))[2]
-        and fm.owner_id = (select auth.uid())));
+    and family_member_photo_allowed(name));
 
 drop policy if exists "Owners replace family member photos" on storage.objects;
 create policy "Owners replace family member photos"
   on storage.objects for update
   to authenticated
   using ((bucket_id = 'family-member-photos'::text)
-    and ((storage.foldername(name))[1] = ((select auth.uid())::text))
-    and exists (select 1 from public.family_members fm
-      where (fm.id)::text = (storage.foldername(objects.name))[2]
-        and fm.owner_id = (select auth.uid())))
+    and family_member_photo_allowed(name))
   with check ((bucket_id = 'family-member-photos'::text)
-    and ((storage.foldername(name))[1] = ((select auth.uid())::text))
-    and exists (select 1 from public.family_members fm
-      where (fm.id)::text = (storage.foldername(objects.name))[2]
-        and fm.owner_id = (select auth.uid())));
+    and family_member_photo_allowed(name));
 
 drop policy if exists "Owners delete family member photos" on storage.objects;
 create policy "Owners delete family member photos"
   on storage.objects for delete
   to authenticated
   using ((bucket_id = 'family-member-photos'::text)
-    and ((storage.foldername(name))[1] = ((select auth.uid())::text))
-    and exists (select 1 from public.family_members fm
-      where (fm.id)::text = (storage.foldername(objects.name))[2]
-        and fm.owner_id = (select auth.uid())));
+    and family_member_photo_allowed(name));
 
 -- Restrictive: exige pertenencia, salvo que el objeto este en un plan de
 -- borrado pendiente (family_delete_object_allowed).
@@ -192,16 +177,10 @@ create policy "Family photos require their owner"
   on storage.objects as restrictive for all
   to authenticated
   using ((bucket_id <> 'family-member-photos'::text)
-    or (((storage.foldername(name))[1] = ((select auth.uid())::text))
-      and exists (select 1 from public.family_members fm
-        where (fm.id)::text = (storage.foldername(objects.name))[2]
-          and fm.owner_id = (select auth.uid())))
+    or family_member_photo_allowed(name)
     or family_delete_object_allowed(bucket_id, name))
   with check ((bucket_id <> 'family-member-photos'::text)
-    or (((storage.foldername(name))[1] = ((select auth.uid())::text))
-      and exists (select 1 from public.family_members fm
-        where (fm.id)::text = (storage.foldername(objects.name))[2]
-          and fm.owner_id = (select auth.uid()))));
+    or family_member_photo_allowed(name));
 
 drop policy if exists "Family photos deny anonymous access" on storage.objects;
 create policy "Family photos deny anonymous access"
@@ -281,30 +260,21 @@ create policy "Family owners can read response audio"
   on storage.objects for select
   to authenticated
   using ((bucket_id = 'story-audio'::text)
-    and exists (select 1
-      from (public.question_requests qr
-        join public.family_members fm on fm.id = qr.family_member_id)
-      where ((qr.id)::text = (storage.foldername(objects.name))[1])
-        and fm.owner_id = auth.uid()));
+    and response_audio_allowed(name, 'owner-read'));
 
 drop policy if exists "Responders can read own response audio" on storage.objects;
 create policy "Responders can read own response audio"
   on storage.objects for select
   to authenticated
   using ((bucket_id = 'story-audio'::text)
-    and exists (select 1 from public.question_requests qr
-      where ((qr.id)::text = (storage.foldername(objects.name))[1])
-        and qr.recipient_id = auth.uid()));
+    and response_audio_allowed(name, 'responder-read'));
 
 drop policy if exists "Recipients can upload question response audio" on storage.objects;
 create policy "Recipients can upload question response audio"
   on storage.objects for insert
   to authenticated
   with check ((bucket_id = 'story-audio'::text)
-    and exists (select 1 from public.question_requests qr
-      where ((qr.id)::text = (storage.foldername(objects.name))[1])
-        and qr.recipient_id = auth.uid()
-        and qr.status = 'pending'::text));
+    and response_audio_allowed(name, 'responder-insert'));
 
 -- --- avatars ----------------------------------------------------------------
 -- Bucket PUBLICO (ver 0005). Sin policy de DELETE (S-29).
