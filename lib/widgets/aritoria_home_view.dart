@@ -315,15 +315,12 @@ class _AutomaticHeroState extends State<_AutomaticHero> {
         if (member.photoPath == null && member.linkedAccountId != null)
           member.linkedAccountId!,
     };
-    await Future.wait(
-      accounts.map((account) async {
-        try {
-          await service.load(account);
-        } catch (_) {
-          // Optional metadata: keep selecting from the available own photos.
-        }
-      }),
-    );
+    try {
+      // C-5: one batched RPC per <=100 ids instead of one RPC per account.
+      await service.loadMany(accounts.toList());
+    } catch (_) {
+      // Optional metadata: keep selecting from the available own photos.
+    }
     if (mounted && generation == _generation) setState(() {});
   }
 

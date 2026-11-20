@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: **C-4 ✅** (1/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5** (5/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -298,15 +298,36 @@ BD nueva, `0002` exige que `0003` exista previamente; es una condición
 sigue el mismo patrón. (2) **Pendiente de prueba en vivo al aplicar a
 producción** (el harness local cubre el comportamiento, no el proyecto real).
 
-## 🔴 C-5 · N+1 de RPC por cuenta en avatares (Alto)
+## ✅ C-5 · N+1 de RPC por cuenta en avatares (Alto) — resuelto
 
 ```dart
-// visible_account_avatar_service.dart:152-157 — el RPC admite ≤100 ids y se le manda 1
-params: {'p_account_ids': [accountId]},
+// antes: el RPC admite ≤100 ids y se le mandaba 1
+params: {'p_account_ids': [accountId]}
 ```
 
-`aritoria_home_view.dart:318-326` hace `Future.wait(accounts.map(load))` → 50
-familiares = 50 RPC donde 1 bastaría.
+`aritoria_home_view.dart` hacía `Future.wait(accounts.map(load))` → 50
+familiares = 50 RPC donde 1 bastaba.
+
+**Fix (este commit):**
+
+- `VisibleAccountAvatarService.loadMany(ids)` con implementación por defecto
+  que reenvía a `load` por id → los fakes de test siguen funcionando sin
+  tocarlos.
+- `SupabaseVisibleAccountAvatarService.loadMany`: descarta ids vacíos y los
+  ya validados en caché (TTL de 5 min, mismo criterio que `load`), se une a lo
+  que esté en curso (`_pending`/`_refreshes`), lee el disco en paralelo para
+  los ids fríos (Home pinta lo que ya tiene mientras vuela el RPC) y manda
+  **un RPC por trozo de ≤100 ids** (`_batchSize`, límite
+  `cardinality(p_account_ids) <= 100` del RPC; los trozos, en paralelo).
+  Misma semántica de error que `_fetch`: `42501`/`PGRST301` → nulls en caché;
+  resto → reintento a 15 s y rethrow. El `_fetch` de un solo id ahora
+  delega en `_fetchMany` (un único código de RPC).
+- `_loadAvatars` del Home: de N `load` a **una** `loadMany` con el mismo
+  try/catch (si un trozo falla, los demás ya quedaron cacheados).
+
+**Tests (5 nuevos; los 4 previos sin cambios):** N ids → 1 RPC · 150 ids → 2
+RPCs (100+50) · caché fresca no se vuelve a pedir · `loadMany` se une a un
+`load` en curso (1 sola RPC) · fallo RPC → rethrow + reintento.
 
 ## 🔴 C-6 · Cero paginación (Alto)
 
@@ -358,7 +379,7 @@ correctas.
 
 ## Fase 2 — Escala de datos
 
-10. ⏳ C-5 lote de `get_visible_account_avatars` (≤100 ids) + `warmCached` único en Home.
+10. ✅ C-5 lote de `get_visible_account_avatars` (≤100 ids) → `loadMany` en Home (1 RPC por lote; el `warmCached` único en Home ya existía).
 11. ⏳ C-6 `.range()`/`limit` en las 4 consultas sin tope · C-16 usar `loadMemberForOwner` · C-10 paralelizar bucles · C-17 borrar los re-sort.
 
 ## Fase 3 — Arquitectura

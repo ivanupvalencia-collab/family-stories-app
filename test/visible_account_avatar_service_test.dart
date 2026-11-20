@@ -145,4 +145,64 @@ void main() {
       expect(requests.length, 1);
     },
   );
+
+  test('loadMany collapses every id into a single RPC', () async {
+    await service.loadMany(['a', 'b', 'c', 'a']);
+    expect(requests.length, 1);
+    expect(requests.single.path, '/rest/v1/rpc/get_visible_account_avatars');
+    expect(requests.single.ids, ['a', 'b', 'c']);
+    expect(service.cached('a'), isNotNull);
+    expect(service.cached('b'), isNotNull);
+    expect(service.cached('c'), isNotNull);
+  });
+
+  test('loadMany splits more than 100 ids into bounded RPCs', () async {
+    final ids = [for (var i = 0; i < 150; i++) 'id$i'];
+    await service.loadMany(ids);
+    final sizes = requests.map((r) => r.ids.length).toList()..sort();
+    expect(sizes, [50, 100]);
+    final requested = {
+      for (final request in requests) ...request.ids.cast<String>(),
+    };
+    expect(requested, ids.toSet());
+    expect(service.cached('id0'), isNotNull);
+    expect(service.cached('id149'), isNotNull);
+  });
+
+  test('loadMany skips ids whose metadata is fresh in the cache', () async {
+    await service.load('a');
+    await service.loadMany(['a', 'b']);
+    expect(requests.length, 2);
+    expect(requests.last.ids, ['b']);
+    expect(service.cached('a'), isNotNull);
+    expect(service.cached('b'), isNotNull);
+  });
+
+  test('loadMany joins an in-flight load instead of a second RPC', () async {
+    gate = Completer<void>();
+    final single = service.load('slow');
+    while (requests.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    final batch = service.loadMany(['slow']);
+    gate!.complete();
+    expect(await single, isNotNull);
+    await batch;
+    expect(requests.length, 1);
+    expect(service.cached('slow'), isNotNull);
+  });
+
+  test('loadMany surfaces RPC failures and retries on the next call', () async {
+    fail = true;
+    await expectLater(
+      service.loadMany(['x', 'y']),
+      throwsA(isA<PostgrestException>()),
+    );
+    fail = false;
+    await service.loadMany(['x', 'y']);
+    expect(requests.length, 2);
+    expect(requests.last.ids.toSet(), {'x', 'y'});
+    expect(service.cached('x'), isNotNull);
+    expect(service.cached('y'), isNotNull);
+  });
 }
