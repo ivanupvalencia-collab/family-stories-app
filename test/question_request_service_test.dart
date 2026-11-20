@@ -89,6 +89,9 @@ void main() {
         request.uri.queryParameters['order'],
         'answered_at.desc.nullslast,created_at.desc.nullslast',
       );
+      // C-6: el tope de 500 filas viaja en la propia petición.
+      expect(request.uri.queryParameters['offset'], '0');
+      expect(request.uri.queryParameters['limit'], '500');
       expect(request.authorization, 'Bearer test-user-token');
       expect(answers.first.status, QuestionRequestStatus.answered);
       expect(answers.first.answeredAt, DateTime.utc(2026, 10, 5, 12));

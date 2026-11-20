@@ -55,7 +55,9 @@ class SupabaseFamilyStoryService
         .from('stories')
         .select(selection)
         .eq('family_member_id', familyMemberId)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        // C-6: hard cap so a growing table can never be downloaded whole.
+        .range(0, 499);
     late List<Map<String, dynamic>> data;
     try {
       data = await query('$fields, photo_path');

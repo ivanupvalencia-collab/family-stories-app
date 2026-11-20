@@ -105,7 +105,9 @@ class SupabaseQuestionRequestService implements QuestionRequestService {
         )
         .eq('recipient_id', recipientId)
         .eq('status', 'pending')
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        // C-6: hard cap so a growing table can never be downloaded whole.
+        .range(0, 499);
 
     return data.map(QuestionRequest.fromJson).toList();
   }
@@ -122,7 +124,9 @@ class SupabaseQuestionRequestService implements QuestionRequestService {
         .eq('recipient_id', recipientId)
         .eq('status', 'answered')
         .order('answered_at', ascending: false, nullsFirst: false)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        // C-6: hard cap so a growing table can never be downloaded whole.
+        .range(0, 499);
     return data.map(QuestionRequest.fromJson).toList();
   }
 

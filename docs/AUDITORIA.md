@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5** (5/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6** (6/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -329,11 +329,31 @@ familiares = 50 RPC donde 1 bastaba.
 RPCs (100+50) · caché fresca no se vuelve a pedir · `loadMany` se une a un
 `load` en curso (1 sola RPC) · fallo RPC → rethrow + reintento.
 
-## 🔴 C-6 · Cero paginación (Alto)
+## ✅ C-6 · Cero paginación (Alto) — resuelto
 
-`grep "\.range(\|\.limit(" en lib/` → 0 coincidencias. Consultas sin tope:
-todas las stories por familiar, todos los requests pendientes/contestados, todos
-los familiares por owner.
+`grep "\.range(\|\.limit(" en lib/` → 0 coincidencias. Cuatro consultas de
+lista descargaban todas las filas en cada carga: stories por familiar
+(`loadForFamily`, incluido su reintento `42703`), requests pendientes y
+contestados por destinatario, y familiares por owner (`loadForOwner`).
+
+**Fix (este commit):** `.range(0, 499)` al final de las 4 cadenas (tras
+`.order(...)`; en `loadForFamily`, dentro del helper `query()` para cubrir
+también el fallback). `postgrest` lo serializa como `offset=0&limit=500` en
+la URL de la petición.
+
+**Gate** `test/pagination_gate_test.dart` (patrón de
+`deletion_sql_gate_test`): escanea `lib/**/*.dart`, extrae cada cadena
+`.from('<tabla>')` hasta el `;` y exige que toda lectura (`.select(`) lleve
+`.range(` / `.limit(` o una guarda de una sola fila; además, las lecturas
+ordenadas deben cumplir **exactamente** `.range(0, 499)` (la política de 500
+filas: cambiar el cap obliga a actualizar el gate). Incluye test negativo del
+clasificador. `question_request_service_test` verifica además, en la petición
+real, `offset=0` y `limit=500`.
+
+**Trade-off aceptado:** más de 500 filas por consulta quedan fuera de la UI
+(la app no tiene paginación; por el `order` existente se conservan las más
+recientes). Las lecturas por RPC quedan fuera de este tope: su límite lo da
+la entrada (ver C-10).
 
 ## 🟠 Otros hallazgos de concurrencia/rendimiento
 
@@ -380,7 +400,7 @@ correctas.
 ## Fase 2 — Escala de datos
 
 10. ✅ C-5 lote de `get_visible_account_avatars` (≤100 ids) → `loadMany` en Home (1 RPC por lote; el `warmCached` único en Home ya existía).
-11. ⏳ C-6 `.range()`/`limit` en las 4 consultas sin tope · C-16 usar `loadMemberForOwner` · C-10 paralelizar bucles · C-17 borrar los re-sort.
+11. ⏳ **C-6 ✅** `.range(0, 499)` en las 4 consultas de lista + gate `pagination_gate_test` · C-16 usar `loadMemberForOwner` · C-10 paralelizar bucles · C-17 borrar los re-sort.
 
 ## Fase 3 — Arquitectura
 

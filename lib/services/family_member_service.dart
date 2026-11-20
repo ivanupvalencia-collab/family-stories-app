@@ -123,7 +123,9 @@ class SupabaseFamilyMemberService
         .from('family_members')
         .select('id, name, relationship, linked_account_id, photo_path')
         .eq('owner_id', ownerId)
-        .order('created_at');
+        .order('created_at')
+        // C-6: hard cap so a growing table can never be downloaded whole.
+        .range(0, 499);
 
     _requireOwner(ownerId, generation);
     final members = data.map(FamilyMember.fromSupabaseJson).toList();
