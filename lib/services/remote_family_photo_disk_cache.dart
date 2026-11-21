@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -15,8 +16,8 @@ class RemoteFamilyPhotoDiskCache {
   }) : _directoryProvider = directoryProvider ?? getApplicationSupportDirectory;
 
   // One instance per client and configuration: every reader shares the same
-  // write queue, so a logout purge (S-6) can never race a download that is
-  // still committing its file.
+  // ordering (per file + per-owner barrier, see _run), so a logout purge
+  // (S-6) can never race a download that is still committing its file.
   static final _shared = Expando<Map<String, RemoteFamilyPhotoDiskCache>>();
 
   static RemoteFamilyPhotoDiskCache forClient(
@@ -36,7 +37,81 @@ class RemoteFamilyPhotoDiskCache {
   final Future<Directory> Function() _directoryProvider;
   final String directoryName;
   final bool allowForeignUploader;
-  Future<void> _writes = Future.value();
+
+  // C-9: operations are ordered per logical file, plus one barrier per owner
+  // for tree-wide ops (clearOwner/retain). A read only waits for the write of
+  // its own file and for a purge/cleanup of its owner — never for the rest of
+  // the backlog. Dependencies always point from older to newer registrations
+  // (an op only chains onto barriers that already existed when it was
+  // enqueued), so no cycle is possible.
+  final _pendingFiles = <String, Future<void>>{};
+  final _ownerQueues = <String, Future<void>>{};
+  final _inFlightFiles = <String, Set<Future<void>>>{};
+
+  String _fileKey(String backend, String owner, String path) =>
+      'file:$backend|$owner|$path';
+  String _entryKey(String backend, String owner, String key) =>
+      'entry:$backend|$owner|$key';
+  String _ownerKey(String backend, String owner) => 'owner:$backend|$owner';
+
+  // Wait only for operations that can touch this file: its own pending write
+  // or removal, and a tree-wide purge/cleanup of the same owner.
+  Future<void> _settle(String ownerKey, String fileKey) {
+    final waiting = <Future<void>>[];
+    final pending = _pendingFiles[fileKey];
+    if (pending != null) waiting.add(pending);
+    final barrier = _ownerQueues[ownerKey];
+    if (barrier != null) waiting.add(barrier);
+    return waiting.isEmpty ? Future.value() : Future.wait(waiting);
+  }
+
+  Future<void> _run(
+    String ownerKey,
+    String? fileKey, // null → tree-wide op over the owner's directory
+    Future<void> Function() action,
+  ) {
+    final deps = <Future<void>>[];
+    if (fileKey == null) {
+      final previous = _ownerQueues[ownerKey];
+      if (previous != null) deps.add(previous);
+      deps.addAll(_inFlightFiles[ownerKey] ?? const <Future<void>>[]);
+    } else {
+      final sameFile = _pendingFiles[fileKey];
+      if (sameFile != null) deps.add(sameFile);
+      final barrier = _ownerQueues[ownerKey];
+      if (barrier != null) deps.add(barrier);
+    }
+    final next = Future.wait(deps)
+        .then((_) => action())
+        // Same contract as the old global queue: failures stay internal and
+        // never block the operations queued behind them.
+        .catchError((Object _) {});
+    if (fileKey == null) {
+      _ownerQueues[ownerKey] = next;
+    } else {
+      _pendingFiles[fileKey] = next;
+      (_inFlightFiles[ownerKey] ??= <Future<void>>{}).add(next);
+    }
+    unawaited(
+      next.whenComplete(() {
+        if (fileKey == null) {
+          if (identical(_ownerQueues[ownerKey], next)) {
+            _ownerQueues.remove(ownerKey);
+          }
+          return;
+        }
+        if (identical(_pendingFiles[fileKey], next)) {
+          _pendingFiles.remove(fileKey);
+        }
+        final inFlight = _inFlightFiles[ownerKey];
+        inFlight?.remove(next);
+        if (inFlight != null && inFlight.isEmpty) {
+          _inFlightFiles.remove(ownerKey);
+        }
+      }),
+    );
+    return next;
+  }
 
   Future<Directory> _root(String backend, String owner) async {
     final support = await _directoryProvider();
@@ -93,7 +168,7 @@ class RemoteFamilyPhotoDiskCache {
   }
 
   Future<Uint8List?> read(String backend, String owner, String path) async {
-    await _writes;
+    await _settle(_ownerKey(backend, owner), _fileKey(backend, owner, path));
     try {
       final file = await _file(backend, owner, path);
       final bytes = await file.readAsBytes();
@@ -105,19 +180,13 @@ class RemoteFamilyPhotoDiskCache {
     }
   }
 
-  Future<void> _enqueue(Future<void> Function() action) {
-    final next = _writes.then((_) => action());
-    _writes = next.catchError((Object _) {});
-    return _writes;
-  }
-
   Future<void> write(
     String backend,
     String owner,
     String path,
     Uint8List bytes, {
     required bool Function() stillValid,
-  }) => _enqueue(() async {
+  }) => _run(_ownerKey(backend, owner), _fileKey(backend, owner, path), () async {
     await _writeFile(await _file(backend, owner, path), bytes, stillValid);
   });
 
@@ -161,7 +230,7 @@ class RemoteFamilyPhotoDiskCache {
     String key, {
     bool image = true,
   }) async {
-    await _writes;
+    await _settle(_ownerKey(backend, owner), _entryKey(backend, owner, key));
     try {
       final bytes = await (await _named(backend, owner, key)).readAsBytes();
       if (image) {
@@ -182,30 +251,34 @@ class RemoteFamilyPhotoDiskCache {
     String key,
     Uint8List bytes, {
     required bool Function() stillValid,
-  }) => _enqueue(() async {
+  }) => _run(_ownerKey(backend, owner), _entryKey(backend, owner, key), () async {
     await _writeFile(await _named(backend, owner, key), bytes, stillValid);
   });
 
   Future<void> removeEntry(String backend, String owner, String key) =>
-      _enqueue(() async {
+      _run(_ownerKey(backend, owner), _entryKey(backend, owner, key), () async {
         final file = await _named(backend, owner, key);
         if (await file.exists()) await file.delete();
       });
 
-  Future<void> clearOwner(String backend, String owner) => _enqueue(() async {
-    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(owner)) return;
-    final root = await _root(backend, owner);
-    if (await root.exists()) await root.delete(recursive: true);
-  });
+  Future<void> clearOwner(String backend, String owner) => _run(
+    _ownerKey(backend, owner),
+    null,
+    () async {
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(owner)) return;
+      final root = await _root(backend, owner);
+      if (await root.exists()) await root.delete(recursive: true);
+    },
+  );
 
   Future<void> remove(String backend, String owner, String path) =>
-      _enqueue(() async {
+      _run(_ownerKey(backend, owner), _fileKey(backend, owner, path), () async {
         final file = await _file(backend, owner, path);
         if (await file.exists()) await file.delete();
       });
 
   Future<void> retain(String backend, String owner, Set<String> paths) =>
-      _enqueue(() async {
+      _run(_ownerKey(backend, owner), null, () async {
         final root = await _root(backend, owner);
         if (!await root.exists()) return;
         final keep = <String>{};
