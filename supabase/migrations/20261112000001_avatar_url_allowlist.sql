@@ -26,7 +26,7 @@ select id, avatar_url
 from public.profiles
 where avatar_url is not null
   and avatar_url <> ''
-  and avatar_url not ~ (
+  and avatar_url !~ (
     '^https://hwqvdrtehvixqloegilg\.supabase\.co/storage/v1/object/public/avatars/'
     || id::text
     || '/profile\?v=[0-9]+$'
