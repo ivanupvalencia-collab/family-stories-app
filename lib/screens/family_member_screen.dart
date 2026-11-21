@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../design/aritoria_design.dart';
+import '../domain/delete_family_member.dart';
 import '../widgets/family_member_space_view.dart';
 import '../services/question_of_the_day.dart';
 import '../services/story_photo_service.dart';
@@ -500,30 +501,20 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
     try {
       if (widget.isRemoteFamilyMember) {
         final account = _photoOwnerId!;
-        final plan = await _deletionService.delete(
-          ownerId: account,
-          familyMemberId: _familyMember.id,
-        );
-        final service = widget.familyMemberService;
-        if (service is FamilyMemberCacheRemover) {
-          await (service as FamilyMemberCacheRemover).forgetMember(
-            account,
-            _familyMember.id,
-          );
+        // A-1: the multi-service transaction lives in the domain; a partial
+        // plan throws so this screen's retry path stays unchanged.
+        final failure = await DeleteFamilyMember(
+          deletion: _deletionService,
+          photos: _photoService,
+          storyPhotos: _storyPhotos,
+          remoteStories: _remoteStoryService,
+          memberCache: widget.familyMemberService is FamilyMemberCacheRemover
+              ? widget.familyMemberService as FamilyMemberCacheRemover
+              : null,
+        )(ownerId: account, member: _familyMember);
+        if (failure != null) {
+          throw StateError('Deletion incomplete');
         }
-        await _photoService.forgetPhotos(
-          account,
-          plan.resources
-              .where((r) => r.bucket == 'family-member-photos')
-              .map((r) => r.path),
-        );
-        await _storyPhotos.forgetPhotos(
-          account,
-          plan.resources
-              .where((r) => r.bucket == 'story-photos')
-              .map((r) => r.path),
-        );
-        await _remoteStoryService?.clearAudioCache();
       } else {
         if (_storyStorage is! LocalFamilyStoryStorage) {
           throw StateError('Safe deletion unavailable');

@@ -35,7 +35,7 @@ desde entonces.
 | S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ✅ este commit · política own-folder en `20261115000001` (**no aplicada**) + gate S-29 |
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
-| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-2, A-3, A-4** (3/12); resto por grupos |
+| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-1, A-2, A-3, A-4** (4/12); resto por grupos |
 | C-1…C-18 | Eje de concurrencia y rendimiento | — | ✅ **completo (18/18)**: hechos **C-1…C-18** — sin vetoados en este eje |
 
 ---
@@ -163,6 +163,15 @@ consistente entre pantallas y se re-implementa por pantalla.
 **Fix:** `lib/domain/` (reglas puras) + casos de uso `DeleteFamilyMember`,
 `SubmitAnswer`, `AddFamilyMember` con resultado tipado; las pantallas solo
 mapean resultado → UI.
+
+**✅ resuelto (A-1):** los tres casos de uso viven en `lib/domain/` con
+resultado tipado (`AppFailure` sellada + banderas de foto blanda) —
+`SubmitAnswer` (upload → RPC con delete compensatorio → foto opcional),
+`DeleteFamilyMember` (plan → cache de miembros → ambos árboles de fotos →
+audio) y `AddFamilyMember` (local/remoto + foto opcional). Las tres pantallas
+mapean resultado → UI (los mensajes y la navegación quedan donde estaban);
+tests unitarios fijan la compensación y los fallos blandos que antes solo se
+cubrían end-to-end.
 
 ## 🔴 A-2 · Lógica de dominio dentro de widgets (Alto)
 
@@ -437,7 +446,7 @@ guardar).
 
 ## Fase 3 — Arquitectura
 
-12. ⏳ A-1/A-2 casos de uso fuera de pantallas + `selectHomeHero` a `domain/` + mapeo `AppFailure`.
+12. ✅ **A-1/A-2** `lib/domain/` + casos de uso tipados (`DeleteFamilyMember`, `SubmitAnswer`, `AddFamilyMember`) + `selectHomeHero`/presentación a `domain/` + `AppFailure` + clasificación PostgREST unificada.
 13. ✅ **A-3** `AppGraph` único en `main()`: sin fallbacks `?? Concrete()` en la capa de app, sin `.shared`, config a `String.fromEnvironment`/`--dart-define`.
 14. ⏳ A-4 `dispose()` en los servicios + suscripciones de auth centralizadas en un `SessionMonitor`.
 15. ⏳ A-7/A-8 extraer `RemotePhotoStore<T>` y `AudioPlaybackController`; utilidad `AsyncValueLoader<T>`.

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import '../design/aritoria_design.dart';
+import '../domain/add_family_member.dart';
 import '../models/family_member.dart';
 import '../models/question_request.dart';
 import '../services/auth_service.dart';
@@ -523,29 +524,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       final familyMember = draft.member;
       final user = _user;
-      _loadRequest++; // An older refresh must not overwrite this new member.
-      var savedMember = user == null
-          ? await _saveLocalFamilyMember(familyMember)
-          : await _familyMemberService.create(
-              ownerId: user.id,
-              name: familyMember.name,
-              relationship: familyMember.relationship,
-            );
+      _loadRequest++;
+      // A-1: the transaction lives in the domain; this screen only maps
+      // the typed result to UI.
+      final result = await AddFamilyMember(
+        members: _familyMemberService,
+        photos: photoService,
+        localStorage: _familyMemberStorage,
+      )(member: familyMember, ownerId: user?.id, photo: draft.photo);
       if (!mounted || _user?.id != user?.id) {
         return;
       }
-      if (draft.photo != null) {
-        try {
-          savedMember = await photoService.save(savedMember, draft.photo);
-        } catch (_) {
-          if (mounted && _user?.id == user?.id) {
-            _showMessage(
-              'El familiar se ha guardado, pero no su foto. Puedes añadirla desde su perfil.',
-            );
-          }
-        }
+      if (result.failure != null) {
+        _showMessage('No se pudo guardar el familiar. Inténtalo de nuevo.');
+        return;
       }
-      if (!mounted || _user?.id != user?.id) return;
+      if (!result.photoSaved) {
+        _showMessage(
+          'El familiar se ha guardado, pero no su foto. Puedes añadirla desde su perfil.',
+        );
+      }
+      final savedMember = result.saved!;
       setState(() {
         _familyMembers.add(savedMember);
         _hasMembersSnapshot = true;
@@ -568,12 +567,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// flow while one is open is a no-op" is pinned through this method.
   @visibleForTesting
   Future<void> debugAddFamilyMember() => _addFamilyMember();
-
-  Future<FamilyMember> _saveLocalFamilyMember(FamilyMember familyMember) async {
-    final current = await _familyMemberStorage.load();
-    await _familyMemberStorage.save([...current, familyMember]);
-    return familyMember;
-  }
 
   FamilyMemberPhotoService _photoServiceFor(AuthUser? user) =>
       widget.familyMemberPhotoService ??

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/question_answer_hints.dart';
+import '../domain/submit_answer.dart';
 import '../widgets/question_answer_view.dart';
 import '../models/question_request.dart';
 import '../services/audio_answer_service.dart';
@@ -39,59 +40,27 @@ class _QuestionRequestScreenState extends State<QuestionRequestScreen> {
     required Duration duration,
     PickedProfileImage? photo,
   }) async {
-    final objectPath = createQuestionAnswerObjectPath(
-      widget.questionRequest.id,
-    );
-    var uploaded = false;
-    late String storyId;
-
-    try {
-      await widget.questionRequestService.uploadAnswerAudio(
-        localAudioPath: audioPath,
-        objectPath: objectPath,
+    // A-1: the transaction (upload, RPC, compensating delete, optional
+    // photo) lives in the domain; this screen only maps the typed result
+    // to UI. A failure rethrows so QuestionScreen keeps the recording for
+    // a retry, exactly like the inline transaction did.
+    final result = await SubmitAnswer(
+      questionRequests: widget.questionRequestService,
+      photos: widget.photoService,
+    )(request: widget.questionRequest, audioPath: audioPath, duration: duration, photo: photo);
+    if (!result.photoAttached && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(16, 0, 16, 96),
+          content: Text(
+            'La respuesta se ha enviado sin foto. Puedes añadirla desde Historias contadas.',
+          ),
+        ),
       );
-      uploaded = true;
-      storyId = await widget.questionRequestService.completeQuestionRequest(
-        questionRequestId: widget.questionRequest.id,
-        audioPath: objectPath,
-        durationSeconds: duration.inSeconds,
-      );
-    } catch (_) {
-      if (uploaded) {
-        try {
-          await widget.questionRequestService.deleteAnswerAudio(objectPath);
-        } catch (_) {
-          // Storage cleanup depends on the authenticated user's DELETE policy.
-        }
-      }
-      rethrow;
     }
-    if (photo != null) {
-      try {
-        final service = widget.photoService ?? SupabaseStoryPhotoService();
-        // The existing completion RPC's returned ID is authoritative. A
-        // separate photo failure never enters the audio rollback above.
-        final seed = await widget.questionRequestService.loadAnswerStory(
-          widget.questionRequest.id,
-        );
-        if (seed == null || seed.id != storyId) {
-          throw StateError('Answer metadata unavailable');
-        }
-        await service.save(seed, photo);
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              behavior: SnackBarBehavior.floating,
-              margin: EdgeInsets.fromLTRB(16, 0, 16, 96),
-              content: Text(
-                'La respuesta se ha enviado sin foto. Puedes añadirla desde Historias contadas.',
-              ),
-            ),
-          );
-        }
-      }
-    }
+    final failure = result.failure;
+    if (failure != null) throw failure;
   }
 
   Future<void> _openRecorder() async {
