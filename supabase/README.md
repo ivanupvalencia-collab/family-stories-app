@@ -55,6 +55,47 @@ triggers de `updated_at`**, **0011 (S-29) la política `DELETE` de `avatars`**
 y **0012 (S-30) elimina la política muerta de `family_invitations`**; ninguno
 se ha aplicado.
 
+### Compatibilidad de URL de avatar (2026-11-21)
+
+`20261121000001_avatar_url_image_extensions.sql` sustituye el CHECK
+`profiles_avatar_url_storage_only`: conserva `profile?v=<ms>` y permite
+`profile.jpg`, `profile.png`, `profile.webp`, `profile.heic` y `profile.heif`
+con la misma revisión `?v=<ms>`. Son las extensiones que generan los servicios
+de fotos y cuyos MIME ya admite el bucket `avatars`. Sigue exigiendo HTTPS,
+el host exacto del proyecto, el bucket público `avatars` y la carpeta del `id`
+de la propia fila. Mantiene los valores NULL/vacío del catálogo de avatares.
+La sustitución se hace en una única sentencia y valida las filas existentes.
+
+La prueba `test/avatar_url_migration_test.dart` reproduce que el patrón anterior
+rechaza `profile.jpg?v=...` y comprueba los formatos permitidos y las URL que
+deben rechazarse. Es una comprobación estática; no acredita qué migraciones
+están instaladas en el proyecto remoto.
+
+#### Aplicación mediante la integración existente con GitHub
+
+Este documento registra sincronizaciones previas con GitHub. El repositorio
+no contiene `.github/workflows/`, `supabase/config.toml` ni un script de deploy;
+la configuración de la integración y el historial aplicado están fuera de Git.
+Las anotaciones históricas «NO aplicado» de arriba no prueban el estado remoto
+actual.
+
+1. Revisar en la integración GitHub de Supabase que este repositorio y la rama
+   de producción sean los correctos, y que `Deploy to production` esté activo.
+2. Incorporar la nueva migración al flujo habitual de rama/PR y merge a la rama
+   de producción configurada (`main` si conserva la rama principal del repo).
+3. Revisar el despliegue de Supabase: la fase `migrate` debe aplicar
+   `20261121000001` y terminar correctamente. Después, reintentar guardar el
+   avatar desde la app. No hace falta cambiar ni recompilar el cliente.
+
+La integración aplica los archivos que no figuran en su historial de migraciones:
+antes del merge, comprobar que el baseline ya está registrado y que las
+pendientes son las esperadas. No reiniciar la base ni volver a ejecutar el
+baseline sobre producción: `20261111000001_baseline_schema.sql` contiene
+`DROP TABLE`. Si hay una migración anterior fallida, debe resolverse mediante
+el mismo flujo antes de que pueda ejecutarse esta nueva.
+
+Referencia: [integración GitHub de Supabase](https://supabase.com/docs/guides/deployment/branching/github-integration).
+
 ### Correcciones sobre el volcado crudo
 
 El exportador del dashboard devolvió tres defectos que `0001` corrige:
