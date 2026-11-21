@@ -370,7 +370,12 @@ void main() {
         relationship: 'Abuelo/a',
       ),
     ];
-    await tester.drag(find.byType(ListView), const Offset(0, 350));
+    // C-14: the home now also contains a horizontal ListView (the member
+    // strip), so the scroll is addressed by its stable key.
+    await tester.drag(
+      find.byKey(const ValueKey('home-scroll')),
+      const Offset(0, 350),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Usuario M'), findsOneWidget);
     expect(questionRequestService.requestedRecipientIds, isEmpty);
@@ -408,7 +413,12 @@ void main() {
         status: QuestionRequestStatus.answered,
       ),
     ];
-    await tester.drag(find.byType(ListView), const Offset(0, 350));
+    // C-14: the home now also contains a horizontal ListView (the member
+    // strip), so the scroll is addressed by its stable key.
+    await tester.drag(
+      find.byKey(const ValueKey('home-scroll')),
+      const Offset(0, 350),
+    );
     await tester.pumpAndSettle();
 
     expect(questionRequestService.requestedAnsweredRecipientIds, [

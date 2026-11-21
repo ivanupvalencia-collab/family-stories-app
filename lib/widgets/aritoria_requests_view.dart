@@ -34,38 +34,64 @@ class AritoriaRequestsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => RefreshIndicator(
     onRefresh: onRefresh,
-    child: ListView(
+    child: CustomScrollView(
       key: const ValueKey('questions-scroll'),
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(AritoriaSpace.lg),
-      children: [
-        Text('Preguntas', style: AritoriaType.brand.copyWith(fontSize: 36)),
-        const SizedBox(height: AritoriaSpace.sm + AritoriaSpace.xs),
-        Text(
-          'Preguntas que tus familiares te han hecho para conocer mejor tu historia.',
-          style: AritoriaType.body.copyWith(color: AritoriaColors.muted),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(AritoriaSpace.lg),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Preguntas',
+                      style: AritoriaType.brand.copyWith(fontSize: 36),
+                    ),
+                    const SizedBox(height: AritoriaSpace.sm + AritoriaSpace.xs),
+                    Text(
+                      'Preguntas que tus familiares te han hecho para conocer mejor tu historia.',
+                      style: AritoriaType.body.copyWith(
+                        color: AritoriaColors.muted,
+                      ),
+                    ),
+                    const SizedBox(height: AritoriaSpace.lg),
+                    _RequestTabs(
+                      pendingCount: pendingCount,
+                      showAnswers: showAnswers,
+                      onChanged: onTabChanged,
+                    ),
+                    const SizedBox(height: AritoriaSpace.lg),
+                  ],
+                ),
+              ),
+              // C-14: the request list is bounded only by the C-6 page cap;
+              // only the visible rows are built.
+              if (status != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AritoriaSpace.md,
+                    ),
+                    child: status!,
+                  ),
+                )
+              else
+                SliverList.builder(
+                  itemCount: requests.length,
+                  itemBuilder: (context, index) => ReceivedRequestRow(
+                    request: requests[index],
+                    details: details[requests[index].id],
+                    editorial: true,
+                    avatarService: avatarService,
+                    onTap: () => onRequestTap(requests[index]),
+                  ),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: AritoriaSpace.lg),
-        _RequestTabs(
-          pendingCount: pendingCount,
-          showAnswers: showAnswers,
-          onChanged: onTabChanged,
-        ),
-        const SizedBox(height: AritoriaSpace.lg),
-        if (status != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AritoriaSpace.md),
-            child: status!,
-          )
-        else
-          for (final request in requests)
-            ReceivedRequestRow(
-              request: request,
-              details: details[request.id],
-              editorial: true,
-              avatarService: avatarService,
-              onTap: () => onRequestTap(request),
-            ),
       ],
     ),
   );

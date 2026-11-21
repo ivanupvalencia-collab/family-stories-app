@@ -567,20 +567,22 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
           child: Scaffold(
             appBar: AppBar(title: const Text('Sus historias')),
             body: StatefulBuilder(
-              builder: (listContext, updateList) => ListView(
+              builder: (listContext, updateList) => ListView.builder(
+                // C-14: the stories list is bounded only by the C-6 page
+                // cap; only the visible rows are built.
                 padding: const EdgeInsets.all(24),
-                children: _stories
-                    .map(
-                      (story) => StoryMemoryRow(
-                        story: story,
-                        photos: _photosForStory(story),
-                        onTap: () async {
-                          await _openStory(story);
-                          if (listContext.mounted) updateList(() {});
-                        },
-                      ),
-                    )
-                    .toList(),
+                itemCount: _stories.length,
+                itemBuilder: (listContext, index) {
+                  final story = _stories[index];
+                  return StoryMemoryRow(
+                    story: story,
+                    photos: _photosForStory(story),
+                    onTap: () async {
+                      await _openStory(story);
+                      if (listContext.mounted) updateList(() {});
+                    },
+                  );
+                },
               ),
             ),
           ),

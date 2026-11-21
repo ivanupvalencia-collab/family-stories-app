@@ -321,4 +321,45 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     avatars.dispose();
   });
+
+  testWidgets('long request lists build only the visible rows (C-14)', (
+    tester,
+  ) async {
+    final many = [
+      for (var i = 0; i < 300; i++)
+        fixtures.testQuestionRequest(
+          id: 'q$i',
+          recipientId: 'recipient',
+          questionText: 'Pregunta número $i',
+          createdAt: DateTime(2026, 10, 4),
+        ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AritoriaDesign.theme(),
+        home: Scaffold(
+          body: AritoriaRequestsView(
+            requests: many,
+            pendingCount: many.length,
+            showAnswers: false,
+            status: null,
+            details: const {},
+            onRefresh: () async {},
+            onTabChanged: (_) {},
+            onRequestTap: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final built = find.byType(ReceivedRequestRow).evaluate().length;
+    expect(built, greaterThan(0));
+    expect(
+      built,
+      lessThan(300),
+      reason: 'C-14: the whole request list was built eagerly.',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 }

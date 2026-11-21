@@ -274,6 +274,30 @@ void main() {
     await second;
   });
 
+  testWidgets('the home member strip builds only the visible tiles (C-14)', (
+    tester,
+  ) async {
+    final members = [
+      for (var i = 0; i < 300; i++)
+        FamilyMember(
+          id: 'member$i',
+          name: 'Familiar $i',
+          relationship: 'Familia',
+        ),
+    ];
+    await tester.pumpWidget(
+      fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: members)),
+    );
+    await tester.pumpAndSettle();
+    final built = find.byType(FamilyMemberPhotoView).evaluate().length;
+    expect(built, greaterThan(0));
+    expect(
+      built,
+      lessThan(300),
+      reason: 'C-14: every member tile was built eagerly.',
+    );
+  });
+
   testWidgets(
     'quick recording and sending select a member then open existing questions',
     (tester) async {

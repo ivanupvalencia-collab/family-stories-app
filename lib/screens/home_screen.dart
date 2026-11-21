@@ -804,31 +804,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _membersView() => RefreshIndicator(
     onRefresh: _refreshHome,
-    child: ListView(
+    // C-14: the member rows are built lazily; the chrome (status, empty
+    // text, trailing add button) stays in fixed box slivers.
+    child: CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(AritoriaSpace.lg),
-      children: [
-        if (_memberStatus() != null)
-          _memberStatus()!
-        else if (_familyMembers.isEmpty)
-          const Text('Todavía no has añadido ningún ser querido.')
-        else
-          for (final member in _familyMembers)
-            ListTile(
-              leading: FamilyMemberPhotoView(
-                member: member,
-                photoService: _photos,
-                radius: 24,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(AritoriaSpace.lg),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              if (_memberStatus() != null)
+                SliverToBoxAdapter(child: _memberStatus()!)
+              else if (_familyMembers.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Text('Todavía no has añadido ningún ser querido.'),
+                )
+              else
+                SliverList.builder(
+                  itemCount: _familyMembers.length,
+                  itemBuilder: (context, index) => ListTile(
+                    leading: FamilyMemberPhotoView(
+                      member: _familyMembers[index],
+                      photoService: _photos,
+                      radius: 24,
+                    ),
+                    title: Text(_familyMembers[index].name),
+                    subtitle: Text(_familyMembers[index].relationship),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openFamilyMember(_familyMembers[index]),
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: TextButton.icon(
+                  onPressed: _isLoading || _isSaving ? null : _addFamilyMember,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Añadir ser querido'),
+                ),
               ),
-              title: Text(member.name),
-              subtitle: Text(member.relationship),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openFamilyMember(member),
-            ),
-        TextButton.icon(
-          onPressed: _isLoading || _isSaving ? null : _addFamilyMember,
-          icon: const Icon(Icons.add),
-          label: const Text('Añadir ser querido'),
+            ],
+          ),
         ),
       ],
     ),

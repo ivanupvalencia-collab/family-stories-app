@@ -185,46 +185,50 @@ class AritoriaHomeView extends StatelessWidget {
           if (memberStatus != null)
             memberStatus!
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final member in members)
-                    Padding(
-                      padding: const EdgeInsets.only(right: AritoriaSpace.md),
-                      child: _Person(
-                        member: member,
-                        photos: photos,
-                        onTap: () => onMember(member),
-                      ),
-                    ),
-                  SizedBox(
-                    width: 80,
-                    child: InkWell(
-                      onTap: onAdd,
-                      borderRadius: BorderRadius.circular(AritoriaSpace.sm),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AritoriaColors.taupe),
+            // C-14: only the visible member tiles are built; the height is
+            // the tile's own extent (64px photo + a two-line caption).
+            SizedBox(
+              height: 112,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: members.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == members.length) {
+                    return SizedBox(
+                      width: 80,
+                      child: InkWell(
+                        onTap: onAdd,
+                        borderRadius: BorderRadius.circular(AritoriaSpace.sm),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AritoriaColors.taupe),
+                              ),
+                              child: const Icon(
+                                Icons.add,
+                                color: AritoriaColors.olive,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.add,
-                              color: AritoriaColors.olive,
-                            ),
-                          ),
-                          const SizedBox(height: AritoriaSpace.sm),
-                          const Text('Añadir', style: AritoriaType.action),
-                        ],
+                            const SizedBox(height: AritoriaSpace.sm),
+                            const Text('Añadir', style: AritoriaType.action),
+                          ],
+                        ),
                       ),
+                    );
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(right: AritoriaSpace.md),
+                    child: _Person(
+                      member: members[index],
+                      photos: photos,
+                      onTap: () => onMember(members[index]),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           if (authenticated) ...[
