@@ -6,6 +6,7 @@ import 'package:family_stories_app/models/family_story.dart';
 import 'package:family_stories_app/services/family_story_storage.dart';
 import 'package:family_stories_app/services/persistent_story_waveform_service.dart';
 import 'package:family_stories_app/services/story_waveform_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -392,16 +393,31 @@ void main() {
       );
       await usuarioA.loadForStory(_story(), resolve);
       await _login(client, 'usuarioB');
-      final usuarioB = StoryWaveforms.forClient(client);
+      // C-18: the same (client, disk) pair must keep returning the same
+      // binding, so all three lookups below pass the injected cache.
+      final usuarioB = StoryWaveforms.forClient(
+        client,
+        diskCache: disk,
+        extractorFactory: () => extractor,
+      );
       expect(usuarioA.cachedForStory(_story()), isNull);
       await expectLater(usuarioA.loadForStory(_story(), resolve), throwsStateError);
       await usuarioB.loadForStory(_story(), resolve);
       expect(extractor.calls, 2);
       // Return to Usuario A: old disk entries must already have been removed.
       await _login(client, 'usuarioA');
-      await StoryWaveforms.forClient(client).loadForStory(_story(), resolve);
+      await StoryWaveforms.forClient(
+        client,
+        diskCache: disk,
+        extractorFactory: () => extractor,
+      ).loadForStory(_story(), resolve);
       expect(extractor.calls, 3);
-      await (StoryWaveforms.forClient(client) as PersistentStoryWaveformService)
+      await (StoryWaveforms.forClient(
+            client,
+            diskCache: disk,
+            extractorFactory: () => extractor,
+          )
+              as PersistentStoryWaveformService)
           .invalidate();
       await client.dispose();
     },
@@ -471,5 +487,128 @@ void main() {
     final kept = await onlyJson();
     expect(kept.existsSync(), isTrue);
     expect(await budgeted.read('backend', 'owner', _story(id: 'b')), isNotNull);
+  });
+
+  test(
+    'forClient honors a later disk cache instead of freezing the first (C-18)',
+    () async {
+      final client = SupabaseClient(
+        'https://example.test',
+        'test-key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false),
+      );
+      try {
+        await _login(client, 'usuarioA');
+        Future<int> jsonCount(String root) async {
+          final dir = Directory(root);
+          if (!await dir.exists()) return 0;
+          var count = 0;
+          await for (final entry
+              in dir.list(recursive: true, followLinks: false)) {
+            if (entry is File && entry.path.endsWith('.json')) count++;
+          }
+          return count;
+        }
+
+        final first = StoryWaveforms.forClient(
+          client,
+          diskCache: StoryWaveformDiskCache(
+            directoryProvider: () async => Directory('${directory.path}/diskA'),
+          ),
+          extractorFactory: () => extractor,
+        );
+        await first.loadForStory(_story(), resolve);
+        expect(await jsonCount('${directory.path}/diskA'), 1);
+
+        // A later call with a different cache must not reuse the first
+        // binding's frozen configuration.
+        final second = StoryWaveforms.forClient(
+          client,
+          diskCache: StoryWaveformDiskCache(
+            directoryProvider: () async => Directory('${directory.path}/diskB'),
+          ),
+          extractorFactory: () => extractor,
+        );
+        expect(second, isNot(first));
+        await second.loadForStory(_story(id: 'second'), resolve);
+        expect(
+          await jsonCount('${directory.path}/diskB'),
+          1,
+          reason: 'C-18: forClient froze the first disk cache.',
+        );
+        expect(await jsonCount('${directory.path}/diskA'), 1);
+      } finally {
+        await client.dispose();
+      }
+    },
+  );
+
+  test('an account change drops the guest waveform memory (C-18)', () async {
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (_) async => directory.path);
+    try {
+      String part(String value) =>
+          base64Url.encode(utf8.encode(value)).replaceAll('=', '');
+      final story = _story(id: 'guest-story', path: audio.path);
+      final stat = await File(audio.path).stat();
+      // Seed a valid device-scope entry so the static guest scope warms its
+      // RAM from disk without any native extraction.
+      final entryFile = File(
+        '${directory.path}/story_waveforms_v1/${part('local')}/${part('device')}'
+        '/${part('family')}/${part('guest-story')}.json',
+      );
+      await entryFile.parent.create(recursive: true);
+      await entryFile.writeAsString(
+        jsonEncode({
+          'format': 'audio_waveforms-2.0.2-rms256-peak-v1',
+          'identity': jsonEncode([
+            story.familyMemberId,
+            story.id,
+            story.audioPath,
+          ]),
+          'stamp': [stat.size, stat.modified.microsecondsSinceEpoch],
+          'samples': [0, 0.5, 1],
+        }),
+      );
+
+      final guest = StoryWaveforms.local;
+      await guest.loadForStory(story, resolve);
+      await guest.loadForStory(story, resolve);
+      // Corrupt the disk copy: only the RAM entry can serve the next read.
+      await entryFile.writeAsString('{');
+      await guest.loadForStory(story, resolve);
+
+      final client = SupabaseClient(
+        'https://example.test',
+        'test-key',
+        authOptions: const AuthClientOptions(autoRefreshToken: false),
+      );
+      try {
+        await _login(client, 'usuarioA');
+        StoryWaveforms.forClient(
+          client,
+          diskCache: StoryWaveformDiskCache(
+            directoryProvider: () async =>
+                Directory('${directory.path}/remote'),
+          ),
+          extractorFactory: () => extractor,
+        );
+        await _login(client, 'usuarioB');
+        // The account transition must drop the guest RAM: the next read can
+        // no longer come from memory and the corrupted disk entry forces a
+        // (failing, unmocked) native extraction.
+        await expectLater(
+          guest.loadForStory(story, resolve),
+          throwsA(isA<MissingPluginException>()),
+          reason: 'C-18: the guest samples survived the account change.',
+        );
+      } finally {
+        await client.dispose();
+      }
+    } finally {
+      messenger.setMockMethodCallHandler(channel, null);
+    }
   });
 }
