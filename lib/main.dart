@@ -24,6 +24,7 @@ import 'services/question_request_service.dart';
 import 'services/received_request_details_service.dart';
 import 'services/secure_session_storage.dart';
 import 'services/session_data_sweeper.dart';
+import 'services/shared_http_client.dart';
 
 const _supabaseUrl = 'https://hwqvdrtehvixqloegilg.supabase.co';
 const _supabasePublishableKey =
@@ -38,6 +39,9 @@ Future<void> main() async {
   await Supabase.initialize(
     url: _supabaseUrl,
     publishableKey: _supabasePublishableKey,
+    // C-7: every storage/REST/auth download shares the app's single pooled
+    // HttpClient (connection timeout included) with the avatar downloads.
+    httpClient: sharedSupabaseHttpClient,
     // The app owns deep-link handling through PlatformIncomingLinkService and
     // never uses a redirect/OAuth flow, so supabase_flutter must not install
     // its own link observer and race with getInitialUri().

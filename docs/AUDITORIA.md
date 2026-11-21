@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-10, C-16, C-17** (9/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-7, C-10, C-16, C-17** (10/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -359,7 +359,7 @@ la entrada (ver C-10).
 
 | # | Hallazgo | Sev. | Ubicación |
 |---|---|---|---|
-| C-7 | Cero timeouts de red; HttpClient nuevo por descarga; un request colgado bloquea el avatar (**parcial resuelto en S-5**: `connectionTimeout` 10 s + `requestTimeout` 30 s + `followRedirects = false` en la descarga de avatares; queda compartir el `HttpClient` con el resto de descargas) | Medio | `profile_avatar_image_cache.dart:176-225` |
+| C-7 | Cero timeouts de red; HttpClient nuevo por descarga; un request colgado bloquea el avatar (**✅ resuelto**: timeouts + `followRedirects = false` desde S-5, y ahora un único `HttpClient` compartido por toda la app — avatares + storage/REST/auth vía `httpClient` en `Supabase.initialize`, con pooling de conexiones) | Medio | `profile_avatar_image_cache.dart:176-225` |
 | C-8 | Doble-tap: `_isSaving` se pone tras el `await` del picker → dos filas creadas | Medio | `home_screen.dart:506-524,821,895` |
 | C-9 | Cola de escritura serializada y lecturas que esperan TODO el backlog | Medio | `remote_family_photo_disk_cache.dart:20,89-92,145` |
 | C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto (**✅ resuelto**: chunks de RPC en paralelo con `Future.wait` + un remove por bucket de ≤100 rutas con cortocircuito y validación previa del plan) | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
@@ -386,7 +386,7 @@ correctas.
 
 1. ✅ C-1 dedup in-flight + `rename()` atómico en descargas de audio.
 2. ✅ C-2 mutex `_enqueue` en `family_story_storage` y `family_member_storage`.
-3. ✅ C-7 timeouts + HttpClient compartido + liberación garantizada de `_pendingBytes` → **parcial** (timeouts y sin redirects en el avatar, con S-5; comparten `HttpClient` pendiente).
+3. ✅ C-7 timeouts + `HttpClient` compartido + liberación garantizada de `_pendingBytes` → **completo** (timeouts y sin redirects desde S-5; un único `HttpClient` compartido entre avatares y todo el tráfico Supabase, con tests de pooling por puerto remoto).
 4. ✅ S-7 `finally` en el sign-out (Google + cachés se ejecutan siempre) → hecho en este commit con reserva local de `signOut(scope: local)`; ver riesgo residual en la tabla de estado. También **S-10**: los errores del stream de auth (fallos de refresh) ya no pueden romper la app — módulo `auth_stream.dart` (`handleAuthStreamError` + `listenAuthSafely`) usado por los 8 servicios que se suscribían directamente y por `authUserChanges()` en `auth_service.dart`, sin tocar nunca el estado de sesión.
 
 ## Fase 1 — Frontera de seguridad

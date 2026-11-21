@@ -43,6 +43,9 @@ dependencies:
   # not sit in plain SharedPreferences. Requires minSdk 23; Flutter sets 24.
   flutter_secure_storage: 11.2.0
   supabase_flutter: 2.18.0
+  # C-7: direct dependency for IOClient, which adapts the shared
+  # dart:io HttpClient to the `Client` SupabaseClient accepts.
+  http: ^1.6.0
   google_sign_in: 7.2.0
   image_picker: ^1.2.3
   share_plus: ^13.3.1

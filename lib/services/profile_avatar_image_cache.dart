@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -12,6 +11,7 @@ import '../models/user_profile.dart';
 import 'auth_stream.dart';
 import 'avatar_url_policy.dart';
 import 'remote_family_photo_disk_cache.dart';
+import 'shared_http_client.dart';
 
 abstract interface class ProfileAvatarImageSource {
   ProfileAvatarImageCache get avatarImages;
@@ -197,44 +197,37 @@ class ProfileAvatarImageCache extends ChangeNotifier {
           if (!_urlPolicy.allows(url)) {
             throw StateError('Avatar URL is not served by the backend');
           }
-          final http = HttpClient()
-            // C-7: a stalled connection must not pin this future forever.
-            ..connectionTimeout = const Duration(seconds: 10);
+          // C-7: reuse the app-wide shared HttpClient (the S-5 connection
+          // timeout lives there). It is never closed: force-closing it would
+          // abort every other download sharing its pool.
           Future<Uint8List> download() async {
-            try {
-              final uri = Uri.parse(url);
-              final request = await http
-                  .getUrl(uri)
-                  // A redirect could leave the allowed origin behind it.
-                  ..followRedirects = false;
-              final response = await request.close();
-              if (response.statusCode != 200) {
-                throw NetworkImageLoadException(
-                  statusCode: response.statusCode,
-                  uri: uri,
-                );
-              }
-              final builder = BytesBuilder(copy: false);
-              await for (final chunk in response) {
-                builder.add(chunk);
-                if (builder.length > 10 * 1024 * 1024) {
-                  throw const FormatException('Avatar too large');
-                }
-              }
-              return builder.takeBytes();
-            } finally {
-              http.close(force: true);
+            final uri = Uri.parse(url);
+            final request = await sharedHttpClient
+                .getUrl(uri)
+                // A redirect could leave the allowed origin behind it.
+                ..followRedirects = false;
+            final response = await request.close();
+            if (response.statusCode != 200) {
+              throw NetworkImageLoadException(
+                statusCode: response.statusCode,
+                uri: uri,
+              );
             }
+            final builder = BytesBuilder(copy: false);
+            await for (final chunk in response) {
+              builder.add(chunk);
+              if (builder.length > 10 * 1024 * 1024) {
+                throw const FormatException('Avatar too large');
+              }
+            }
+            return builder.takeBytes();
           }
 
-          try {
-            // dart:io has no per-request timeout: bound the whole exchange
-            // (headers + body) and drop the socket when it fires.
-            bytes = await download().timeout(const Duration(seconds: 30));
-          } on TimeoutException {
-            http.close(force: true);
-            rethrow;
-          }
+          // dart:io has no per-request timeout: bound the whole exchange
+          // (headers + body). On expiry our future stops here; the abandoned
+          // exchange ends on its own (the 10 MB cap, a trusted origin, or the
+          // OS reaping a dead peer) without touching the shared pool.
+          bytes = await download().timeout(const Duration(seconds: 30));
           await RemoteFamilyPhotoDiskCache.validate(bytes);
           if (!valid()) throw StateError('Avatar was invalidated');
           if (owner != null) {

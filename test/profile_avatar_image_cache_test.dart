@@ -6,6 +6,7 @@ import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/avatar_url_policy.dart';
 import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:family_stories_app/services/profile_service.dart';
+import 'package:family_stories_app/services/shared_http_client.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,6 +20,7 @@ void main() {
   var downloads = 0;
   var fail = false;
   var revision = 1;
+  final remotePorts = <int>[];
   Completer<void>? gate;
 
   UserProfile profile({String id = 'owner', int version = 1}) => UserProfile(
@@ -50,12 +52,14 @@ void main() {
     downloads = 0;
     fail = false;
     revision = 1;
+    remotePorts.clear();
     gate = null;
     cache = ProfileAvatarImageCache(
       urlPolicy: AvatarUrlPolicy.permissive(),
     );
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
+      remotePorts.add(request.connectionInfo?.remotePort ?? -1);
       if (request.uri.path == '/avatar') {
         downloads++;
         await gate?.future;
@@ -106,6 +110,38 @@ void main() {
       expect(downloads, 1);
     },
   );
+
+  test('avatar downloads reuse one pooled HttpClient (C-7)', () async {
+    await resolve(cache.imageFor(profile(id: 'avatar-a'))!);
+    await resolve(cache.imageFor(profile(id: 'avatar-b'))!);
+    expect(downloads, 2);
+    expect(remotePorts, hasLength(2));
+    // Same remote TCP port means both downloads ran on the same pooled
+    // connection: a fresh HttpClient per download would open a new socket.
+    expect(
+      remotePorts[1],
+      remotePorts[0],
+      reason: 'C-7: every download opened its own connection.',
+    );
+  });
+
+  test('avatar and Supabase downloads share the pool (C-7)', () async {
+    await resolve(cache.imageFor(profile(id: 'avatar-owner'))!);
+    final client = SupabaseClient(
+      'http://127.0.0.1:${server.port}',
+      'test-key',
+      httpClient: sharedSupabaseHttpClient,
+    );
+    final bytes = await client.storage.from('story-photos').download('x.png');
+    expect(bytes, isNotEmpty);
+    await client.dispose();
+    expect(remotePorts, hasLength(2));
+    expect(
+      remotePorts[1],
+      remotePorts[0],
+      reason: 'C-7: Supabase traffic must reuse the shared HttpClient pool.',
+    );
+  });
 
   test('revision change and removing a photo evict the former image', () async {
     final first = cache.imageFor(profile())!;
