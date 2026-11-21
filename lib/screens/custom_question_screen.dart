@@ -97,6 +97,8 @@ class _CustomQuestionScreenState extends State<CustomQuestionScreen> {
                     const SizedBox(height: 24),
                     TextFormField(
                       controller: _questionController,
+                      // S-13: same ceiling as question_text_max_length (500).
+                      maxLength: 500,
                       autofocus: true,
                       keyboardType: TextInputType.multiline,
                       textInputAction: TextInputAction.newline,

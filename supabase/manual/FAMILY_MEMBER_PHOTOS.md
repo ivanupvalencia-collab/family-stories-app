@@ -78,24 +78,24 @@ No hay caché global de bytes privados compartida entre cuentas.
 
 ## Prueba manual con sesión
 
-1. Ejecutar los dos scripts en orden. Con Iván, abrir familiares existentes:
+1. Ejecutar los dos scripts en orden. Con Usuario A, abrir familiares existentes:
    deben mantener datos y vínculos, con fallback si no tienen foto.
 2. Crear un familiar con foto y otro sin ella. En Supabase, comprobar bucket
-   privado, ruta `<Iván>/<familyMemberId>/...` y columna `photo_path` correcta.
+   privado, ruta `<Usuario A>/<familyMemberId>/...` y columna `photo_path` correcta.
 3. Abrir el perfil, cambiar y eliminar la foto. Confirmar que se actualiza la
    columna y se elimina el objeto anterior al completar la operación. Cerrar
    y reabrir la app; probar también otro dispositivo con la misma cuenta.
-4. Elegir una foto propia para un familiar vinculado a Pepe. Cambiar el avatar
-   de la cuenta de Pepe: la foto del familiar creado por Iván debe mantenerse.
-5. Con una sesión real de Pepe/u otra cuenta, intentar por la Data API descargar,
-   subir, reemplazar o eliminar el objeto de Iván, y llamar a la RPC con el ID
-   del familiar de Iván: las operaciones deben rechazarse. Repetir lectura sin
+4. Elegir una foto propia para un familiar vinculado a Usuario B. Cambiar el avatar
+   de la cuenta de Usuario B: la foto del familiar creado por Usuario A debe mantenerse.
+5. Con una sesión real de Usuario B/u otra cuenta, intentar por la Data API descargar,
+   subir, reemplazar o eliminar el objeto de Usuario A, y llamar a la RPC con el ID
+   del familiar de Usuario A: las operaciones deben rechazarse. Repetir lectura sin
    sesión. No probar RLS con una clave service-role ni con el SQL Editor como
    postgres, que tienen privilegios distintos de una sesión de usuario.
 6. Cerrar sesión o cambiar de cuenta con el perfil abierto: se oculta la foto
    remota y se deshabilita su edición. No deben mostrarse bytes de la cuenta
    anterior. Volver a entrar y abrir el perfil de nuevo.
-7. Repetir Iván → pregunta a Pepe → respuesta → reproducción, «Tus respuestas»
+7. Repetir Usuario A → pregunta a Usuario B → respuesta → reproducción, «Tus respuestas»
    e invitaciones para comprobar los flujos anteriores.
 
 Las pruebas automatizadas validan archivos, SharedPreferences, contrato HTTP

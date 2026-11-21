@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_member.dart';
 import '../models/local_id.dart';
+import 'auth_stream.dart';
 import 'family_member_service.dart';
 import 'family_member_storage.dart';
 import 'profile_image_picker.dart';
@@ -115,19 +117,34 @@ class LocalFamilyMemberPhotoService extends FamilyMemberPhotoService {
 // Entries and pending downloads belong to a single authenticated session.
 class _RemotePhotoCache extends ChangeNotifier {
   _RemotePhotoCache(this.client) : account = client.auth.currentUser?.id {
-    client.auth.onAuthStateChange.listen((state) {
-      final next = state.session?.user.id;
-      if (next != account || state.event == AuthChangeEvent.signedOut) {
-        reset(next);
-      }
-      notifyListeners();
-    });
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    // A-4: the subscription is owned and cancellable, not leaked.
+    _subscription = listenAuthSafely(
+      client.auth.onAuthStateChange,
+      _handleAuthState,
+    );
   }
 
   final SupabaseClient client;
+  late final StreamSubscription<AuthState> _subscription;
   String? account;
   int generation = 0;
   final entries = <String, _PhotoEntry>{};
+
+  void _handleAuthState(AuthState state) {
+    final next = state.session?.user.id;
+    if (next != account || state.event == AuthChangeEvent.signedOut) {
+      reset(next);
+    }
+    notifyListeners();
+  }
+
+  /// A-4: stop listening on teardown.
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
 
   void reset(String? next) {
     account = next;
@@ -163,9 +180,8 @@ class SupabaseFamilyMemberPhotoService extends FamilyMemberPhotoService {
   final SupabaseClient? _clientOverride;
   SupabaseClient get _client => _clientOverride ?? Supabase.instance.client;
   final RemoteFamilyPhotoDiskCache? _diskOverride;
-  static final _disks = Expando<RemoteFamilyPhotoDiskCache>();
   RemoteFamilyPhotoDiskCache get _disk =>
-      _diskOverride ?? (_disks[_client] ??= RemoteFamilyPhotoDiskCache());
+      _diskOverride ?? RemoteFamilyPhotoDiskCache.forClient(_client);
   String get _backend => _client.storage.url;
   static final _caches = Expando<_RemotePhotoCache>();
   _RemotePhotoCache get _cache {

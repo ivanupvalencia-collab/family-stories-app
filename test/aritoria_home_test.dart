@@ -14,6 +14,7 @@ import 'package:family_stories_app/screens/questions_screen.dart';
 import 'package:family_stories_app/services/family_member_photo_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/received_request_details_service.dart';
+import 'package:family_stories_app/domain/home_hero.dart';
 import 'package:family_stories_app/widgets/aritoria_home_view.dart';
 import 'package:family_stories_app/widgets/family_member_photo_view.dart';
 import 'package:flutter/material.dart';
@@ -23,12 +24,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'widget_test.dart' as fixtures;
 
-const _pepe = FamilyMember(
-  id: 'pepe',
-  name: 'Pepe',
+const _usuarioB = FamilyMember(
+  id: 'usuario_b',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
 );
-const _ana = FamilyMember(id: 'ana', name: 'Ana', relationship: 'Abuelo/a');
+const _usuarioE = FamilyMember(id: 'usuario_e', name: 'Usuario E', relationship: 'Abuelo/a');
 
 Finder _heroTitle(String name) => find.byWidgetPredicate(
   (widget) =>
@@ -67,7 +68,7 @@ class _Details implements ReceivedRequestDetailsService {
     return {
       for (final id in ids)
         id: const ReceivedRequestDetails(
-          senderName: 'Iván',
+          senderName: 'Usuario A',
           durationSeconds: 75,
         ),
     };
@@ -78,7 +79,8 @@ fixtures.FakeQuestionRequestService _requests() =>
     fixtures.FakeQuestionRequestService(
       pendingByRecipient: {
         fixtures.testAuthUser.id: [
-          for (var i = 1; i <= 5; i++)
+          // SQL order: created_at desc — the fake must mirror the query.
+          for (var i = 5; i >= 1; i--)
             fixtures.testQuestionRequest(
               id: 'q$i',
               recipientId: fixtures.testAuthUser.id,
@@ -89,7 +91,8 @@ fixtures.FakeQuestionRequestService _requests() =>
       },
       answeredByRecipient: {
         fixtures.testAuthUser.id: [
-          for (var i = 1; i <= 5; i++)
+          // SQL order: answered_at desc, nulls last.
+          for (var i = 5; i >= 1; i--)
             fixtures.testQuestionRequest(
               id: 'a$i',
               recipientId: fixtures.testAuthUser.id,
@@ -120,7 +123,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pregunta 5'));
       await tester.pumpAndSettle();
-      expect(find.text('Enviada por Iván · Pendiente'), findsOneWidget);
+      expect(find.text('Enviada por Usuario A · Pendiente'), findsOneWidget);
     },
   );
 
@@ -183,20 +186,20 @@ void main() {
   }
   test('hero keeps first-member fallback and prefers an own photo without avatar metadata', () {
     expect(selectHomeHero([]), isNull);
-    expect(selectHomeHero([_pepe, _ana]), same(_pepe));
-    final photographed = _ana.withPhotoPath('own/ana/photo.png');
-    expect(selectHomeHero([_pepe, photographed]), same(photographed));
-    expect(selectHomeHero([_pepe, photographed]), same(photographed));
+    expect(selectHomeHero([_usuarioB, _usuarioE]), same(_usuarioB));
+    final photographed = _usuarioE.withPhotoPath('own/usuario_e/photo.png');
+    expect(selectHomeHero([_usuarioB, photographed]), same(photographed));
+    expect(selectHomeHero([_usuarioB, photographed]), same(photographed));
   });
 
   testWidgets(
     'hero opens the existing questions flow with the current palette',
     (tester) async {
       await tester.pumpWidget(
-        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
+        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_usuarioB])),
       );
       await tester.pumpAndSettle();
-      expect(_heroTitle('Pepe'), findsOneWidget);
+      expect(_heroTitle('Usuario B'), findsOneWidget);
       await tester.tap(find.text('Conoce su historia'));
       await tester.pumpAndSettle();
       expect(find.byType(QuestionsScreen), findsOneWidget);
@@ -244,12 +247,64 @@ void main() {
     },
   );
 
+  testWidgets('a second creation call while one is open is a no-op (C-8)', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      fixtures.testApp(fixtures.MemoryFamilyMemberStorage()),
+    );
+    await tester.pumpAndSettle();
+    // The double-tap contract: the guard lives before the first await, so a
+    // second invocation while the first flow is still open is rejected. The
+    // old guard armed itself only after the add screen returned and both
+    // flows ran, creating two rows.
+    final home = tester.state(find.byType(HomeScreen));
+    final first = (home as dynamic).debugAddFamilyMember();
+    final second = (home as dynamic).debugAddFamilyMember();
+    await tester.pumpAndSettle();
+    expect(find.byType(AddFamilyMemberScreen), findsOneWidget);
+    // A stacked second flow would only become visible after the first pop.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(AddFamilyMemberScreen),
+      findsNothing,
+      reason: 'C-8: the second creation flow was not rejected.',
+    );
+    await first;
+    await second;
+  });
+
+  testWidgets('the home member strip builds only the visible tiles (C-14)', (
+    tester,
+  ) async {
+    final members = [
+      for (var i = 0; i < 300; i++)
+        FamilyMember(
+          id: 'member$i',
+          name: 'Familiar $i',
+          relationship: 'Familia',
+        ),
+    ];
+    await tester.pumpWidget(
+      fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: members)),
+    );
+    await tester.pumpAndSettle();
+    final built = find.byType(FamilyMemberPhotoView).evaluate().length;
+    expect(built, greaterThan(0));
+    expect(
+      built,
+      lessThan(300),
+      reason: 'C-14: every member tile was built eagerly.',
+    );
+  });
+
   testWidgets(
     'quick recording and sending select a member then open existing questions',
     (tester) async {
       await tester.pumpWidget(
         fixtures.testApp(
-          fixtures.MemoryFamilyMemberStorage(members: [_pepe, _ana]),
+          fixtures.MemoryFamilyMemberStorage(members: [_usuarioB, _usuarioE]),
         ),
       );
       await tester.pumpAndSettle();
@@ -261,7 +316,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(BottomSheet),
-            matching: find.text('Pepe'),
+            matching: find.text('Usuario B'),
           ),
         );
         await tester.pumpAndSettle();
@@ -276,12 +331,12 @@ void main() {
     'navigation switches roots without duplicate stacks and Android back returns Home',
     (tester) async {
       await tester.pumpWidget(
-        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_pepe])),
+        fixtures.testApp(fixtures.MemoryFamilyMemberStorage(members: [_usuarioB])),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Familia'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Pepe'));
+      await tester.tap(find.text('Usuario B'));
       await tester.pumpAndSettle();
       expect(find.byType(FamilyMemberScreen), findsOneWidget);
       await tester.tap(find.byTooltip('Atrás'));
@@ -328,7 +383,7 @@ void main() {
       expect(find.text('Historia 5'), findsOneWidget);
       expect(find.text('Historia 4'), findsOneWidget);
       expect(find.text('Historia 3'), findsNothing);
-      expect(find.text('Para Iván · 05/10/2026 · 1:15'), findsOneWidget);
+      expect(find.text('Para Usuario A · 05/10/2026 · 1:15'), findsOneWidget);
       await tester.ensureVisible(find.text('Ver todas').last);
       await tester.tap(find.text('Ver todas').last);
       await tester.pumpAndSettle();
@@ -429,13 +484,13 @@ void main() {
       await tester.pumpWidget(
         fixtures.testApp(
           fixtures.MemoryFamilyMemberStorage(
-            members: [_pepe, _ana.withPhotoPath('own/ana/photo.png')],
+            members: [_usuarioB, _usuarioE.withPhotoPath('own/usuario_e/photo.png')],
           ),
           familyMemberPhotoService: photos,
         ),
       );
       await tester.pumpAndSettle();
-      expect(_heroTitle('Ana'), findsOneWidget);
+      expect(_heroTitle('Usuario E'), findsOneWidget);
       expect(photos.paths, isEmpty);
       expect(find.byType(FamilyMemberPhotoView), findsNWidgets(3));
     },
@@ -488,8 +543,8 @@ void main() {
             fixtures.MemoryFamilyMemberStorage(
               members: [
                 dimensions == null
-                    ? _pepe
-                    : _pepe.withPhotoPath('own/pepe/photo.png'),
+                    ? _usuarioB
+                    : _usuarioB.withPhotoPath('own/usuario_b/photo.png'),
               ],
             ),
             familyMemberPhotoService: photos,
@@ -498,7 +553,7 @@ void main() {
         await tester.pumpAndSettle();
         final hero = find.byKey(const ValueKey('home-hero'));
         final size = tester.getSize(hero);
-        final titleHeight = tester.getSize(_heroTitle('Pepe')).height;
+        final titleHeight = tester.getSize(_heroTitle('Usuario B')).height;
         final oldHeight =
             (titleHeight + 145 + AritoriaSpace.lg * 2 + AritoriaSpace.md + 48)
                 .clamp(350.0, double.infinity);
@@ -520,7 +575,7 @@ void main() {
   }
 
   for (final width in [320.0, 390.0]) {
-    for (final name in ['Mavi', 'Pepe', 'María José']) {
+    for (final name in ['Usuario F', 'Usuario B', 'Usuario G']) {
       testWidgets('hero avoids isolated solo at $width px for $name', (
         tester,
       ) async {
@@ -651,10 +706,10 @@ void main() {
       RepaintBoundary(
         key: key,
         child: fixtures.testApp(
-          fixtures.MemoryFamilyMemberStorage(members: [_pepe, _ana]),
+          fixtures.MemoryFamilyMemberStorage(members: [_usuarioB, _usuarioE]),
           authService: fixtures.FakeAuthService(fixtures.testAuthUser),
           familyMemberService: fixtures.FakeFamilyMemberService(
-            members: [_pepe, _ana],
+            members: [_usuarioB, _usuarioE],
           ),
           questionRequestService: _requests(),
           receivedRequestDetailsService: _Details(),

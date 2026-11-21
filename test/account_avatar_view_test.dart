@@ -4,6 +4,7 @@ import 'package:family_stories_app/models/family_member.dart';
 import 'package:family_stories_app/models/question_request.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/family_member_photo_service.dart';
+import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/received_request_details_service.dart';
 import 'package:family_stories_app/services/visible_account_avatar_service.dart';
@@ -16,10 +17,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'widget_test.dart' as fixtures;
 
-class _Avatars extends VisibleAccountAvatarService {
+/// Serves the profile's remote URL through a NetworkImage exactly as the real
+/// cache would, without depending on the backend allowlist.
+class _NetworkAvatarImages extends ProfileAvatarImageCache {
+  @override
+  ImageProvider? imageFor(UserProfile profile) {
+    final url = profile.avatarUrl?.trim();
+    return url == null || url.isEmpty ? null : NetworkImage(url);
+  }
+}
+
+class _Avatars extends VisibleAccountAvatarService
+    implements ProfileAvatarImageSource {
+  @override
+  final ProfileAvatarImageCache avatarImages = _NetworkAvatarImages();
   UserProfile? profile = const UserProfile(
     id: 'linked',
-    name: 'Claudia',
+    name: 'Usuario C',
     avatarKey: 'avatar_01',
   );
   final loads = <String>[];
@@ -53,7 +67,7 @@ class _Photos extends FamilyMemberPhotoService {
 
 const _member = FamilyMember(
   id: 'member',
-  name: 'Pepe',
+  name: 'Usuario B',
   relationship: 'Padre/Madre',
   linkedAccountId: 'linked',
 );
@@ -65,7 +79,7 @@ void main() {
       final avatars = _Avatars()
         ..profile = const UserProfile(
           id: 'sender-user-id',
-          name: 'Claudia',
+          name: 'Usuario C',
           avatarUrl: 'https://example.test/avatar.png?v=2',
         );
       await tester.pumpWidget(
@@ -91,7 +105,7 @@ void main() {
       expect(image.fit, BoxFit.cover);
       // Test binding returns HTTP 400: errorBuilder must render a safe initial.
       await tester.pumpAndSettle();
-      expect(find.text('C'), findsOneWidget);
+      expect(find.text('U'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       avatars.dispose();
@@ -107,7 +121,7 @@ void main() {
           home: FamilyMemberPhotoView(
             member: const FamilyMember(
               id: 'local',
-              name: 'Ana',
+              name: 'Usuario E',
               relationship: 'Abuelo/a',
             ),
             photoService: _Photos(),
@@ -239,7 +253,7 @@ void main() {
     'pending row uses sender account, initial, subtitle, chevron and existing tap',
     (tester) async {
       final avatars = _Avatars()
-        ..profile = const UserProfile(id: 'sender', name: 'Claudia');
+        ..profile = const UserProfile(id: 'sender', name: 'Usuario C');
       var taps = 0;
       final request = fixtures.testQuestionRequest(
         id: 'pending',
@@ -252,7 +266,7 @@ void main() {
             body: ReceivedRequestRow(
               request: request,
               avatarService: avatars,
-              details: const ReceivedRequestDetails(senderName: 'Claudia'),
+              details: const ReceivedRequestDetails(senderName: 'Usuario C'),
               onTap: () => taps++,
             ),
           ),
@@ -260,8 +274,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(avatars.loads, ['sender-user-id']);
-      expect(find.text('C'), findsOneWidget);
-      expect(find.textContaining('De Claudia'), findsOneWidget);
+      expect(find.text('U'), findsOneWidget);
+      expect(find.textContaining('De Usuario C'), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
       await tester.tap(find.byType(ListTile));
       expect(taps, 1);

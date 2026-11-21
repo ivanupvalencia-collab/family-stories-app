@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_member.dart';
 import 'remote_family_member_cache.dart';
+import 'session_monitor.dart';
 
 abstract interface class FamilyMemberInfoEditor {
   Future<FamilyMember> editInformation({
@@ -47,25 +48,41 @@ class SupabaseFamilyMemberService
   SupabaseFamilyMemberService({
     SupabaseClient? client,
     RemoteFamilyMemberCache? cache,
+    SessionMonitor? sessionMonitor,
   }) : _client = client ?? Supabase.instance.client {
-    _cache = cache ?? (_caches[_client] ??= RemoteFamilyMemberCache());
+    _cache = cache ?? RemoteFamilyMemberCache.forClient(_client);
     _account = _client.auth.currentUser?.id;
-    _client.auth.onAuthStateChange.listen((state) {
-      final next = state.session?.user.id;
-      if (next != _account || state.event == AuthChangeEvent.signedOut) {
-        _generation++;
-        _account = next;
-      }
-    });
+    // S-10 + A-4: the auth registration lives in the session monitor (the
+    // app graph passes one shared monitor, A-3) and this service detaches
+    // on dispose instead of leaking it.
+    _session = sessionMonitor ?? SessionMonitor(_client);
+    _ownsSession = sessionMonitor == null;
+    _detachAuth = _session.onAuthState(_handleAuthState);
   }
 
   final SupabaseClient _client;
-  static final _caches = Expando<RemoteFamilyMemberCache>();
   late final RemoteFamilyMemberCache _cache;
+  late final SessionMonitor _session;
+  late final bool _ownsSession;
+  late final void Function() _detachAuth;
   String? _account;
   int _generation = 0;
   int _loadSequence = 0;
   String get _backend => _client.storage.url;
+
+  void _handleAuthState(AuthState state) {
+    final next = state.session?.user.id;
+    if (next != _account || state.event == AuthChangeEvent.signedOut) {
+      _generation++;
+      _account = next;
+    }
+  }
+
+  /// A-4: the interface never exposed a way to stop listening before.
+  void dispose() {
+    _detachAuth();
+    if (_ownsSession) _session.dispose();
+  }
 
   @override
   Future<void> forgetMember(String ownerId, String familyMemberId) =>
@@ -122,7 +139,9 @@ class SupabaseFamilyMemberService
         .from('family_members')
         .select('id, name, relationship, linked_account_id, photo_path')
         .eq('owner_id', ownerId)
-        .order('created_at');
+        .order('created_at')
+        // C-6: hard cap so a growing table can never be downloaded whole.
+        .range(0, 499);
 
     _requireOwner(ownerId, generation);
     final members = data.map(FamilyMember.fromSupabaseJson).toList();

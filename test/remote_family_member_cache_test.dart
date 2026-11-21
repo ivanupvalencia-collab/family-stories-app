@@ -68,7 +68,7 @@ void main() {
     rows = [
       {
         'id': 'member-a',
-        'name': 'Pepe',
+        'name': 'Usuario B',
         'relationship': 'Padre/Madre',
         'linked_account_id': 'recipient',
         'photo_path': null,
@@ -133,11 +133,11 @@ void main() {
       remote.single.toJson(),
     );
     expect(requests, 1);
-    rows.first['name'] = 'Pepe actualizado';
+    rows.first['name'] = 'Usuario B actualizado';
     await restarted.loadForOwner(owner);
     expect(
       (await restarted.loadCachedForOwner(owner))!.single.name,
-      'Pepe actualizado',
+      'Usuario B actualizado',
     );
     expect(requests, 2);
   });
@@ -177,7 +177,7 @@ void main() {
     () async {
       final created = await service.create(
         ownerId: owner,
-        name: 'Ana',
+        name: 'Usuario E',
         relationship: 'Nieto/a',
       );
       expect((await service.loadCachedForOwner(owner))!.single.id, created.id);
@@ -212,7 +212,7 @@ void main() {
     await service.loadForOwner(owner);
     final created = await service.create(
       ownerId: owner,
-      name: 'Ana',
+      name: 'Usuario E',
       relationship: 'Nieto/a',
     );
     expect((await service.loadCachedForOwner(owner))!.last.id, created.id);
@@ -251,7 +251,7 @@ void main() {
     await client.auth.signOut(scope: SignOutScope.local);
     await expectLater(service.loadCachedForOwner('owner-b'), throwsStateError);
     await _login(client, owner);
-    expect((await service.loadCachedForOwner(owner))!.single.name, 'Pepe');
+    expect((await service.loadCachedForOwner(owner))!.single.name, 'Usuario B');
   });
 
   test(
@@ -277,6 +277,6 @@ void main() {
     preferences.values.updateAll((key, value) => ['broken json']);
     expect(await service.loadCachedForOwner(owner), isNull);
     preferences.fail = true;
-    expect((await service.loadForOwner(owner)).single.name, 'Pepe');
+    expect((await service.loadForOwner(owner)).single.name, 'Usuario B');
   });
 }

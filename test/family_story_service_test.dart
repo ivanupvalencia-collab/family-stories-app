@@ -118,6 +118,25 @@ void main() {
     },
   );
 
+  test(
+    'sign-out clears the downloaded audio and its cache entry on its own',
+    () async {
+      final path = await service.localAudioPathFor(story);
+      expect(await File(path).exists(), isTrue);
+      await client.auth.signOut(scope: SignOutScope.local);
+      final end = DateTime.now().add(const Duration(seconds: 5));
+      while (await File(path).exists()) {
+        if (DateTime.now().isAfter(end)) {
+          fail('Downloaded audio survives sign-out');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      // The files are gone; only the (now empty) cache directory may remain.
+      final remaining = await temporary.list(recursive: true).toList();
+      expect(remaining.whereType<File>(), isEmpty);
+    },
+  );
+
   tearDown(() async {
     await service.clearAudioCache();
     await client.dispose();
@@ -206,4 +225,53 @@ void main() {
       expect(requestedPaths, hasLength(2));
     },
   );
+
+  test('a disposed story service no longer sweeps audio on sign-out (A-4)',
+      () async {
+    final path = await service.localAudioPathFor(story);
+    expect(await File(path).exists(), isTrue);
+    // A-4: dispose detaches the auth registration; before the fix the
+    // service listened forever and swept the file on every sign-out.
+    service.dispose();
+    await client.auth.signOut(scope: SignOutScope.local);
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      await File(path).exists(),
+      isTrue,
+      reason: 'A-4: the disposed service still swept audio on sign-out.',
+    );
+  });
+
+  test('the audio cache evicts old downloads beyond its byte budget (C-11)',
+      () async {
+    final cacheDirectory = Directory(
+      '${temporary.path}${Platform.pathSeparator}remote_story_audio',
+    );
+    await cacheDirectory.create(recursive: true);
+    final stale = File(
+      '${cacheDirectory.path}${Platform.pathSeparator}stale.m4a',
+    );
+    await stale.writeAsBytes(List.filled(1000, 1));
+    await stale.setLastModified(
+      DateTime.now().subtract(const Duration(minutes: 2)),
+    );
+
+    final budgeted = SupabaseFamilyStoryService(
+      client: client,
+      audioCacheMaxBytes: 500,
+    );
+    await budgeted.localAudioPathFor(story);
+
+    expect(
+      stale.existsSync(),
+      isFalse,
+      reason: 'C-11: the audio cache did not evict the stale download.',
+    );
+    expect(
+      File('${cacheDirectory.path}${Platform.pathSeparator}'
+              '${story.id}.m4a')
+          .existsSync(),
+      isTrue,
+    );
+  });
 }

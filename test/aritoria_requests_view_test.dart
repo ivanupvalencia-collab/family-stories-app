@@ -21,7 +21,7 @@ class _Avatars extends VisibleAccountAvatarService {
   @override
   UserProfile? cached(String id) => const UserProfile(
     id: 'sender-user-id',
-    name: 'Iván Fernández Ariza',
+    name: 'Usuario A',
     avatarKey: 'avatar_01',
   );
   @override
@@ -47,6 +47,7 @@ List<QuestionRequest> _requests({bool answered = false}) => [
 
 Widget _app({
   bool answered = false,
+  int pendingCount = 2,
   ValueChanged<int>? onTab,
   ValueChanged<QuestionRequest>? onRequest,
   Future<void> Function()? onRefresh,
@@ -62,17 +63,17 @@ Widget _app({
       body: SafeArea(
         child: AritoriaRequestsView(
           requests: _requests(answered: answered),
-          pendingCount: 2,
+          pendingCount: pendingCount,
           showAnswers: answered,
           status: status,
           avatarService: avatars,
           details: const {
             'q0': ReceivedRequestDetails(
-              senderName: 'Iván Fernández Ariza',
+              senderName: 'Usuario A',
               durationSeconds: 75,
             ),
             'q1': ReceivedRequestDetails(
-              senderName: 'Ana',
+              senderName: 'Usuario E',
               durationSeconds: 90,
             ),
           },
@@ -116,7 +117,7 @@ void main() {
       expect(question.style!.fontFamily, 'Lora');
       expect(question.data, contains('pequeño\u2060/\u2060a'));
       expect(question.semanticsLabel, _requests().first.questionText);
-      expect(find.text('De Iván Fernández Ariza · 04/10/2026'), findsOneWidget);
+      expect(find.text('De Usuario A · 04/10/2026'), findsOneWidget);
       await tester.tap(find.textContaining('casa'));
       expect(opened!.id, 'q0');
       expect(opened!.questionText, _requests().first.questionText);
@@ -139,7 +140,7 @@ void main() {
       expect(find.byType(AccountAvatarView), findsNothing);
       expect(find.byIcon(Icons.play_arrow_rounded), findsNWidgets(2));
       expect(
-        find.text('Para Iván Fernández Ariza · 05/10/2026\u00a0·\u00a01:15'),
+        find.text('Para Usuario A · 05/10/2026\u00a0·\u00a01:15'),
         findsOneWidget,
       );
       await tester.tap(find.textContaining('casa'));
@@ -219,13 +220,13 @@ void main() {
         (widget) =>
             widget is Text &&
             widget.semanticsLabel ==
-                'Para Iván Fernández Ariza · 05/10/2026 · 1:15',
+                'Para Usuario A · 05/10/2026 · 1:15',
       );
       final metadata = tester.widget<Text>(metadataFinder).data!;
       if (width == 320) {
         expect(
           metadata,
-          'Para Iván Fernández Ariza\n05/10/2026\u00a0·\u00a01:15',
+          'Para Usuario A\n05/10/2026\u00a0·\u00a01:15',
         );
       }
       final paragraph = tester.renderObject<RenderParagraph>(
@@ -250,7 +251,7 @@ void main() {
       expect(date.single.top, duration.single.top);
       expect(
         tester.widget<Text>(find.text(metadata)).semanticsLabel,
-        'Para Iván Fernández Ariza · 05/10/2026 · 1:15',
+        'Para Usuario A · 05/10/2026 · 1:15',
       );
       expect(tester.takeException(), isNull);
     });
@@ -320,5 +321,70 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     avatars.dispose();
+  });
+
+  testWidgets('long request lists build only the visible rows (C-14)', (
+    tester,
+  ) async {
+    final many = [
+      for (var i = 0; i < 300; i++)
+        fixtures.testQuestionRequest(
+          id: 'q$i',
+          recipientId: 'recipient',
+          questionText: 'Pregunta número $i',
+          createdAt: DateTime(2026, 10, 4),
+        ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AritoriaDesign.theme(),
+        home: Scaffold(
+          body: AritoriaRequestsView(
+            requests: many,
+            pendingCount: many.length,
+            showAnswers: false,
+            status: null,
+            details: const {},
+            onRefresh: () async {},
+            onTabChanged: (_) {},
+            onRequestTap: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final built = find.byType(ReceivedRequestRow).evaluate().length;
+    expect(built, greaterThan(0));
+    expect(
+      built,
+      lessThan(300),
+      reason: 'C-14: the whole request list was built eagerly.',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('tab labels are measured once and not on every rebuild (C-15)', (
+    tester,
+  ) async {
+    debugTabLabelLayouts = 0;
+    addTearDown(() => debugTabLabelLayouts = 0);
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    expect(debugTabLabelLayouts, 2);
+    // Plain rebuilds (a different selected tab) must reuse the measures.
+    await tester.pumpWidget(_app(answered: true));
+    await tester.pumpAndSettle();
+    expect(
+      debugTabLabelLayouts,
+      2,
+      reason: 'C-15: the tab labels were re-measured on a plain rebuild.',
+    );
+    // A changed label set (new pending count) re-measures once.
+    await tester.pumpWidget(_app(answered: true, pendingCount: 5));
+    await tester.pumpAndSettle();
+    expect(debugTabLabelLayouts, 4);
+    expect(find.text('Preguntas para ti (5)'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 }

@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -7,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
 import '../models/local_id.dart';
+import 'auth_stream.dart';
 import 'family_story_storage.dart';
 import 'private_photo_service.dart';
 import 'profile_image_picker.dart';
@@ -105,20 +107,36 @@ class _Entry {
 
 class _Cache extends ChangeNotifier {
   _Cache(this.client) : account = client.auth.currentUser?.id {
-    client.auth.onAuthStateChange.listen((state) {
-      final next = state.session?.user.id;
-      if (next != account || state.event == AuthChangeEvent.signedOut) {
-        reset(next);
-      }
-      // Also notify if an eager cachedPhoto call already synchronized account.
-      notifyListeners();
-    });
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    // A-4: the subscription is owned and cancellable, not leaked.
+    _subscription = listenAuthSafely(
+      client.auth.onAuthStateChange,
+      _handleAuthState,
+    );
   }
   final SupabaseClient client;
+  late final StreamSubscription<AuthState> _subscription;
   String? account;
   int generation = 0;
   final entries = <String, _Entry>{};
   final previews = <String, FamilyStory?>{};
+
+  void _handleAuthState(AuthState state) {
+    final next = state.session?.user.id;
+    if (next != account || state.event == AuthChangeEvent.signedOut) {
+      reset(next);
+    }
+    // Also notify if an eager cachedPhoto call already synchronized account.
+    notifyListeners();
+  }
+
+  /// A-4: stop listening on teardown.
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+
   void reset(String? next) {
     account = next;
     generation++;
@@ -146,7 +164,6 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
   final RemoteFamilyPhotoDiskCache? _diskOverride;
   SupabaseClient get _client => _override ?? Supabase.instance.client;
   static final _caches = Expando<_Cache>();
-  static final _disks = Expando<RemoteFamilyPhotoDiskCache>();
   _Cache get _cache {
     final cache = _caches[_client] ??= _Cache(_client);
     cache.sync();
@@ -155,10 +172,11 @@ class SupabaseStoryPhotoService extends StoryPhotoService {
 
   RemoteFamilyPhotoDiskCache get _disk =>
       _diskOverride ??
-      (_disks[_client] ??= RemoteFamilyPhotoDiskCache(
+      RemoteFamilyPhotoDiskCache.forClient(
+        _client,
         directoryName: 'remote_story_photos_v1',
         allowForeignUploader: true,
-      ));
+      );
   String get _backend => _client.storage.url;
   bool _belongs(FamilyStory story, String path) {
     final parts = path.split('/');

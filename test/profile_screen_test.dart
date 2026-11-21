@@ -32,13 +32,26 @@ class _ProfilesWithImages extends fixtures.FakeProfileService
     : super(
         profile: const UserProfile(
           id: 'google-user-id',
-          name: 'Ana García',
+          name: 'Usuario D',
           avatarUrl: 'https://aritoria.test/avatars/own-profile?v=1',
         ),
       );
 
   @override
   final _AvatarImages avatarImages = _AvatarImages();
+}
+
+// S-7: the server refuses the sign-out, so no `signedOut` event is emitted.
+class _OfflineAuthService extends fixtures.FakeAuthService {
+  _OfflineAuthService(super.user);
+
+  int attempts = 0;
+
+  @override
+  Future<void> signOut() async {
+    attempts++;
+    throw StateError('No network');
+  }
 }
 
 void main() {
@@ -118,8 +131,8 @@ void main() {
     );
     expect(avatar.avatarUrl, fixtures.testUserProfile.avatarUrl);
     expect(avatar.avatarKey, fixtures.testUserProfile.avatarKey);
-    expect(find.text('Ana García'), findsOneWidget);
-    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(find.text('Usuario D'), findsOneWidget);
+    expect(find.text('usuario-e@example.com'), findsOneWidget);
     await tester.tap(find.byTooltip('Editar foto de perfil'));
     await tester.pumpAndSettle();
     expect(find.byType(EditProfileScreen), findsOneWidget);
@@ -166,4 +179,30 @@ void main() {
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'un cierre que falla limpia la caché y no miente sobre la sesión viva',
+    (tester) async {
+      final auth = _OfflineAuthService(fixtures.testAuthUser);
+      final profiles = fixtures.FakeProfileService();
+      await openProfile(tester, auth: auth, profiles: profiles);
+
+      final signOut = find.text('Cerrar sesión');
+      await tester.ensureVisible(signOut);
+      await tester.tap(signOut);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(auth.attempts, 1);
+      // S-7: the cache purge must run even though signOut() threw.
+      expect(profiles.clearCacheCalls, 1);
+      expect(
+        find.text('No se pudo cerrar sesión. Inténtalo de nuevo.'),
+        findsOneWidget,
+      );
+      // The session is still alive, so the screen must not log the user out.
+      expect(find.text('Continuar con Google'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

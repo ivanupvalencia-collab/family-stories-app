@@ -15,9 +15,10 @@ instaladas (01 y 02), ejecutar completos en este orden:
 4. `06_family_member_delete_audit.sql` es una consulta **de diagnóstico**, no
    habilita eliminación. Puede ejecutarse después para revisar FKs y políticas.
 
-La app mantiene la eliminación remota bloqueada: el esquema base y las FKs de
-invitaciones no están versionados aquí. Falta revisar esos resultados y diseñar
-el borrado coordinado con la API de Storage. No borrar `storage.objects` por SQL:
+La app mantiene la eliminación remota bloqueada: el esquema base, las FKs de
+invitaciones y las políticas están versionados en `supabase/migrations/`
+(este directorio conserva solo los scripts históricos puntuales). Falta revisar
+esos resultados y diseñar el borrado coordinado con la API de Storage. No borrar `storage.objects` por SQL:
 eso no elimina correctamente los archivos físicos. La eliminación local pide
 confirmación, retira las referencias y limpia los archivos de su espacio privado.
 
@@ -67,17 +68,17 @@ No se lista Storage ni se reconstruye el nombre del objeto.
 
 ## Verificación manual
 
-1. Con Pepe, comprobar la lista, las fechas y la reproducción de una respuesta
+1. Con Usuario B, comprobar la lista, las fechas y la reproducción de una respuesta
    anterior (también tras reiniciar la app).
 2. Responder una pregunta nueva: desaparece de pendientes y aparece en
    respuestas al volver a Home. Comprobar también pull-to-refresh y Realtime.
-3. Con Iván, verificar el flujo original y su reproducción en el perfil de Pepe.
-4. Con una sesión autenticada de Pepe, invocar la RPC con el ID de su solicitud
-   respondida: debe devolver la historia. Con otra cuenta (incluido Iván), ese
+3. Con Usuario A, verificar el flujo original y su reproducción en el perfil de Usuario B.
+4. Con una sesión autenticada de Usuario B, invocar la RPC con el ID de su solicitud
+   respondida: debe devolver la historia. Con otra cuenta (incluido Usuario A), ese
    mismo ID debe devolver `null`. Pendientes e IDs inexistentes también deben
    devolver `null`. Anónimo no debe tener EXECUTE. Probar mediante sesiones
    reales/Data API: el SQL Editor administrativo no reproduce la RLS del usuario.
-5. Cambiar de cuenta o cerrar sesión: no deben quedar respuestas de Pepe en Home
+5. Cambiar de cuenta o cerrar sesión: no deben quedar respuestas de Usuario B en Home
    ni reproducirse una respuesta abierta desde su sesión anterior.
 
 Las pruebas Flutter utilizan un servidor local simulado: verifican el contrato

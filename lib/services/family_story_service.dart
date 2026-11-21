@@ -5,6 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
+import 'disk_budget.dart';
+import 'session_monitor.dart';
 import 'story_waveform_service.dart';
 import 'persistent_story_waveform_service.dart';
 
@@ -21,15 +23,48 @@ class SupabaseFamilyStoryService
   SupabaseFamilyStoryService({
     SupabaseClient? client,
     StoryWaveformService? waveformService,
+    this.audioCacheMaxBytes = 64 * 1024 * 1024,
+    SessionMonitor? sessionMonitor,
   }) : _client = client ?? Supabase.instance.client,
-       _waveformOverride = waveformService;
+       _waveformOverride = waveformService {
+    // S-6: the service must drop its audio map on its own; relying on
+    // HomeScreen being mounted to call clearAudioCache() leaves stale paths
+    // behind. Home constructs this service at start, so the listener always
+    // exists before any download can happen.
+    // S-10 + A-4: the registration lives in the session monitor (shared by
+    // the app graph, A-3) and detaches on dispose.
+    _session = sessionMonitor ?? SessionMonitor(_client);
+    _ownsSession = sessionMonitor == null;
+    _detachAuth = _session.onAuthState(_handleAuthState);
+  }
 
   static const audioBucketName = 'story-audio';
 
   final SupabaseClient _client;
   final StoryWaveformService? _waveformOverride;
+  late final SessionMonitor _session;
+  late final bool _ownsSession;
+  late final void Function() _detachAuth;
+
+  void _handleAuthState(AuthState state) {
+    if (state.event == AuthChangeEvent.signedOut) {
+      unawaited(clearAudioCache());
+    }
+  }
+
+  /// A-4: the interface never exposed a way to stop listening before.
+  void dispose() {
+    _detachAuth();
+    if (_ownsSession) _session.dispose();
+  }
+
+  /// C-11: byte budget for `tmp/remote_story_audio`, re-checked after every
+  /// download. The directory is session-scoped (S-6 wipes it whole), so one
+  /// budget over the whole directory is correct.
+  final int audioCacheMaxBytes;
   final Map<String, ({String path, int size})> _audioCache = {};
   int _cacheGeneration = 0;
+
   @override
   StoryWaveformService get waveforms =>
       _waveformOverride ?? StoryWaveforms.forClient(_client);
@@ -42,7 +77,9 @@ class SupabaseFamilyStoryService
         .from('stories')
         .select(selection)
         .eq('family_member_id', familyMemberId)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        // C-6: hard cap so a growing table can never be downloaded whole.
+        .range(0, 499);
     late List<Map<String, dynamic>> data;
     try {
       data = await query('$fields, photo_path');
@@ -107,6 +144,10 @@ class SupabaseFamilyStoryService
       await file.delete();
       throw StateError('Audio cache was invalidated.');
     }
+    // C-11: each download re-checks the directory's budget. Files younger
+    // than the sweep's freshness window (including this one) are never
+    // deleted, and a file being played keeps its open descriptor on POSIX.
+    await enforceDiskBudget(cacheDirectory, audioCacheMaxBytes);
     _audioCache[story.audioPath] = (path: file.path, size: fileSize);
     unawaited(waveformScope.warm(story, () async => file.path));
     return file.path;

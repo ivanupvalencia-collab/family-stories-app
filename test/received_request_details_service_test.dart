@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,10 +12,12 @@ void main() {
   late SupabaseReceivedRequestDetailsService service;
   late List<({String path, String? authorization, List<dynamic> ids})> requests;
   var fail = false;
+  Completer<void>? gate;
 
   setUp(() async {
     requests = [];
     fail = false;
+    gate = null;
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       final body = jsonDecode(await utf8.decoder.bind(request).join());
@@ -24,6 +27,9 @@ void main() {
         authorization: request.headers.value('authorization'),
         ids: ids,
       ));
+      // C-10: hold the response until the test releases the gate, so a
+      // sequential implementation would deadlock instead of passing.
+      await gate?.future;
       request.response.headers.contentType = ContentType.json;
       if (fail) {
         request.response.statusCode = 404;
@@ -36,7 +42,7 @@ void main() {
             for (final id in ids)
               {
                 'request_id': id,
-                'sender_name': id == 'unnamed' ? '  ' : ' Iván ',
+                'sender_name': id == 'unnamed' ? '  ' : ' Usuario A ',
                 'duration_seconds': id == 'unnamed' ? null : 75,
               },
           ]),
@@ -68,6 +74,7 @@ void main() {
     service = SupabaseReceivedRequestDetailsService(client: client);
   });
   tearDown(() async {
+    if (gate != null && !gate!.isCompleted) gate!.complete();
     await client.dispose();
     await server.close(force: true);
   });
@@ -77,7 +84,7 @@ void main() {
     expect(requests.single.path, '/rest/v1/rpc/get_received_request_details');
     expect(requests.single.authorization, 'Bearer test-user-token');
     expect(requests.single.ids, ['answered', 'unnamed']);
-    expect(details['answered']!.senderName, 'Iván');
+    expect(details['answered']!.senderName, 'Usuario A');
     expect(details['answered']!.durationSeconds, 75);
     expect(details['unnamed']!.senderName, isNull);
     expect(details['unnamed']!.durationSeconds, isNull);
@@ -88,10 +95,36 @@ void main() {
     () async {
       final ids = List.generate(201, (index) => '$index');
       final details = await service.load(ids);
-      expect(requests.map((request) => request.ids.length), [100, 100, 1]);
+      // C-10: chunks fly in parallel, so arrival order is not guaranteed.
+      final sizes = requests.map((request) => request.ids.length).toList()
+        ..sort();
+      expect(sizes, [1, 100, 100]);
+      expect(details.keys.toSet(), ids.toSet());
       expect(details.length, 201);
     },
   );
+
+  test('chunks are requested concurrently (C-10)', () async {
+    gate = Completer<void>();
+    final ids = List.generate(250, (index) => '$index');
+    final pending = service.load(ids);
+    // The sequential implementation would never reach this point: it sends
+    // one chunk at a time and blocks on the first gated response.
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (requests.length < 3 && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(
+      requests,
+      hasLength(3),
+      reason: 'Chunks not in flight at once: the loop is sequential (C-10).',
+    );
+    gate!.complete();
+    gate = null;
+    final details = await pending;
+    expect(details.length, 250);
+    expect(details.keys.toSet(), ids.toSet());
+  });
 
   test('missing manual RPC propagates for the optional UI fallback', () async {
     fail = true;

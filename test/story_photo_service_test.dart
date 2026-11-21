@@ -214,7 +214,7 @@ void main() {
           members: [
             const FamilyMember(
               id: 'member',
-              name: 'Pepe',
+              name: 'Usuario B',
               relationship: 'Otro',
             ),
           ],
@@ -244,8 +244,8 @@ void main() {
       await File('${memberPhotos.path}/photo.png').writeAsBytes([1]);
       final members = fixtures.MemoryFamilyMemberStorage(
         members: [
-          const FamilyMember(id: 'member', name: 'Pepe', relationship: 'Otro'),
-          const FamilyMember(id: 'other', name: 'Ana', relationship: 'Otro'),
+          const FamilyMember(id: 'member', name: 'Usuario B', relationship: 'Otro'),
+          const FamilyMember(id: 'other', name: 'Usuario E', relationship: 'Otro'),
         ],
       );
       await storage.deleteFamily('member', members);
@@ -362,6 +362,24 @@ void main() {
     int downloads() => requests
         .where((r) => r.method == 'GET' && r.path.contains('/storage/'))
         .length;
+
+    test(
+      'can_edit=false disables the edit affordance and rejects save (S-19)',
+      () async {
+        row['can_edit'] = false;
+        final item = story();
+        expect(await photos.canEdit(item), isFalse);
+        await expectLater(
+          photos.save(item, fixtures.testPickedImage),
+          throwsA(isA<StateError>()),
+        );
+        // The refusal happens client-side, before any commit is attempted.
+        expect(
+          requests.where((r) => r.path.endsWith('/set_story_photo')),
+          isEmpty,
+        );
+      },
+    );
     test(
       'member deletion invalidates shared photo memory and persistent bytes',
       () async {

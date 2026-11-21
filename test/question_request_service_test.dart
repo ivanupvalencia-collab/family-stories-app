@@ -89,11 +89,46 @@ void main() {
         request.uri.queryParameters['order'],
         'answered_at.desc.nullslast,created_at.desc.nullslast',
       );
+      // C-6: el tope de 500 filas viaja en la propia petición.
+      expect(request.uri.queryParameters['offset'], '0');
+      expect(request.uri.queryParameters['limit'], '500');
       expect(request.authorization, 'Bearer test-user-token');
       expect(answers.first.status, QuestionRequestStatus.answered);
       expect(answers.first.answeredAt, DateTime.utc(2026, 10, 5, 12));
       expect(answers.last.answeredAt, isNull);
       expect(answers.map((a) => a.id), ['request-id', 'legacy-request']);
+    },
+  );
+
+  test(
+    'pending list filters recipient/status and orders created_at descending',
+    () async {
+      response = [
+        {
+          'id': 'request-id',
+          'sender_id': 'sender-id',
+          'recipient_id': 'recipient-id',
+          'family_member_id': 'family-id',
+          'question_text': '¿Qué recuerdo guardas?',
+          'status': 'pending',
+          'created_at': '2026-10-04T12:00:00Z',
+          'answered_at': null,
+        },
+      ];
+      final pending = await service.loadPendingForRecipient('recipient-id');
+      final request = requests.single;
+      expect(request.uri.path, '/rest/v1/question_requests');
+      expect(request.uri.queryParameters['recipient_id'], 'eq.recipient-id');
+      expect(request.uri.queryParameters['status'], 'eq.pending');
+      // C-17: el orden lo fija SQL; sin este .order() el orden del listado
+      // dependía del re-sort que Home hacía en el cliente.
+      expect(request.uri.queryParameters['order'], 'created_at.desc.nullslast');
+      // C-6: el tope de 500 filas viaja en la propia petición.
+      expect(request.uri.queryParameters['offset'], '0');
+      expect(request.uri.queryParameters['limit'], '500');
+      expect(request.authorization, 'Bearer test-user-token');
+      expect(pending.single.status, QuestionRequestStatus.pending);
+      expect(pending.single.id, 'request-id');
     },
   );
 

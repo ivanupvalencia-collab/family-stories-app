@@ -45,7 +45,9 @@ class _AccountAvatarViewState extends State<AccountAvatarView> {
   }
 
   void _attach() {
-    _service = widget.service ?? SupabaseVisibleAccountAvatarService.shared;
+    // A-3: the service always comes from the graph via the parent chain;
+    // local-only mode and tests pass null and render the fallback.
+    _service = widget.service;
     _service?.addListener(_changed);
     _future = _service?.load(widget.accountId);
   }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:family_stories_app/services/avatar_url_policy.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:family_stories_app/services/profile_service.dart';
@@ -30,7 +31,7 @@ void main() {
   String getUrl(int v) => 'http://127.0.0.1:${server.port}/avatar?v=$v';
   Map<String, dynamic> jsonProfile(String id) => {
     'id': id,
-    'name': 'Pepe',
+    'name': 'Usuario B',
     'avatar_url': getUrl(revision),
   };
 
@@ -65,7 +66,11 @@ void main() {
   }
 
   ProfileAvatarImageCache newImages(SupabaseClient client) {
-    final cache = ProfileAvatarImageCache(client: client, diskCache: disk);
+    final cache = ProfileAvatarImageCache(
+      client: client,
+      diskCache: disk,
+      urlPolicy: AvatarUrlPolicy.permissive(),
+    );
     images.add(cache);
     return cache;
   }
@@ -314,7 +319,7 @@ void main() {
     await first.remember(profile);
     await resolve(first.imageFor(profile)!);
     await first.remember(
-      const UserProfile(id: 'owner', name: 'Pepe', avatarKey: 'avatar_01'),
+      const UserProfile(id: 'owner', name: 'Usuario B', avatarKey: 'avatar_01'),
     );
     first.clear();
     final next = newImages(client);

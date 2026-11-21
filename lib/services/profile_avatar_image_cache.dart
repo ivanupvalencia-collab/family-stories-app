@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -9,7 +8,10 @@ import 'package:flutter/painting.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
+import 'auth_stream.dart';
+import 'avatar_url_policy.dart';
 import 'remote_family_photo_disk_cache.dart';
+import 'shared_http_client.dart';
 
 abstract interface class ProfileAvatarImageSource {
   ProfileAvatarImageCache get avatarImages;
@@ -23,6 +25,8 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     RemoteFamilyPhotoDiskCache? diskCache,
     String? backend,
     String? owner,
+    AvatarUrlPolicy? urlPolicy,
+    this.maxBytes = 24 * 1024 * 1024,
   }) : _client = client,
        _disk =
            diskCache ??
@@ -32,12 +36,17 @@ class ProfileAvatarImageCache extends ChangeNotifier {
                    directoryName: 'remote_account_avatars_v1',
                  )),
        _backend = backend ?? client?.storage.url ?? '',
-       _owner = owner ?? client?.auth.currentUser?.id {
-    _subscription = client?.auth.onAuthStateChange.listen((event) {
-      syncSession();
-      if (event.event == AuthChangeEvent.signedOut) clear();
-      notifyListeners();
-    });
+       _owner = owner ?? client?.auth.currentUser?.id,
+       _announcedOwner = owner ?? client?.auth.currentUser?.id,
+       _urlPolicy =
+           urlPolicy ??
+           AvatarUrlPolicy.forBackend(backend ?? client?.storage.url ?? '') {
+    // S-10: errors (e.g. refresh failures) must not become unhandled. The
+    // client is optional here (local-only installations), so no subscription.
+    // C-13: the handler only notifies when the visible session moved.
+    _subscription = client == null
+        ? null
+        : listenAuthSafely(client.auth.onAuthStateChange, handleAuthState);
   }
   static final _shared = Expando<ProfileAvatarImageCache>();
   static ProfileAvatarImageCache forClient(SupabaseClient client) =>
@@ -46,7 +55,9 @@ class ProfileAvatarImageCache extends ChangeNotifier {
   final SupabaseClient? _client;
   final RemoteFamilyPhotoDiskCache? _disk;
   final String _backend;
+  final AvatarUrlPolicy _urlPolicy;
   String? _owner;
+  String? _announcedOwner;
   StreamSubscription<AuthState>? _subscription;
   Object _scope = Object();
   final _profiles = <String, UserProfile>{};
@@ -56,6 +67,10 @@ class ProfileAvatarImageCache extends ChangeNotifier {
   final _bytes = <String, Uint8List>{};
   int _byteCount = 0;
 
+  /// C-12: budget of the in-memory raw-bytes cache; the head of [_bytes] is
+  /// the least recently used entry and is evicted while over budget.
+  final int maxBytes;
+
   void syncSession() {
     final client = _client;
     if (client == null || _owner == client.auth.currentUser?.id) return;
@@ -63,6 +78,22 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     clear();
     _owner = client.auth.currentUser?.id;
     if (previous != null) unawaited(_disk?.clearOwner(_backend, previous));
+  }
+
+  /// C-13: every mounted avatar view reloads on each notifyListeners, so an
+  /// auth event only notifies when the visible session actually moved. A
+  /// getter may have synchronized the owner before the event arrived, hence
+  /// the separately tracked announced owner: the hourly tokenRefreshed (or
+  /// a same-owner userUpdated) stays silent.
+  @visibleForTesting
+  void handleAuthState(AuthState event) {
+    syncSession();
+    final signedOut = event.event == AuthChangeEvent.signedOut;
+    if (signedOut) clear();
+    final owner = _owner;
+    if (!signedOut && owner == _announcedOwner) return;
+    _announcedOwner = owner;
+    notifyListeners();
   }
 
   bool _valid(Object scope, String? owner) {
@@ -172,7 +203,14 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     if (!_valid(scope, owner)) {
       return Future.error(StateError('Avatar session changed'));
     }
-    if (_bytes[key] case final bytes?) return Future.value(bytes);
+    final hit = _bytes.remove(key);
+    if (hit != null) {
+      // C-12: reading makes this the most recently used entry, so the
+      // eviction below removes the least recently *used* bytes, not the
+      // oldest inserted ones.
+      _bytes[key] = hit;
+      return Future.value(hit);
+    }
     return _pendingBytes[key] ??= () async {
       try {
         bool valid() => _valid(scope, owner) && _images[id]?.url == url;
@@ -180,13 +218,26 @@ class ProfileAvatarImageCache extends ChangeNotifier {
         if (owner != null) bytes = await _disk?.readEntry(_backend, owner, key);
         if (!valid()) throw StateError('Avatar was invalidated');
         if (bytes == null) {
-          final http = HttpClient();
-          try {
-            final response = await (await http.getUrl(Uri.parse(url))).close();
+          // S-5: the URL comes from a client-writable column and is fetched
+          // by other people's devices. Never open a socket to anything the
+          // backend itself would not have produced.
+          if (!_urlPolicy.allows(url)) {
+            throw StateError('Avatar URL is not served by the backend');
+          }
+          // C-7: reuse the app-wide shared HttpClient (the S-5 connection
+          // timeout lives there). It is never closed: force-closing it would
+          // abort every other download sharing its pool.
+          Future<Uint8List> download() async {
+            final uri = Uri.parse(url);
+            final request = await sharedHttpClient
+                .getUrl(uri)
+                // A redirect could leave the allowed origin behind it.
+                ..followRedirects = false;
+            final response = await request.close();
             if (response.statusCode != 200) {
               throw NetworkImageLoadException(
                 statusCode: response.statusCode,
-                uri: Uri.parse(url),
+                uri: uri,
               );
             }
             final builder = BytesBuilder(copy: false);
@@ -196,10 +247,14 @@ class ProfileAvatarImageCache extends ChangeNotifier {
                 throw const FormatException('Avatar too large');
               }
             }
-            bytes = builder.takeBytes();
-          } finally {
-            http.close(force: true);
+            return builder.takeBytes();
           }
+
+          // dart:io has no per-request timeout: bound the whole exchange
+          // (headers + body). On expiry our future stops here; the abandoned
+          // exchange ends on its own (the 10 MB cap, a trusted origin, or the
+          // OS reaping a dead peer) without touching the shared pool.
+          bytes = await download().timeout(const Duration(seconds: 30));
           await RemoteFamilyPhotoDiskCache.validate(bytes);
           if (!valid()) throw StateError('Avatar was invalidated');
           if (owner != null) {
@@ -213,9 +268,13 @@ class ProfileAvatarImageCache extends ChangeNotifier {
           }
         }
         if (!valid()) throw StateError('Avatar was invalidated');
+        // C-12: subtract any previous length before overwriting so the
+        // count stays exact, and evict from the head (least recently used)
+        // until the budget is met.
+        _byteCount -= _bytes[key]?.length ?? 0;
         _bytes[key] = bytes;
         _byteCount += bytes.length;
-        while (_byteCount > 24 * 1024 * 1024 && _bytes.isNotEmpty) {
+        while (_byteCount > maxBytes && _bytes.isNotEmpty) {
           _byteCount -= _bytes.remove(_bytes.keys.first)!.length;
         }
         return bytes;

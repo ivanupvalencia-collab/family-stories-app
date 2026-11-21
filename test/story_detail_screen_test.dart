@@ -63,8 +63,8 @@ Widget _app(
   ),
   home: StoryScreen(
     story: _story(photo),
-    authorName: 'Claudia',
-    recipientName: 'Iván',
+    authorName: 'Usuario C',
+    recipientName: 'Usuario A',
     audioService: audio,
     waveformService: fixtures.UnavailableStoryWaveforms(),
     photoService: _Photos(),
@@ -151,7 +151,7 @@ void main() {
           final audio = _Audio();
           await tester.pumpWidget(_app(audio, photo: photo, scale: 1.6));
           await tester.pumpAndSettle();
-          expect(find.text('Historia de Claudia'), findsOneWidget);
+          expect(find.text('Historia de Usuario C'), findsOneWidget);
           expect(
             tester
                 .widget<QuestionText>(find.byType(QuestionText))
@@ -160,11 +160,11 @@ void main() {
             'Lora',
           );
           await tester.scrollUntilVisible(
-            find.text('17 de octubre de 2026 · Para Iván'),
+            find.text('17 de octubre de 2026 · Para Usuario A'),
             150,
           );
           expect(
-            find.text('17 de octubre de 2026 · Para Iván'),
+            find.text('17 de octubre de 2026 · Para Usuario A'),
             findsOneWidget,
           );
           if (photo) {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import '../design/aritoria_design.dart';
+import '../domain/add_family_member.dart';
 import '../models/family_member.dart';
 import '../models/question_request.dart';
 import '../services/auth_service.dart';
@@ -21,6 +22,7 @@ import '../services/question_request_service.dart';
 import '../services/received_request_details_service.dart';
 import '../services/visible_account_avatar_service.dart';
 import '../services/remote_family_member_cache.dart';
+import '../domain/home_hero.dart';
 import '../widgets/aritoria_home_view.dart';
 import '../widgets/aritoria_requests_view.dart';
 import '../widgets/family_member_photo_view.dart';
@@ -32,36 +34,42 @@ import 'question_request_screen.dart';
 import 'questions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
+  // A-3: every dependency is required and comes from the AppGraph; nothing
+  // below the graph constructs a concrete service. The two nullable ones
+  // are deliberate: the photo service is resolved per account and the
+  // avatar service only exists when a Supabase client does.
   const HomeScreen({
-    this.authService,
-    this.profileService,
-    this.profileImagePicker,
-    this.avatarStorageService,
-    this.familyMemberStorage,
-    this.familyMemberService,
-    this.familyMemberPhotoService,
-    this.familyStoryStorage,
-    this.familyStoryService,
-    this.invitationService,
-    this.invitationShareService,
-    this.questionRequestService,
-    this.receivedRequestDetailsService,
+    required this.authService,
+    required this.profileService,
+    required this.profileImagePicker,
+    required this.avatarStorageService,
+    required this.avatarService,
+    required this.familyMemberStorage,
+    required this.familyMemberService,
+    required this.familyMemberPhotoService,
+    required this.familyStoryStorage,
+    required this.familyStoryService,
+    required this.invitationService,
+    required this.invitationShareService,
+    required this.questionRequestService,
+    required this.receivedRequestDetailsService,
     super.key,
   });
 
-  final AuthService? authService;
-  final ProfileService? profileService;
-  final ProfileImagePicker? profileImagePicker;
+  final AuthService authService;
+  final ProfileService profileService;
+  final ProfileImagePicker profileImagePicker;
   final AvatarStorageService? avatarStorageService;
-  final FamilyMemberStorage? familyMemberStorage;
-  final FamilyMemberService? familyMemberService;
+  final VisibleAccountAvatarService? avatarService;
+  final FamilyMemberStorage familyMemberStorage;
+  final FamilyMemberService familyMemberService;
   final FamilyMemberPhotoService? familyMemberPhotoService;
-  final FamilyStoryStorage? familyStoryStorage;
-  final FamilyStoryService? familyStoryService;
-  final InvitationService? invitationService;
-  final InvitationShareService? invitationShareService;
-  final QuestionRequestService? questionRequestService;
-  final ReceivedRequestDetailsService? receivedRequestDetailsService;
+  final FamilyStoryStorage familyStoryStorage;
+  final FamilyStoryService familyStoryService;
+  final InvitationService invitationService;
+  final InvitationShareService invitationShareService;
+  final QuestionRequestService questionRequestService;
+  final ReceivedRequestDetailsService receivedRequestDetailsService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -108,23 +116,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _authService = widget.authService ?? SupabaseGoogleAuthService();
-    _familyMemberStorage =
-        widget.familyMemberStorage ?? SharedPreferencesFamilyMemberStorage();
-    _familyMemberService =
-        widget.familyMemberService ?? SupabaseFamilyMemberService();
-    _invitationService =
-        widget.invitationService ?? SupabaseInvitationService();
-    _invitationShareService =
-        widget.invitationShareService ?? PlatformInvitationShareService();
-    _questionRequestService =
-        widget.questionRequestService ?? SupabaseQuestionRequestService();
-    _familyStoryService =
-        widget.familyStoryService ?? SupabaseFamilyStoryService();
-    _profileService = widget.profileService ?? SupabaseProfileService();
-    _detailsService =
-        widget.receivedRequestDetailsService ??
-        SupabaseReceivedRequestDetailsService();
+    _authService = widget.authService;
+    _familyMemberStorage = widget.familyMemberStorage;
+    _familyMemberService = widget.familyMemberService;
+    _invitationService = widget.invitationService;
+    _invitationShareService = widget.invitationShareService;
+    _questionRequestService = widget.questionRequestService;
+    _familyStoryService = widget.familyStoryService;
+    _profileService = widget.profileService;
+    _detailsService = widget.receivedRequestDetailsService;
     _user = _authService.currentUser;
     _photos = _photoServiceFor(_user);
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
@@ -266,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (cached != null) {
           // Warm only the hero and first portraits before publishing the
           // snapshot. The rest read disk on demand, never holding up Home.
-          final avatars = SupabaseVisibleAccountAvatarService.shared;
+          final avatars = widget.avatarService;
           await avatars?.warmCached([
             for (final member in cached)
               if (member.photoPath == null && member.linkedAccountId != null)
@@ -399,13 +399,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final answers = await _questionRequestService.loadAnsweredForRecipient(
         user.id,
       );
-      answers.sort((a, b) {
-        if (a.answeredAt == null && b.answeredAt != null) return 1;
-        if (a.answeredAt != null && b.answeredAt == null) return -1;
-        return (b.answeredAt ?? b.createdAt).compareTo(
-          a.answeredAt ?? a.createdAt,
-        );
-      });
+      // C-17: no re-sort here — the service query already returns
+      // answered_at desc (nulls last), created_at desc.
       if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
         return;
       }
@@ -467,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final questionRequests = await _questionRequestService
           .loadPendingForRecipient(user.id);
-      questionRequests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // C-17: no re-sort here — the service query returns created_at desc.
       if (!mounted ||
           request != _questionsLoadRequest ||
           _user?.id != user.id) {
@@ -504,48 +499,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _addFamilyMember() async {
+    // C-8: the guard must exist before the first await. The old one armed
+    // itself only after the add screen returned, so a second invocation
+    // opened a second creation flow and created two rows. While the screen
+    // is open the buttons stay disabled; cancel/error paths reset it in
+    // the finally.
+    if (_isSaving) return;
     final creationUser = _user;
     final photoService = _photoServiceFor(creationUser);
-    final draft = await Navigator.of(context).push<FamilyMemberDraft>(
-      MaterialPageRoute(
-        builder: (context) => AddFamilyMemberScreen(
-          imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
-          photoService: photoService,
-        ),
-      ),
-    );
-
-    if (draft == null || !mounted || _user?.id != creationUser?.id) {
-      return;
-    }
-
-    final familyMember = draft.member;
-    final user = _user;
-    _loadRequest++; // An older refresh must not overwrite this new member.
     setState(() => _isSaving = true);
     try {
-      var savedMember = user == null
-          ? await _saveLocalFamilyMember(familyMember)
-          : await _familyMemberService.create(
-              ownerId: user.id,
-              name: familyMember.name,
-              relationship: familyMember.relationship,
-            );
+      final draft = await Navigator.of(context).push<FamilyMemberDraft>(
+        MaterialPageRoute(
+          builder: (context) => AddFamilyMemberScreen(
+            imagePicker: widget.profileImagePicker,
+            photoService: photoService,
+          ),
+        ),
+      );
+
+      if (draft == null || !mounted || _user?.id != creationUser?.id) {
+        return;
+      }
+
+      final familyMember = draft.member;
+      final user = _user;
+      _loadRequest++;
+      // A-1: the transaction lives in the domain; this screen only maps
+      // the typed result to UI.
+      final result = await AddFamilyMember(
+        members: _familyMemberService,
+        photos: photoService,
+        localStorage: _familyMemberStorage,
+      )(member: familyMember, ownerId: user?.id, photo: draft.photo);
       if (!mounted || _user?.id != user?.id) {
         return;
       }
-      if (draft.photo != null) {
-        try {
-          savedMember = await photoService.save(savedMember, draft.photo);
-        } catch (_) {
-          if (mounted && _user?.id == user?.id) {
-            _showMessage(
-              'El familiar se ha guardado, pero no su foto. Puedes añadirla desde su perfil.',
-            );
-          }
-        }
+      if (result.failure != null) {
+        _showMessage('No se pudo guardar el familiar. Inténtalo de nuevo.');
+        return;
       }
-      if (!mounted || _user?.id != user?.id) return;
+      if (!result.photoSaved) {
+        _showMessage(
+          'El familiar se ha guardado, pero no su foto. Puedes añadirla desde su perfil.',
+        );
+      }
+      final savedMember = result.saved!;
       setState(() {
         _familyMembers.add(savedMember);
         _hasMembersSnapshot = true;
@@ -562,11 +561,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<FamilyMember> _saveLocalFamilyMember(FamilyMember familyMember) async {
-    final current = await _familyMemberStorage.load();
-    await _familyMemberStorage.save([...current, familyMember]);
-    return familyMember;
-  }
+  /// C-8: test seam for the entry guard. The widget-test harness cannot
+  /// reproduce the production double-tap (the pushed route's modal barrier
+  /// becomes hittable synchronously), so the contract "a second creation
+  /// flow while one is open is a no-op" is pinned through this method.
+  @visibleForTesting
+  Future<void> debugAddFamilyMember() => _addFamilyMember();
 
   FamilyMemberPhotoService _photoServiceFor(AuthUser? user) =>
       widget.familyMemberPhotoService ??
@@ -595,7 +595,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           familyStoryService: _familyStoryService,
           familyMemberStorage: _familyMemberStorage,
           photoService: _photoServiceFor(_user),
-          imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
+          imagePicker: widget.profileImagePicker,
         ),
       ),
     );
@@ -630,9 +630,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           questionRequestService: _questionRequestService,
           senderName:
               _details[questionRequest.id]?.senderName ??
-              SupabaseVisibleAccountAvatarService.shared
-                  ?.cached(questionRequest.senderId)
-                  ?.name,
+              widget.avatarService?.cached(questionRequest.senderId)?.name,
         ),
       ),
     );
@@ -648,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (_) => QuestionsScreen(
           familyMember: member,
           familyStoryStorage:
-              widget.familyStoryStorage ?? LocalFamilyStoryStorage(),
+              widget.familyStoryStorage,
           authService: _authService,
           invitationService: _invitationService,
           invitationShareService: _invitationShareService,
@@ -796,31 +794,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _membersView() => RefreshIndicator(
     onRefresh: _refreshHome,
-    child: ListView(
+    // C-14: the member rows are built lazily; the chrome (status, empty
+    // text, trailing add button) stays in fixed box slivers.
+    child: CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(AritoriaSpace.lg),
-      children: [
-        if (_memberStatus() != null)
-          _memberStatus()!
-        else if (_familyMembers.isEmpty)
-          const Text('Todavía no has añadido ningún ser querido.')
-        else
-          for (final member in _familyMembers)
-            ListTile(
-              leading: FamilyMemberPhotoView(
-                member: member,
-                photoService: _photos,
-                radius: 24,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(AritoriaSpace.lg),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              if (_memberStatus() != null)
+                SliverToBoxAdapter(child: _memberStatus()!)
+              else if (_familyMembers.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Text('Todavía no has añadido ningún ser querido.'),
+                )
+              else
+                SliverList.builder(
+                  itemCount: _familyMembers.length,
+                  itemBuilder: (context, index) => ListTile(
+                    leading: FamilyMemberPhotoView(
+                      member: _familyMembers[index],
+                      photoService: _photos,
+                      radius: 24,
+                    ),
+                    title: Text(_familyMembers[index].name),
+                    subtitle: Text(_familyMembers[index].relationship),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openFamilyMember(_familyMembers[index]),
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: TextButton.icon(
+                  onPressed: _isLoading || _isSaving ? null : _addFamilyMember,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Añadir ser querido'),
+                ),
               ),
-              title: Text(member.name),
-              subtitle: Text(member.relationship),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openFamilyMember(member),
-            ),
-        TextButton.icon(
-          onPressed: _isLoading || _isSaving ? null : _addFamilyMember,
-          icon: const Icon(Icons.add),
-          label: const Text('Añadir ser querido'),
+            ],
+          ),
         ),
       ],
     ),

@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
+import 'auth_stream.dart';
+import 'disk_budget.dart';
 import 'story_waveform_service.dart';
 
 const _format = 'audio_waveforms-2.0.2-rms256-peak-v1';
@@ -16,9 +18,14 @@ String _key(FamilyStory story) =>
 
 /// App-private, serialized disk operations prevent late writes after removal.
 class StoryWaveformDiskCache {
-  StoryWaveformDiskCache({Future<Directory> Function()? directoryProvider})
-    : _directory = directoryProvider ?? getApplicationSupportDirectory;
+  StoryWaveformDiskCache({
+    Future<Directory> Function()? directoryProvider,
+    this.maxBytes = 32 * 1024 * 1024,
+  }) : _directory = directoryProvider ?? getApplicationSupportDirectory;
   final Future<Directory> Function() _directory;
+
+  /// C-11: byte budget for one account's waveform tree.
+  final int maxBytes;
   Future<void> _operations = Future.value();
 
   Future<T> _serial<T>(Future<T> Function() action) {
@@ -85,6 +92,10 @@ class StoryWaveformDiskCache {
     } finally {
       if (await staged.exists()) await staged.delete();
     }
+    // C-11: the budget is enforced on the success path, inside the same
+    // serialized action, so eviction is ordered with every other waveform
+    // operation.
+    await enforceDiskBudget(await _root(backend, account), maxBytes);
   });
 
   Future<void> removeFamily(String backend, String account, String family) =>
@@ -298,6 +309,9 @@ class PersistentStoryWaveformService extends StoryWaveformService {
     } catch (_) {}
   }
 
+  /// C-18: drops this scope's raw samples from RAM without touching disk.
+  void invalidateMemory() => _memory.clear();
+
   @override
   Future<void> dispose() async {} // Shared warm-ups survive navigation.
 }
@@ -306,20 +320,34 @@ class PersistentStoryWaveformService extends StoryWaveformService {
 class _RemoteBinding {
   _RemoteBinding(this.client, this.disk, this.factory) {
     sync();
-    client.auth.onAuthStateChange.listen((_) => sync());
+    // S-10: errors (e.g. refresh failures) must not become unhandled.
+    // A-4: the registration is owned and cancellable, not leaked.
+    _subscription = listenAuthSafely(
+      client.auth.onAuthStateChange,
+      (_) => sync(),
+    );
   }
   final SupabaseClient client;
   final StoryWaveformDiskCache disk;
   final StoryWaveformService Function()? factory;
+  late final StreamSubscription<AuthState> _subscription;
   String? account;
   PersistentStoryWaveformService? current;
+
+  /// A-4: stop listening; the registry can drop the binding on teardown.
+  void dispose() => _subscription.cancel();
   void sync() {
     final next = client.auth.currentUser?.id;
     if (account == next) return;
     final previous = current;
+    final transition = previous != null || next != null;
     account = next;
     current = null;
     if (previous != null) unawaited(previous.invalidate());
+    // C-18: a real account transition also drops the guest scope's RAM so no
+    // raw samples survive an account boundary. Its disk tree is device data
+    // (like family_members/family_stories) and rehydrates on demand.
+    if (transition) StoryWaveforms.invalidateLocalMemory();
     if (next != null) {
       late PersistentStoryWaveformService scope;
       scope = PersistentStoryWaveformService(
@@ -338,22 +366,35 @@ class _RemoteBinding {
 
 class StoryWaveforms {
   static final disk = StoryWaveformDiskCache();
-  static final StoryWaveformService local = PersistentStoryWaveformService(
-    backend: 'local',
-    account: 'device',
-    remote: false,
-    disk: disk,
-  );
-  static final _remote = Expando<_RemoteBinding>();
+  // C-18: the guest scope is device-scoped by design, but its RAM does not
+  // survive an account transition (see _RemoteBinding.sync); only its disk
+  // tree is guest data that sessions never purge.
+  static final PersistentStoryWaveformService local =
+      PersistentStoryWaveformService(
+        backend: 'local',
+        account: 'device',
+        remote: false,
+        disk: disk,
+      );
+  static void invalidateLocalMemory() => local.invalidateMemory();
+  // C-18: bindings are keyed per (client, disk): a later call with a
+  // different cache gets its own binding instead of silently freezing the
+  // first call's configuration.
+  static final _remote = Expando<List<_RemoteBinding>>();
   static StoryWaveformService forClient(
     SupabaseClient client, {
     StoryWaveformDiskCache? diskCache,
     StoryWaveformService Function()? extractorFactory,
   }) {
-    final binding = _remote[client] ??= _RemoteBinding(
-      client,
-      diskCache ?? disk,
-      extractorFactory,
+    final wanted = diskCache ?? disk;
+    final bindings = _remote[client] ??= <_RemoteBinding>[];
+    final binding = bindings.firstWhere(
+      (binding) => binding.disk == wanted,
+      orElse: () {
+        final created = _RemoteBinding(client, wanted, extractorFactory);
+        bindings.add(created);
+        return created;
+      },
     );
     binding.sync();
     return binding.current ?? _UnavailableWaveforms();

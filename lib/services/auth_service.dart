@@ -1,6 +1,8 @@
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth_stream.dart';
+
 const _googleWebClientId =
     '922531861898-dv4srvf7daasfmiheuk2e5b2fdcse2pt.apps.googleusercontent.com';
 
@@ -10,6 +12,17 @@ class AuthUser {
   final String id;
   final String email;
 }
+
+// S-10: the app-facing auth stream. Refresh failures arrive as stream errors;
+// they are reported and swallowed here so no listener can turn a flaky network
+// into an unhandled exception. Extracted as a top-level function so tests can
+// feed it a failing source directly.
+Stream<AuthUser?> authUserChanges(
+  Stream<AuthState> source,
+  AuthUser? Function(User? user) toAuthUser,
+) => source
+    .handleError(handleAuthStreamError)
+    .map((state) => toAuthUser(state.session?.user));
 
 abstract class AuthService {
   AuthUser? get currentUser;
@@ -38,9 +51,8 @@ class SupabaseGoogleAuthService implements AuthService {
   AuthUser? get currentUser => _toAuthUser(_client.auth.currentUser);
 
   @override
-  Stream<AuthUser?> get authStateChanges => _client.auth.onAuthStateChange.map(
-    (state) => _toAuthUser(state.session?.user),
-  );
+  Stream<AuthUser?> get authStateChanges =>
+      authUserChanges(_client.auth.onAuthStateChange, _toAuthUser);
 
   @override
   Future<AuthUser> signInWithGoogle() async {
@@ -77,13 +89,31 @@ class SupabaseGoogleAuthService implements AuthService {
 
   @override
   Future<void> signOut() async {
-    await _client.auth.signOut();
-
+    // S-7: nothing may be skipped, whichever layer fails.
     try {
-      await _googleInitialization;
-      await GoogleSignIn.instance.signOut();
-    } catch (_) {
-      // The Supabase session is already closed. Google sign-out is best effort.
+      await _client.auth.signOut();
+    } catch (error) {
+      // gotrue removes the local session and notifies `signedOut` before the
+      // server call, so a server failure has already closed the session here:
+      // there is nothing left to close, and the caches (S-6) already purged.
+      // Residual: if that server call failed, this device's refresh token
+      // stays valid server-side until it expires or rotates.
+      if (_client.auth.currentUser != null) {
+        // The failure happened before the session was removed: force a local
+        // sign-out so `signedOut` —and with it the purge— is guaranteed.
+        try {
+          await _client.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {
+          throw error; // Neither path worked: surface the original failure.
+        }
+      }
+    } finally {
+      try {
+        await _googleInitialization;
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {
+        // The Supabase session is already closed. Google sign-out is best effort.
+      }
     }
   }
 

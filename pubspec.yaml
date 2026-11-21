@@ -39,7 +39,13 @@ dependencies:
   audio_waveforms: 2.0.2
   path_provider: 2.1.6
   shared_preferences: 2.5.5
+  # S-3: the Supabase session (JWT + refresh token) and the PKCE verifier must
+  # not sit in plain SharedPreferences. Requires minSdk 23; Flutter sets 24.
+  flutter_secure_storage: 11.2.0
   supabase_flutter: 2.18.0
+  # C-7: direct dependency for IOClient, which adapts the shared
+  # dart:io HttpClient to the `Client` SupabaseClient accepts.
+  http: ^1.6.0
   google_sign_in: 7.2.0
   image_picker: ^1.2.3
   share_plus: ^13.3.1
@@ -49,6 +55,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # S-6: permite fijar SharedPreferencesAsyncPlatform.instance con un almacén
+  # en memoria en los tests (RemoteFamilyMemberCache.forClient lo necesita).
+  shared_preferences_platform_interface: ^2.4.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

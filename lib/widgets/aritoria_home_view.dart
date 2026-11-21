@@ -2,17 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'question_text.dart';
 
 import '../design/aritoria_design.dart';
+import '../domain/home_hero.dart';
+import '../domain/postgrest_failure.dart';
+import '../domain/request_display.dart';
 import '../models/family_member.dart';
 import '../models/family_story.dart';
 import '../services/question_request_service.dart';
 import '../services/story_photo_service.dart';
 import 'private_photo_view.dart';
-import '../models/profile_avatar.dart';
 import '../models/question_request.dart';
 import '../models/user_profile.dart';
 import '../services/family_member_photo_service.dart';
@@ -23,57 +24,8 @@ import '../services/visible_account_avatar_service.dart';
 
 const double _homeRequestLeadingSize = 48;
 
-FamilyMember? selectHomeHero(
-  List<FamilyMember> members, {
-  UserProfile? Function(String accountId)? linkedProfile,
-}) {
-  if (members.isEmpty) return null;
-  return members.firstWhere((member) {
-    if (member.photoPath != null) return true;
-    final accountId = member.linkedAccountId;
-    final profile = accountId == null ? null : linkedProfile?.call(accountId);
-    return (profile?.avatarUrl?.trim().isNotEmpty ?? false) ||
-        ProfileAvatarCatalog.findByKey(profile?.avatarKey) != null;
-  }, orElse: () => members.first);
-}
-
-String requestDate(DateTime date) {
-  final local = date.toLocal();
-  return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
-}
-
-String requestSubtitle(
-  QuestionRequest request,
-  ReceivedRequestDetails? details, {
-  bool keepTimingTogether = false,
-  bool recipientOnSeparateLine = false,
-}) {
-  final name = details?.senderName;
-  final answered = request.status == QuestionRequestStatus.answered;
-  final parts = <String>[
-    if (name != null)
-      '${answered ? 'Para' : 'De'} $name'
-    else
-      answered ? 'Para quien te preguntó' : 'Una pregunta para ti',
-    if (answered && request.answeredAt != null)
-      requestDate(request.answeredAt!)
-    else if (!answered)
-      requestDate(request.createdAt),
-    if (answered && details?.durationSeconds != null)
-      '${details!.durationSeconds! ~/ 60}:${(details.durationSeconds! % 60).toString().padLeft(2, '0')}',
-  ];
-  if (keepTimingTogether &&
-      answered &&
-      request.answeredAt != null &&
-      details?.durationSeconds != null) {
-    final duration = parts.removeLast();
-    parts[parts.length - 1] = '${parts.last}\u00a0·\u00a0$duration';
-  }
-  if (recipientOnSeparateLine && parts.length > 1) {
-    return '${parts.first}\n${parts.skip(1).join(' · ')}';
-  }
-  return parts.join(' · ');
-}
+// A-2: selectHomeHero, requestDate and requestSubtitle moved to
+// lib/domain/ (pure rules, no widget or Supabase dependency).
 
 class AritoriaHomeView extends StatelessWidget {
   const AritoriaHomeView({
@@ -170,9 +122,8 @@ class AritoriaHomeView extends StatelessWidget {
           _AutomaticHero(
             members: List.of(members),
             photos: photos,
-            avatars: authenticated
-                ? avatarService ?? SupabaseVisibleAccountAvatarService.shared
-                : null,
+            // A-3: injected from the graph; null renders the fallback.
+            avatars: authenticated ? avatarService : null,
             onTap: onHero,
           ),
           const SizedBox(height: AritoriaSpace.section),
@@ -185,46 +136,50 @@ class AritoriaHomeView extends StatelessWidget {
           if (memberStatus != null)
             memberStatus!
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final member in members)
-                    Padding(
-                      padding: const EdgeInsets.only(right: AritoriaSpace.md),
-                      child: _Person(
-                        member: member,
-                        photos: photos,
-                        onTap: () => onMember(member),
-                      ),
-                    ),
-                  SizedBox(
-                    width: 80,
-                    child: InkWell(
-                      onTap: onAdd,
-                      borderRadius: BorderRadius.circular(AritoriaSpace.sm),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AritoriaColors.taupe),
+            // C-14: only the visible member tiles are built; the height is
+            // the tile's own extent (64px photo + a two-line caption).
+            SizedBox(
+              height: 112,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: members.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == members.length) {
+                    return SizedBox(
+                      width: 80,
+                      child: InkWell(
+                        onTap: onAdd,
+                        borderRadius: BorderRadius.circular(AritoriaSpace.sm),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AritoriaColors.taupe),
+                              ),
+                              child: const Icon(
+                                Icons.add,
+                                color: AritoriaColors.olive,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.add,
-                              color: AritoriaColors.olive,
-                            ),
-                          ),
-                          const SizedBox(height: AritoriaSpace.sm),
-                          const Text('Añadir', style: AritoriaType.action),
-                        ],
+                            const SizedBox(height: AritoriaSpace.sm),
+                            const Text('Añadir', style: AritoriaType.action),
+                          ],
+                        ),
                       ),
+                    );
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(right: AritoriaSpace.md),
+                    child: _Person(
+                      member: members[index],
+                      photos: photos,
+                      onTap: () => onMember(members[index]),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           if (authenticated) ...[
@@ -315,15 +270,12 @@ class _AutomaticHeroState extends State<_AutomaticHero> {
         if (member.photoPath == null && member.linkedAccountId != null)
           member.linkedAccountId!,
     };
-    await Future.wait(
-      accounts.map((account) async {
-        try {
-          await service.load(account);
-        } catch (_) {
-          // Optional metadata: keep selecting from the available own photos.
-        }
-      }),
-    );
+    try {
+      // C-5: one batched RPC per <=100 ids instead of one RPC per account.
+      await service.loadMany(accounts.toList());
+    } catch (_) {
+      // Optional metadata: keep selecting from the available own photos.
+    }
     if (mounted && generation == _generation) setState(() {});
   }
 
@@ -662,8 +614,7 @@ class _HomeAnswerPreviewState extends State<_HomeAnswerPreview> {
         return fresh;
       } catch (error) {
         // Transient network errors do not hide an already cached thumbnail.
-        if (error is PostgrestException &&
-            (error.code == '42501' || error.code == 'PGRST301')) {
+        if (isPostgrestDenied(error)) {
           try {
             await _photos.rememberPreview(id, null);
           } catch (_) {}
