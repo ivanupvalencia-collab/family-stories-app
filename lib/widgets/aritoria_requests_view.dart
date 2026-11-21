@@ -97,7 +97,11 @@ class AritoriaRequestsView extends StatelessWidget {
   );
 }
 
-class _RequestTabs extends StatelessWidget {
+/// C-15: incremented on every tab-label TextPainter layout. Test-only.
+@visibleForTesting
+var debugTabLabelLayouts = 0;
+
+class _RequestTabs extends StatefulWidget {
   const _RequestTabs({
     required this.pendingCount,
     required this.showAnswers,
@@ -108,22 +112,59 @@ class _RequestTabs extends StatelessWidget {
   final ValueChanged<int> onChanged;
 
   @override
+  State<_RequestTabs> createState() => _RequestTabsState();
+}
+
+class _RequestTabsState extends State<_RequestTabs> {
+  // C-15: two TextPainter layouts used to run on every build. The widths
+  // are memoized by the label set (pendingCount) and the text environment
+  // (textScaler, direction); plain parent rebuilds reuse them.
+  List<double>? _widths;
+  int? _pendingCount;
+  TextScaler? _scaler;
+  TextDirection? _direction;
+
+  List<double> _measuredWidths(
+    List<String> labels,
+    TextStyle style,
+    BuildContext context,
+  ) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    if (_widths != null &&
+        _pendingCount == widget.pendingCount &&
+        _scaler == scaler &&
+        _direction == direction) {
+      return _widths!;
+    }
+    _pendingCount = widget.pendingCount;
+    _scaler = scaler;
+    _direction = direction;
+    return _widths = [
+      for (final label in labels) _measureTabLabel(label, style, context),
+    ];
+  }
+
+  double _measureTabLabel(String label, TextStyle style, BuildContext context) {
+    debugTabLabelLayouts++;
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final width = painter.width.ceilToDouble() + AritoriaSpace.lg;
+    painter.dispose();
+    return width;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final labels = [
-      'Preguntas para ti ($pendingCount)',
+      'Preguntas para ti (${widget.pendingCount})',
       'Historias que has contado',
     ];
     final style = AritoriaType.action.copyWith(fontSize: 13);
-    final widths = labels.map((label) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-      )..layout();
-      final width = painter.width.ceilToDouble() + AritoriaSpace.lg;
-      painter.dispose();
-      return width;
-    }).toList();
+    final widths = _measuredWidths(labels, style, context);
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: AritoriaColors.line),
@@ -145,15 +186,15 @@ class _RequestTabs extends StatelessWidget {
                     width: widths[index] + extra,
                     child: Semantics(
                       button: true,
-                      selected: showAnswers == (index == 1),
+                      selected: widget.showAnswers == (index == 1),
                       child: Material(
-                        color: showAnswers == (index == 1)
+                        color: widget.showAnswers == (index == 1)
                             ? AritoriaColors.sage.withValues(alpha: 0.3)
                             : AritoriaColors.transparent,
                         borderRadius: BorderRadius.circular(24),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(24),
-                          onTap: () => onChanged(index),
+                          onTap: () => widget.onChanged(index),
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(minHeight: 44),
                             child: Padding(
@@ -167,7 +208,7 @@ class _RequestTabs extends StatelessWidget {
                                   maxLines: 1,
                                   softWrap: false,
                                   style: style.copyWith(
-                                    color: showAnswers == (index == 1)
+                                    color: widget.showAnswers == (index == 1)
                                         ? AritoriaColors.olive
                                         : AritoriaColors.muted,
                                   ),

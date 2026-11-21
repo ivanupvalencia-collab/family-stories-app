@@ -47,6 +47,7 @@ List<QuestionRequest> _requests({bool answered = false}) => [
 
 Widget _app({
   bool answered = false,
+  int pendingCount = 2,
   ValueChanged<int>? onTab,
   ValueChanged<QuestionRequest>? onRequest,
   Future<void> Function()? onRefresh,
@@ -62,7 +63,7 @@ Widget _app({
       body: SafeArea(
         child: AritoriaRequestsView(
           requests: _requests(answered: answered),
-          pendingCount: 2,
+          pendingCount: pendingCount,
           showAnswers: answered,
           status: status,
           avatarService: avatars,
@@ -360,6 +361,30 @@ void main() {
       lessThan(300),
       reason: 'C-14: the whole request list was built eagerly.',
     );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('tab labels are measured once and not on every rebuild (C-15)', (
+    tester,
+  ) async {
+    debugTabLabelLayouts = 0;
+    addTearDown(() => debugTabLabelLayouts = 0);
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    expect(debugTabLabelLayouts, 2);
+    // Plain rebuilds (a different selected tab) must reuse the measures.
+    await tester.pumpWidget(_app(answered: true));
+    await tester.pumpAndSettle();
+    expect(
+      debugTabLabelLayouts,
+      2,
+      reason: 'C-15: the tab labels were re-measured on a plain rebuild.',
+    );
+    // A changed label set (new pending count) re-measures once.
+    await tester.pumpWidget(_app(answered: true, pendingCount: 5));
+    await tester.pumpAndSettle();
+    expect(debugTabLabelLayouts, 4);
+    expect(find.text('Preguntas para ti (5)'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1…C-14, C-16, C-17, C-18** (17/18); falta **C-15** |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ✅ **completo (18/18)**: hechos **C-1…C-18** — sin vetoados en este eje |
 
 ---
 
@@ -367,7 +367,7 @@ la entrada (ver C-10).
 | C-12 | Caché de bytes con evicción por inserción, no LRU; `_byteCount` no resta la longitud previa (**✅ resuelto**: hit reordena la clave como MRU → la evicción expulsa el menos usado; `_byteCount` resta la longitud previa antes de sobrescribir; techo `maxBytes` inyectable) | Medio | `profile_avatar_image_cache.dart` |
 | C-13 | Tempestad de reloads: `notifyListeners()` en cada evento de auth (**✅ resuelto**: las dos cachés notifican solo cuando la sesión visible cambia (guard de announce por `_announcedOwner`, cubre el pre-sync de getters) o al `signedOut`; `tokenRefreshed`/`userUpdated` con el mismo owner quedan silenciosos) | Medio | `visible_account_avatar_service.dart`, `profile_avatar_image_cache.dart` |
 | C-14 | `ListView(children:)` no lazy en 4 sitios (**✅ resuelto**: requests y miembros → `CustomScrollView` + `SliverList.builder`; historias → `ListView.builder`; tira de miembros del home → `ListView.builder` horizontal —la `Row` materializaba todos los tiles, la única construcción eager a nivel elemento—) | Medio | 4 vistas |
-| C-15 | `TextPainter..layout()` dentro de `build()` | Medio | `aritoria_requests_view.dart:85-100` |
+| C-15 | `TextPainter..layout()` dentro de `build()` (**✅ resuelto**: `_RequestTabs` pasa a stateful con medidas memoizadas por (pendingCount, textScaler, dirección) — un rebuild plano reutiliza las medidas y solo un cambio de etiquetas re-mide) | Medio | `aritoria_requests_view.dart` |
 | C-16 | Refresco de un familiar cargando la lista completa y escaneando en lineal (**✅ resuelto**: `_refreshRemoteFamilyMember` usa `loadMemberForOwner`, una fila con `.maybeSingle()`) | Medio | `family_member_screen.dart:309-318` |
 | C-17 | Re-sort en cliente de resultados ya ordenados por SQL (**✅ resuelto**: borrados los dos sorts de Home; el orden lo fija `.order()` en SQL, con el order de pending ahora fijado en test de wire) | Bajo | `home_screen.dart:402-408,470` |
 | C-18 | Caché de waveform compartida estática entre cuentas (**✅ resuelto**: la RAM del scope de invitado se invalida en cada transición de cuenta (`_RemoteBinding.sync`) —su disco es dato de dispositivo y se rehidrata—; `forClient` registra bindings por (cliente, disco) en vez de congelar la config de la primera llamada) | Bajo | `persistent_story_waveform_service.dart` |
@@ -418,5 +418,5 @@ guardar).
 
 ## Fase 4 — Rendimiento de UI y testabilidad
 
-17. ✅ **C-14** listas con builder: solo se construye lo visible (requests/miembros → slivers, historias → `ListView.builder`, tira del home → horizontal) · ⏳ **C-15** caché de `TextPainter` · ✅ **C-11** presupuestos de caché en disco (techo por árbol de owner/por directorio de audio/por cuenta de waveform, evicción por mtime) · ✅ **C-12** LRU real + contabilidad exacta de `_byteCount` · ✅ **C-13** notify de auth solo cuando la sesión visible cambia.
+17. ✅ **C-14** listas con builder: solo se construye lo visible (requests/miembros → slivers, historias → `ListView.builder`, tira del home → horizontal) · ✅ **C-15** medidas de pestañas memoizadas, sin `TextPainter` en cada build · ✅ **C-11** presupuestos de caché en disco (techo por árbol de owner/por directorio de audio/por cuenta de waveform, evicción por mtime) · ✅ **C-12** LRU real + contabilidad exacta de `_byteCount` · ✅ **C-13** notify de auth solo cuando la sesión visible cambia. → **fase cerrada**.
 18. ⏳ CI (`flutter analyze && flutter test` con lints estrictos) + README real + split de `test/widget_test.dart`.
