@@ -246,6 +246,34 @@ void main() {
     },
   );
 
+  testWidgets('a second creation call while one is open is a no-op (C-8)', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      fixtures.testApp(fixtures.MemoryFamilyMemberStorage()),
+    );
+    await tester.pumpAndSettle();
+    // The double-tap contract: the guard lives before the first await, so a
+    // second invocation while the first flow is still open is rejected. The
+    // old guard armed itself only after the add screen returned and both
+    // flows ran, creating two rows.
+    final home = tester.state(find.byType(HomeScreen));
+    final first = (home as dynamic).debugAddFamilyMember();
+    final second = (home as dynamic).debugAddFamilyMember();
+    await tester.pumpAndSettle();
+    expect(find.byType(AddFamilyMemberScreen), findsOneWidget);
+    // A stacked second flow would only become visible after the first pop.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(AddFamilyMemberScreen),
+      findsNothing,
+      reason: 'C-8: the second creation flow was not rejected.',
+    );
+    await first;
+    await second;
+  });
+
   testWidgets(
     'quick recording and sending select a member then open existing questions',
     (tester) async {

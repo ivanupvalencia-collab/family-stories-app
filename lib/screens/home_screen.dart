@@ -499,26 +499,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _addFamilyMember() async {
+    // C-8: the guard must exist before the first await. The old one armed
+    // itself only after the add screen returned, so a second invocation
+    // opened a second creation flow and created two rows. While the screen
+    // is open the buttons stay disabled; cancel/error paths reset it in
+    // the finally.
+    if (_isSaving) return;
     final creationUser = _user;
     final photoService = _photoServiceFor(creationUser);
-    final draft = await Navigator.of(context).push<FamilyMemberDraft>(
-      MaterialPageRoute(
-        builder: (context) => AddFamilyMemberScreen(
-          imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
-          photoService: photoService,
-        ),
-      ),
-    );
-
-    if (draft == null || !mounted || _user?.id != creationUser?.id) {
-      return;
-    }
-
-    final familyMember = draft.member;
-    final user = _user;
-    _loadRequest++; // An older refresh must not overwrite this new member.
     setState(() => _isSaving = true);
     try {
+      final draft = await Navigator.of(context).push<FamilyMemberDraft>(
+        MaterialPageRoute(
+          builder: (context) => AddFamilyMemberScreen(
+            imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
+            photoService: photoService,
+          ),
+        ),
+      );
+
+      if (draft == null || !mounted || _user?.id != creationUser?.id) {
+        return;
+      }
+
+      final familyMember = draft.member;
+      final user = _user;
+      _loadRequest++; // An older refresh must not overwrite this new member.
       var savedMember = user == null
           ? await _saveLocalFamilyMember(familyMember)
           : await _familyMemberService.create(
@@ -556,6 +562,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
   }
+
+  /// C-8: test seam for the entry guard. The widget-test harness cannot
+  /// reproduce the production double-tap (the pushed route's modal barrier
+  /// becomes hittable synchronously), so the contract "a second creation
+  /// flow while one is open is a no-op" is pinned through this method.
+  @visibleForTesting
+  Future<void> debugAddFamilyMember() => _addFamilyMember();
 
   Future<FamilyMember> _saveLocalFamilyMember(FamilyMember familyMember) async {
     final current = await _familyMemberStorage.load();

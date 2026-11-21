@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-7, C-9, C-10, C-11, C-12, C-16, C-17, C-18** (14/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1…C-7, C-8, C-9, C-10, C-11, C-12, C-16, C-17, C-18** (15/18); falta **C-13, C-14, C-15** (uno a uno) |
 
 ---
 
@@ -360,7 +360,7 @@ la entrada (ver C-10).
 | # | Hallazgo | Sev. | Ubicación |
 |---|---|---|---|
 | C-7 | Cero timeouts de red; HttpClient nuevo por descarga; un request colgado bloquea el avatar (**✅ resuelto**: timeouts + `followRedirects = false` desde S-5, y ahora un único `HttpClient` compartido por toda la app — avatares + storage/REST/auth vía `httpClient` en `Supabase.initialize`, con pooling de conexiones) | Medio | `profile_avatar_image_cache.dart:176-225` |
-| C-8 | Doble-tap: `_isSaving` se pone tras el `await` del picker → dos filas creadas | Medio | `home_screen.dart:506-524,821,895` |
+| C-8 | Doble-tap: `_isSaving` se pone tras el `await` del picker → dos filas creadas (**✅ resuelto**: guard `if (_isSaving) return` + `_isSaving = true` síncronos antes del primer `await`, con reset en el `finally`; seam `debugAddFamilyMember` fija el contrato y el test demuestra que la 2.ª creación mientras la 1.ª está abierta es no-op) | Medio | `home_screen.dart` |
 | C-9 | Cola de escritura serializada y lecturas que esperan TODO el backlog (**✅ resuelto**: orden por fichero + barrera por owner en `_run`; `read`/`readEntry` solo esperan su propia clave y la barrera de su owner) | Medio | `remote_family_photo_disk_cache.dart` |
 | C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto (**✅ resuelto**: chunks de RPC en paralelo con `Future.wait` + un remove por bucket de ≤100 rutas con cortocircuito y validación previa del plan) | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
 | C-11 | Cachés de disco sin techo (**✅ resuelto**: presupuesto de bytes por árbol de owner —fotos/avatares—, por directorio de sesión —audio— y por cuenta —waveforms—, con evicción por mtime tras cada escritura; los ficheros <5 s quedan protegidos y una evicción solo degrada a re-descarga) | Medio | `disk_budget.dart` + 3 clases de caché |
