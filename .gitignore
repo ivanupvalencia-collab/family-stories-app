@@ -57,6 +57,6 @@ key.properties
 *.p8
 *.mobileprovision
 
-# The iOS platform folder is regenerated scaffolding (the project ships
-# Android; Xcode 27.2 recreated it during a toolchain update).
-ios/
+# The iOS platform folder is versioned: it carries app configuration
+# (Info.plist, URL schemes, Google Sign-In, signing). Ephemeral files
+# inside are ignored by ios/.gitignore (Pods, symlinks, Generated).
