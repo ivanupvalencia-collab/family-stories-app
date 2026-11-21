@@ -35,7 +35,7 @@ desde entonces.
 | S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ✅ este commit · política own-folder en `20261115000001` (**no aplicada**) + gate S-29 |
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
-| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-4** (1/12); resto por grupos |
+| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-3, A-4** (2/12); resto por grupos |
 | C-1…C-18 | Eje de concurrencia y rendimiento | — | ✅ **completo (18/18)**: hechos **C-1…C-18** — sin vetoados en este eje |
 
 ---
@@ -181,6 +181,19 @@ fuera de `services/`.
 - Configuración hardcodeada: `main.dart:26-28` (URL + publishable key pegadas,
   sin `--dart-define` ni rotación).
 - Sin framework de estado: solo `setState` (hasta 28 llamadas por pantalla).
+
+**✅ resuelto (A-3):** `lib/app_graph.dart` es la raíz de composición única —
+`main()` lo construye tras `Supabase.initialize` y `FamilyStoriesApp` baja de 14
+params opcionales a `required AppGraph`. Los fallbacks de la capa de app
+desaparecen: `HomeScreen` recibe 14 dependencias **requeridas** (2 nullable a
+propósito: foto por cuenta y avatares sin cliente), el getter estático
+`SupabaseVisibleAccountAvatarService.shared` se elimina (las 4 vistas reciben el
+servicio del grafo; null = fallback, idéntico a `.shared` en local-only/tests),
+la URL + publishable key pasan a `String.fromEnvironment` (`--dart-define`, con
+los valores actuales como defaults) y el `SessionMonitor` de A-4 se comparte
+desde el grafo. Los seams de test de pantallas de segundo nivel (ProfileScreen,
+story/question screens) se mantienen deliberadamente: son inyección de tests,
+no fallbacks de producción.
 
 ## 🔴 A-4 · Fugas de ciclo de vida en constructores de servicios (Alto)
 
@@ -418,7 +431,7 @@ guardar).
 ## Fase 3 — Arquitectura
 
 12. ⏳ A-1/A-2 casos de uso fuera de pantallas + `selectHomeHero` a `domain/` + mapeo `AppFailure`.
-13. ⏳ A-3 `AppGraph` único en `main()`: eliminar los 40 fallbacks `?? Concrete()`, los `.shared`, y mover la config a `String.fromEnvironment`.
+13. ✅ **A-3** `AppGraph` único en `main()`: sin fallbacks `?? Concrete()` en la capa de app, sin `.shared`, config a `String.fromEnvironment`/`--dart-define`.
 14. ⏳ A-4 `dispose()` en los servicios + suscripciones de auth centralizadas en un `SessionMonitor`.
 15. ⏳ A-7/A-8 extraer `RemotePhotoStore<T>` y `AudioPlaybackController`; utilidad `AsyncValueLoader<T>`.
 16. ⏳ A-5 trocear `home_screen.dart` · A-6/A-10 `Question`/`QuestionCategory`/`FamilyRelationship` tipados.

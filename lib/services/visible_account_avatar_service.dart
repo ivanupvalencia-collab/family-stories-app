@@ -47,21 +47,8 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
     );
   }
 
-  static SupabaseVisibleAccountAvatarService? _shared;
-
-  // Lazy initialization also lets local-only installations keep working.
-  static VisibleAccountAvatarService? get shared {
-    try {
-      final client = Supabase.instance.client;
-      if (_shared?._client != client) {
-        _shared?.dispose();
-        _shared = SupabaseVisibleAccountAvatarService(client: client);
-      }
-      return _shared;
-    } catch (_) {
-      return null;
-    }
-  }
+  // A-3: the AppGraph owns the single instance; the process-wide getter is
+  // gone and every view receives the service from above.
 
   final SupabaseClient _client;
   @override

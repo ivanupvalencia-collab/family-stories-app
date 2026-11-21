@@ -265,7 +265,8 @@ class _MemberHeaderState extends State<_MemberHeader> {
   }
 
   void _attach() {
-    _avatars = widget.avatars ?? SupabaseVisibleAccountAvatarService.shared;
+    // A-3: injected from the graph; null renders the fallback.
+    _avatars = widget.avatars;
     _avatars?.addListener(_changed);
     _pending = _loadAvatar();
   }

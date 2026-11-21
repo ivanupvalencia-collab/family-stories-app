@@ -32,36 +32,42 @@ import 'question_request_screen.dart';
 import 'questions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
+  // A-3: every dependency is required and comes from the AppGraph; nothing
+  // below the graph constructs a concrete service. The two nullable ones
+  // are deliberate: the photo service is resolved per account and the
+  // avatar service only exists when a Supabase client does.
   const HomeScreen({
-    this.authService,
-    this.profileService,
-    this.profileImagePicker,
-    this.avatarStorageService,
-    this.familyMemberStorage,
-    this.familyMemberService,
-    this.familyMemberPhotoService,
-    this.familyStoryStorage,
-    this.familyStoryService,
-    this.invitationService,
-    this.invitationShareService,
-    this.questionRequestService,
-    this.receivedRequestDetailsService,
+    required this.authService,
+    required this.profileService,
+    required this.profileImagePicker,
+    required this.avatarStorageService,
+    required this.avatarService,
+    required this.familyMemberStorage,
+    required this.familyMemberService,
+    required this.familyMemberPhotoService,
+    required this.familyStoryStorage,
+    required this.familyStoryService,
+    required this.invitationService,
+    required this.invitationShareService,
+    required this.questionRequestService,
+    required this.receivedRequestDetailsService,
     super.key,
   });
 
-  final AuthService? authService;
-  final ProfileService? profileService;
-  final ProfileImagePicker? profileImagePicker;
+  final AuthService authService;
+  final ProfileService profileService;
+  final ProfileImagePicker profileImagePicker;
   final AvatarStorageService? avatarStorageService;
-  final FamilyMemberStorage? familyMemberStorage;
-  final FamilyMemberService? familyMemberService;
+  final VisibleAccountAvatarService? avatarService;
+  final FamilyMemberStorage familyMemberStorage;
+  final FamilyMemberService familyMemberService;
   final FamilyMemberPhotoService? familyMemberPhotoService;
-  final FamilyStoryStorage? familyStoryStorage;
-  final FamilyStoryService? familyStoryService;
-  final InvitationService? invitationService;
-  final InvitationShareService? invitationShareService;
-  final QuestionRequestService? questionRequestService;
-  final ReceivedRequestDetailsService? receivedRequestDetailsService;
+  final FamilyStoryStorage familyStoryStorage;
+  final FamilyStoryService familyStoryService;
+  final InvitationService invitationService;
+  final InvitationShareService invitationShareService;
+  final QuestionRequestService questionRequestService;
+  final ReceivedRequestDetailsService receivedRequestDetailsService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -108,23 +114,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _authService = widget.authService ?? SupabaseGoogleAuthService();
-    _familyMemberStorage =
-        widget.familyMemberStorage ?? SharedPreferencesFamilyMemberStorage();
-    _familyMemberService =
-        widget.familyMemberService ?? SupabaseFamilyMemberService();
-    _invitationService =
-        widget.invitationService ?? SupabaseInvitationService();
-    _invitationShareService =
-        widget.invitationShareService ?? PlatformInvitationShareService();
-    _questionRequestService =
-        widget.questionRequestService ?? SupabaseQuestionRequestService();
-    _familyStoryService =
-        widget.familyStoryService ?? SupabaseFamilyStoryService();
-    _profileService = widget.profileService ?? SupabaseProfileService();
-    _detailsService =
-        widget.receivedRequestDetailsService ??
-        SupabaseReceivedRequestDetailsService();
+    _authService = widget.authService;
+    _familyMemberStorage = widget.familyMemberStorage;
+    _familyMemberService = widget.familyMemberService;
+    _invitationService = widget.invitationService;
+    _invitationShareService = widget.invitationShareService;
+    _questionRequestService = widget.questionRequestService;
+    _familyStoryService = widget.familyStoryService;
+    _profileService = widget.profileService;
+    _detailsService = widget.receivedRequestDetailsService;
     _user = _authService.currentUser;
     _photos = _photoServiceFor(_user);
     _authSubscription = _authService.authStateChanges.listen(_applyAuthUser);
@@ -266,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (cached != null) {
           // Warm only the hero and first portraits before publishing the
           // snapshot. The rest read disk on demand, never holding up Home.
-          final avatars = SupabaseVisibleAccountAvatarService.shared;
+          final avatars = widget.avatarService;
           await avatars?.warmCached([
             for (final member in cached)
               if (member.photoPath == null && member.linkedAccountId != null)
@@ -512,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final draft = await Navigator.of(context).push<FamilyMemberDraft>(
         MaterialPageRoute(
           builder: (context) => AddFamilyMemberScreen(
-            imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
+            imagePicker: widget.profileImagePicker,
             photoService: photoService,
           ),
         ),
@@ -603,7 +601,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           familyStoryService: _familyStoryService,
           familyMemberStorage: _familyMemberStorage,
           photoService: _photoServiceFor(_user),
-          imagePicker: widget.profileImagePicker ?? DeviceProfileImagePicker(),
+          imagePicker: widget.profileImagePicker,
         ),
       ),
     );
@@ -638,9 +636,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           questionRequestService: _questionRequestService,
           senderName:
               _details[questionRequest.id]?.senderName ??
-              SupabaseVisibleAccountAvatarService.shared
-                  ?.cached(questionRequest.senderId)
-                  ?.name,
+              widget.avatarService?.cached(questionRequest.senderId)?.name,
         ),
       ),
     );
@@ -656,7 +652,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (_) => QuestionsScreen(
           familyMember: member,
           familyStoryStorage:
-              widget.familyStoryStorage ?? LocalFamilyStoryStorage(),
+              widget.familyStoryStorage,
           authService: _authService,
           invitationService: _invitationService,
           invitationShareService: _invitationShareService,

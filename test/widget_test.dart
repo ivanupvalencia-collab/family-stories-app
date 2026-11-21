@@ -3,6 +3,7 @@ import 'photo_editor_test_support.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:family_stories_app/app_graph.dart';
 import 'package:family_stories_app/main.dart';
 import 'package:family_stories_app/design/aritoria_design.dart';
 import 'package:family_stories_app/models/family_member.dart';
@@ -2264,16 +2265,18 @@ void main() {
 
     await tester.pumpWidget(
       FamilyStoriesApp(
-        authService: FakeAuthService(),
-        profileService: FakeProfileService(),
-        invitationService: FakeInvitationService(),
-        invitationShareService: FakeInvitationShareService(),
-        questionRequestService: FakeQuestionRequestService(),
-        incomingLinkService: FakeIncomingLinkService(),
-        familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
-        familyMemberService: FakeFamilyMemberService(),
-        familyStoryStorage: storyStorage,
-        familyStoryService: FakeFamilyStoryService(),
+        graph: AppGraph(
+          authService: FakeAuthService(),
+          profileService: FakeProfileService(),
+          invitationService: FakeInvitationService(),
+          invitationShareService: FakeInvitationShareService(),
+          questionRequestService: FakeQuestionRequestService(),
+          incomingLinkService: FakeIncomingLinkService(),
+          familyMemberStorage: MemoryFamilyMemberStorage(members: [familyMember]),
+          familyMemberService: FakeFamilyMemberService(),
+          familyStoryStorage: storyStorage,
+          familyStoryService: FakeFamilyStoryService(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -2974,22 +2977,26 @@ FamilyStoriesApp testApp(
   ReceivedRequestDetailsService? receivedRequestDetailsService,
 }) {
   return FamilyStoriesApp(
-    authService: authService ?? FakeAuthService(),
-    profileService: profileService ?? FakeProfileService(),
-    profileImagePicker: profileImagePicker ?? FakeProfileImagePicker(),
-    avatarStorageService: avatarStorageService ?? FakeAvatarStorageService(),
-    familyMemberStorage: familyMemberStorage,
-    familyMemberService: familyMemberService ?? FakeFamilyMemberService(),
-    familyMemberPhotoService: familyMemberPhotoService,
-    familyStoryStorage: MemoryFamilyStoryStorage(),
-    familyStoryService: familyStoryService ?? FakeFamilyStoryService(),
-    invitationService: invitationService ?? FakeInvitationService(),
-    invitationShareService:
-        invitationShareService ?? FakeInvitationShareService(),
-    incomingLinkService: incomingLinkService ?? FakeIncomingLinkService(),
-    questionRequestService:
-        questionRequestService ?? FakeQuestionRequestService(),
-    receivedRequestDetailsService: receivedRequestDetailsService,
+    // A-3: the graph is the single composition root; tests build it from
+    // fakes exactly like main() builds it from the concrete services.
+    graph: AppGraph(
+      authService: authService ?? FakeAuthService(),
+      profileService: profileService ?? FakeProfileService(),
+      profileImagePicker: profileImagePicker ?? FakeProfileImagePicker(),
+      avatarStorageService: avatarStorageService ?? FakeAvatarStorageService(),
+      familyMemberStorage: familyMemberStorage,
+      familyMemberService: familyMemberService ?? FakeFamilyMemberService(),
+      familyMemberPhotoService: familyMemberPhotoService,
+      familyStoryStorage: MemoryFamilyStoryStorage(),
+      familyStoryService: familyStoryService ?? FakeFamilyStoryService(),
+      invitationService: invitationService ?? FakeInvitationService(),
+      invitationShareService:
+          invitationShareService ?? FakeInvitationShareService(),
+      incomingLinkService: incomingLinkService ?? FakeIncomingLinkService(),
+      questionRequestService:
+          questionRequestService ?? FakeQuestionRequestService(),
+      receivedRequestDetailsService: receivedRequestDetailsService,
+    ),
   );
 }
 

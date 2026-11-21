@@ -170,9 +170,8 @@ class AritoriaHomeView extends StatelessWidget {
           _AutomaticHero(
             members: List.of(members),
             photos: photos,
-            avatars: authenticated
-                ? avatarService ?? SupabaseVisibleAccountAvatarService.shared
-                : null,
+            // A-3: injected from the graph; null renders the fallback.
+            avatars: authenticated ? avatarService : null,
             onTap: onHero,
           ),
           const SizedBox(height: AritoriaSpace.section),
