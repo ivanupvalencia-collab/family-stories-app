@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -107,20 +108,35 @@ class _Entry {
 class _Cache extends ChangeNotifier {
   _Cache(this.client) : account = client.auth.currentUser?.id {
     // S-10: errors (e.g. refresh failures) must not become unhandled.
-    listenAuthSafely(client.auth.onAuthStateChange, (state) {
-      final next = state.session?.user.id;
-      if (next != account || state.event == AuthChangeEvent.signedOut) {
-        reset(next);
-      }
-      // Also notify if an eager cachedPhoto call already synchronized account.
-      notifyListeners();
-    });
+    // A-4: the subscription is owned and cancellable, not leaked.
+    _subscription = listenAuthSafely(
+      client.auth.onAuthStateChange,
+      _handleAuthState,
+    );
   }
   final SupabaseClient client;
+  late final StreamSubscription<AuthState> _subscription;
   String? account;
   int generation = 0;
   final entries = <String, _Entry>{};
   final previews = <String, FamilyStory?>{};
+
+  void _handleAuthState(AuthState state) {
+    final next = state.session?.user.id;
+    if (next != account || state.event == AuthChangeEvent.signedOut) {
+      reset(next);
+    }
+    // Also notify if an eager cachedPhoto call already synchronized account.
+    notifyListeners();
+  }
+
+  /// A-4: stop listening on teardown.
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+
   void reset(String? next) {
     account = next;
     generation++;

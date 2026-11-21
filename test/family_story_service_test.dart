@@ -226,6 +226,22 @@ void main() {
     },
   );
 
+  test('a disposed story service no longer sweeps audio on sign-out (A-4)',
+      () async {
+    final path = await service.localAudioPathFor(story);
+    expect(await File(path).exists(), isTrue);
+    // A-4: dispose detaches the auth registration; before the fix the
+    // service listened forever and swept the file on every sign-out.
+    service.dispose();
+    await client.auth.signOut(scope: SignOutScope.local);
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      await File(path).exists(),
+      isTrue,
+      reason: 'A-4: the disposed service still swept audio on sign-out.',
+    );
+  });
+
   test('the audio cache evicts old downloads beyond its byte budget (C-11)',
       () async {
     final cacheDirectory = Directory(

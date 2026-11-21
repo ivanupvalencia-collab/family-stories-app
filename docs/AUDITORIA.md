@@ -35,7 +35,7 @@ desde entonces.
 | S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ✅ este commit · política own-folder en `20261115000001` (**no aplicada**) + gate S-29 |
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
-| A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
+| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-4** (1/12); resto por grupos |
 | C-1…C-18 | Eje de concurrencia y rendimiento | — | ✅ **completo (18/18)**: hechos **C-1…C-18** — sin vetoados en este eje |
 
 ---
@@ -194,6 +194,13 @@ no expone `dispose()`. Mismo patrón en `story_photo_service.dart:108`,
 `family_member_photo_service.dart:118`,
 `persistent_story_waveform_service.dart:309`. (Solo
 `visible_account_avatar_service.dart:25` lo hace bien.)
+
+**✅ resuelto (A-4):** los 5 sitios guardan su suscripción y exponen `dispose()`
+— `family_member_service` y `family_story_service` registran en un `SessionMonitor`
+(una única suscripción de auth con abanico que el grafo de A-3 comparte), y las dos
+cachés internas de fotos y el binding de waveforms cancelan su suscripción
+directamente. Test: un servicio disposed ya no barre audio al cerrar sesión
+(la fuga original lo hacía).
 
 ## 🟠 Otros hallazgos de arquitectura
 

@@ -321,13 +321,21 @@ class _RemoteBinding {
   _RemoteBinding(this.client, this.disk, this.factory) {
     sync();
     // S-10: errors (e.g. refresh failures) must not become unhandled.
-    listenAuthSafely(client.auth.onAuthStateChange, (_) => sync());
+    // A-4: the registration is owned and cancellable, not leaked.
+    _subscription = listenAuthSafely(
+      client.auth.onAuthStateChange,
+      (_) => sync(),
+    );
   }
   final SupabaseClient client;
   final StoryWaveformDiskCache disk;
   final StoryWaveformService Function()? factory;
+  late final StreamSubscription<AuthState> _subscription;
   String? account;
   PersistentStoryWaveformService? current;
+
+  /// A-4: stop listening; the registry can drop the binding on teardown.
+  void dispose() => _subscription.cancel();
   void sync() {
     final next = client.auth.currentUser?.id;
     if (account == next) return;
