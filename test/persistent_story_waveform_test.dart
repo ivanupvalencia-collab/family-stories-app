@@ -437,4 +437,39 @@ void main() {
       throwsStateError,
     );
   });
+
+  test('the waveform cache evicts old waveforms beyond its byte budget (C-11)',
+      () async {
+    final budgeted = StoryWaveformDiskCache(
+      directoryProvider: () async => Directory('${directory.path}/budget'),
+      maxBytes: 300,
+    );
+    final data = {'samples': List<double>.filled(50, 0.5)};
+    bool valid() => true;
+    Future<File> onlyJson() async {
+      final files = await Directory('${directory.path}/budget')
+          .list(recursive: true, followLinks: false)
+          .where((entry) => entry is File && entry.path.endsWith('.json'))
+          .cast<File>()
+          .toList();
+      return files.single;
+    }
+
+    await budgeted.write('backend', 'owner', _story(id: 'a'), data, valid);
+    final old = await onlyJson();
+    await old.setLastModified(
+      DateTime.now().subtract(const Duration(minutes: 2)),
+    );
+
+    await budgeted.write('backend', 'owner', _story(id: 'b'), data, valid);
+
+    expect(
+      await budgeted.read('backend', 'owner', _story(id: 'a')),
+      isNull,
+      reason: 'C-11: the oldest waveform was not evicted over the budget.',
+    );
+    final kept = await onlyJson();
+    expect(kept.existsSync(), isTrue);
+    expect(await budgeted.read('backend', 'owner', _story(id: 'b')), isNotNull);
+  });
 }

@@ -113,4 +113,68 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'the disk cache evicts the oldest files when a tree exceeds its byte budget (C-11)',
+    () async {
+      final budgeted = RemoteFamilyPhotoDiskCache(
+        directoryProvider: provider,
+        maxBytes: 2500,
+      );
+      final namespace = base64Url.encode(utf8.encode('backend'));
+      String filePath(String owner, String name) =>
+          '${support.path}/remote_family_photos_v1/$namespace/$owner/m/$name';
+
+      await budgeted.write(
+        'backend',
+        'owner',
+        'owner/m/a.png',
+        Uint8List(1000),
+        stillValid: stillValid,
+      );
+      await File(filePath('owner', 'a.png')).setLastModified(
+        DateTime.now().subtract(const Duration(minutes: 1)),
+      );
+      await budgeted.write(
+        'backend',
+        'owner',
+        'owner/m/b.png',
+        Uint8List(1000),
+        stillValid: stillValid,
+      );
+      await File(filePath('owner', 'b.png')).setLastModified(
+        DateTime.now().subtract(const Duration(minutes: 1)),
+      );
+      // An old file of another owner is outside this owner's budget.
+      final foreign = File(filePath('other', 'old.png'));
+      await foreign.parent.create(recursive: true);
+      await foreign.writeAsBytes(Uint8List(1000));
+      await foreign.setLastModified(
+        DateTime.now().subtract(const Duration(minutes: 2)),
+      );
+
+      await budgeted.write(
+        'backend',
+        'owner',
+        'owner/m/c.png',
+        Uint8List(1000),
+        stillValid: stillValid,
+      );
+
+      expect(
+        File(filePath('owner', 'a.png')).existsSync(),
+        isFalse,
+        reason: 'C-11: the oldest file was not evicted over the budget.',
+      );
+      expect(File(filePath('owner', 'b.png')).existsSync(), isTrue);
+      expect(File(filePath('owner', 'c.png')).existsSync(), isTrue);
+      expect(
+        foreign.existsSync(),
+        isTrue,
+        reason: 'C-11: eviction must be scoped to the owner tree.',
+      );
+      await budgeted.clearOwner('backend', 'owner');
+      await budgeted.clearOwner('backend', 'other');
+    },
+  );
 }

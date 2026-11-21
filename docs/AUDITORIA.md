@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-7, C-9, C-10, C-16, C-17** (11/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-7, C-9, C-10, C-11, C-16, C-17** (12/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -363,7 +363,7 @@ la entrada (ver C-10).
 | C-8 | Doble-tap: `_isSaving` se pone tras el `await` del picker → dos filas creadas | Medio | `home_screen.dart:506-524,821,895` |
 | C-9 | Cola de escritura serializada y lecturas que esperan TODO el backlog (**✅ resuelto**: orden por fichero + barrera por owner en `_run`; `read`/`readEntry` solo esperan su propia clave y la barrera de su owner) | Medio | `remote_family_photo_disk_cache.dart` |
 | C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto (**✅ resuelto**: chunks de RPC en paralelo con `Future.wait` + un remove por bucket de ≤100 rutas con cortocircuito y validación previa del plan) | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
-| C-11 | Cachés de disco sin techo | Medio | 3 clases de caché |
+| C-11 | Cachés de disco sin techo (**✅ resuelto**: presupuesto de bytes por árbol de owner —fotos/avatares—, por directorio de sesión —audio— y por cuenta —waveforms—, con evicción por mtime tras cada escritura; los ficheros <5 s quedan protegidos y una evicción solo degrada a re-descarga) | Medio | `disk_budget.dart` + 3 clases de caché |
 | C-12 | Caché de bytes con evicción por inserción, no LRU; `_byteCount` no resta la longitud previa | Medio | `profile_avatar_image_cache.dart:216-220` |
 | C-13 | Tempestad de reloads: `notifyListeners()` en cada evento de auth | Medio | `account_avatar_view.dart:53-59` |
 | C-14 | `ListView(children:)` no lazy en 4 sitios | Medio | `family_member_screen.dart:570-584` |
@@ -418,5 +418,5 @@ guardar).
 
 ## Fase 4 — Rendimiento de UI y testabilidad
 
-17. ⏳ C-14/C-15 `ListView.builder` + caché de `TextPainter` · C-11/C-12 presupuestos de caché + LRU real · C-13 debounce de `notifyListeners`.
+17. ⏳ C-14/C-15 `ListView.builder` + caché de `TextPainter` · ✅ **C-11** presupuestos de caché en disco (techo por árbol de owner/por directorio de audio/por cuenta de waveform, evicción por mtime) · ⏳ C-12 LRU real · C-13 debounce de `notifyListeners`.
 18. ⏳ CI (`flutter analyze && flutter test` con lints estrictos) + README real + split de `test/widget_test.dart`.

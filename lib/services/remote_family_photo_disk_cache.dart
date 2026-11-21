@@ -6,6 +6,8 @@ import 'dart:ui' as ui;
 
 import 'package:path_provider/path_provider.dart';
 
+import 'disk_budget.dart';
+
 // App-private cache, never the guest's original photos. Object paths are
 // validated by the photo service before reaching this class.
 class RemoteFamilyPhotoDiskCache {
@@ -13,6 +15,7 @@ class RemoteFamilyPhotoDiskCache {
     Future<Directory> Function()? directoryProvider,
     this.directoryName = 'remote_family_photos_v1',
     this.allowForeignUploader = false,
+    this.maxBytes = 64 * 1024 * 1024,
   }) : _directoryProvider = directoryProvider ?? getApplicationSupportDirectory;
 
   // One instance per client and configuration: every reader shares the same
@@ -37,6 +40,11 @@ class RemoteFamilyPhotoDiskCache {
   final Future<Directory> Function() _directoryProvider;
   final String directoryName;
   final bool allowForeignUploader;
+
+  /// C-11: byte budget for one owner tree of this cache. Every write
+  /// re-checks it, so a tree can only stay over budget while all of its
+  /// files are younger than the sweep's freshness window.
+  final int maxBytes;
 
   // C-9: operations are ordered per logical file, plus one barrier per owner
   // for tree-wide ops (clearOwner/retain). A read only waits for the write of
@@ -188,6 +196,11 @@ class RemoteFamilyPhotoDiskCache {
     required bool Function() stillValid,
   }) => _run(_ownerKey(backend, owner), _fileKey(backend, owner, path), () async {
     await _writeFile(await _file(backend, owner, path), bytes, stillValid);
+    // C-11: inline, not through _run — a barrier enqueued from inside this
+    // action would deadlock (the barrier would wait for this very write)
+    // and re-serialize the reads C-9 decoupled. Victim deletes are
+    // cache-safe: the next read just downloads the file again.
+    await enforceDiskBudget(await _root(backend, owner), maxBytes);
   });
 
   Future<void> _writeFile(
@@ -253,6 +266,8 @@ class RemoteFamilyPhotoDiskCache {
     required bool Function() stillValid,
   }) => _run(_ownerKey(backend, owner), _entryKey(backend, owner, key), () async {
     await _writeFile(await _named(backend, owner, key), bytes, stillValid);
+    // C-11: entries count towards the same owner tree budget.
+    await enforceDiskBudget(await _root(backend, owner), maxBytes);
   });
 
   Future<void> removeEntry(String backend, String owner, String key) =>

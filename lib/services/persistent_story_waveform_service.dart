@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
 import 'auth_stream.dart';
+import 'disk_budget.dart';
 import 'story_waveform_service.dart';
 
 const _format = 'audio_waveforms-2.0.2-rms256-peak-v1';
@@ -17,9 +18,14 @@ String _key(FamilyStory story) =>
 
 /// App-private, serialized disk operations prevent late writes after removal.
 class StoryWaveformDiskCache {
-  StoryWaveformDiskCache({Future<Directory> Function()? directoryProvider})
-    : _directory = directoryProvider ?? getApplicationSupportDirectory;
+  StoryWaveformDiskCache({
+    Future<Directory> Function()? directoryProvider,
+    this.maxBytes = 32 * 1024 * 1024,
+  }) : _directory = directoryProvider ?? getApplicationSupportDirectory;
   final Future<Directory> Function() _directory;
+
+  /// C-11: byte budget for one account's waveform tree.
+  final int maxBytes;
   Future<void> _operations = Future.value();
 
   Future<T> _serial<T>(Future<T> Function() action) {
@@ -86,6 +92,10 @@ class StoryWaveformDiskCache {
     } finally {
       if (await staged.exists()) await staged.delete();
     }
+    // C-11: the budget is enforced on the success path, inside the same
+    // serialized action, so eviction is ordered with every other waveform
+    // operation.
+    await enforceDiskBudget(await _root(backend, account), maxBytes);
   });
 
   Future<void> removeFamily(String backend, String account, String family) =>

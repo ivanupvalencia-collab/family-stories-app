@@ -225,4 +225,37 @@ void main() {
       expect(requestedPaths, hasLength(2));
     },
   );
+
+  test('the audio cache evicts old downloads beyond its byte budget (C-11)',
+      () async {
+    final cacheDirectory = Directory(
+      '${temporary.path}${Platform.pathSeparator}remote_story_audio',
+    );
+    await cacheDirectory.create(recursive: true);
+    final stale = File(
+      '${cacheDirectory.path}${Platform.pathSeparator}stale.m4a',
+    );
+    await stale.writeAsBytes(List.filled(1000, 1));
+    await stale.setLastModified(
+      DateTime.now().subtract(const Duration(minutes: 2)),
+    );
+
+    final budgeted = SupabaseFamilyStoryService(
+      client: client,
+      audioCacheMaxBytes: 500,
+    );
+    await budgeted.localAudioPathFor(story);
+
+    expect(
+      stale.existsSync(),
+      isFalse,
+      reason: 'C-11: the audio cache did not evict the stale download.',
+    );
+    expect(
+      File('${cacheDirectory.path}${Platform.pathSeparator}'
+              '${story.id}.m4a')
+          .existsSync(),
+      isTrue,
+    );
+  });
 }

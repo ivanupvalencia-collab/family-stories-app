@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/family_story.dart';
 import 'auth_stream.dart';
+import 'disk_budget.dart';
 import 'story_waveform_service.dart';
 import 'persistent_story_waveform_service.dart';
 
@@ -22,6 +23,7 @@ class SupabaseFamilyStoryService
   SupabaseFamilyStoryService({
     SupabaseClient? client,
     StoryWaveformService? waveformService,
+    this.audioCacheMaxBytes = 64 * 1024 * 1024,
   }) : _client = client ?? Supabase.instance.client,
        _waveformOverride = waveformService {
     // S-6: the service must drop its audio map on its own; relying on
@@ -40,6 +42,11 @@ class SupabaseFamilyStoryService
 
   final SupabaseClient _client;
   final StoryWaveformService? _waveformOverride;
+
+  /// C-11: byte budget for `tmp/remote_story_audio`, re-checked after every
+  /// download. The directory is session-scoped (S-6 wipes it whole), so one
+  /// budget over the whole directory is correct.
+  final int audioCacheMaxBytes;
   final Map<String, ({String path, int size})> _audioCache = {};
   int _cacheGeneration = 0;
 
@@ -122,6 +129,10 @@ class SupabaseFamilyStoryService
       await file.delete();
       throw StateError('Audio cache was invalidated.');
     }
+    // C-11: each download re-checks the directory's budget. Files younger
+    // than the sweep's freshness window (including this one) are never
+    // deleted, and a file being played keeps its open descriptor on POSIX.
+    await enforceDiskBudget(cacheDirectory, audioCacheMaxBytes);
     _audioCache[story.audioPath] = (path: file.path, size: fileSize);
     unawaited(waveformScope.warm(story, () async => file.path));
     return file.path;
