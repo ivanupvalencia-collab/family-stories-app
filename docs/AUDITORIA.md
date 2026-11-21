@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-10, C-16** (8/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-10, C-16, C-17** (9/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -369,7 +369,7 @@ la entrada (ver C-10).
 | C-14 | `ListView(children:)` no lazy en 4 sitios | Medio | `family_member_screen.dart:570-584` |
 | C-15 | `TextPainter..layout()` dentro de `build()` | Medio | `aritoria_requests_view.dart:85-100` |
 | C-16 | Refresco de un familiar cargando la lista completa y escaneando en lineal (**✅ resuelto**: `_refreshRemoteFamilyMember` usa `loadMemberForOwner`, una fila con `.maybeSingle()`) | Medio | `family_member_screen.dart:309-318` |
-| C-17 | Re-sort en cliente de resultados ya ordenados por SQL | Bajo | `home_screen.dart:402-408,470` |
+| C-17 | Re-sort en cliente de resultados ya ordenados por SQL (**✅ resuelto**: borrados los dos sorts de Home; el orden lo fija `.order()` en SQL, con el order de pending ahora fijado en test de wire) | Bajo | `home_screen.dart:402-408,470` |
 | C-18 | Caché de waveform compartida estática entre cuentas | Bajo | `persistent_story_waveform_service.dart:339-347` |
 
 **Positivos:** un único `Supabase.instance.client` compartido, `Future.wait`
@@ -400,7 +400,7 @@ correctas.
 ## Fase 2 — Escala de datos
 
 10. ✅ C-5 lote de `get_visible_account_avatars` (≤100 ids) → `loadMany` en Home (1 RPC por lote; el `warmCached` único en Home ya existía).
-11. ⏳ **C-6 ✅** `.range(0, 499)` en las 4 consultas de lista + gate `pagination_gate_test` · **C-10 ✅** chunks de RPC en paralelo + removes agrupados por bucket · **C-16 ✅** refresco con `loadMemberForOwner` · C-17 borrar los re-sort.
+11. ✅ **C-6** `.range(0, 499)` + gate `pagination_gate_test` · **C-10** chunks de RPC en paralelo + removes por bucket · **C-16** refresco con `loadMemberForOwner` · **C-17** re-sorts de Home borrados (orden fijado en SQL).
 
 ## Fase 3 — Arquitectura
 

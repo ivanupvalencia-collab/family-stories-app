@@ -271,6 +271,49 @@ void main() {
     expect(find.text('Grabar respuesta'), findsOneWidget);
   });
 
+  testWidgets('Home keeps the service order without re-sorting (C-17)', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    // Ascending createdAt: the SQL query can never return this order, so a
+    // client-side re-sort would flip it. Home must trust the service order.
+    final questionRequestService = FakeQuestionRequestService(
+      pendingByRecipient: {
+        testAuthUser.id: [
+          testQuestionRequest(
+            id: 'old-request',
+            recipientId: testAuthUser.id,
+            questionText: 'Pregunta más antigua',
+            createdAt: DateTime.utc(2026, 10, 1),
+          ),
+          testQuestionRequest(
+            id: 'new-request',
+            recipientId: testAuthUser.id,
+            questionText: 'Pregunta más reciente',
+            createdAt: DateTime.utc(2026, 10, 5),
+          ),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      testApp(
+        MemoryFamilyMemberStorage(),
+        authService: FakeAuthService(testAuthUser),
+        questionRequestService: questionRequestService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pregunta más antigua'), findsOneWidget);
+    expect(find.text('Pregunta más reciente'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Pregunta más antigua')).dy,
+      lessThan(tester.getTopLeft(find.text('Pregunta más reciente')).dy),
+      reason: 'Home must not re-sort what the service returned (C-17).',
+    );
+  });
+
   testWidgets('muestra un estado discreto sin preguntas pendientes', (
     tester,
   ) async {

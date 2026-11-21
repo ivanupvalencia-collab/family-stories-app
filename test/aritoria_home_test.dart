@@ -78,7 +78,8 @@ fixtures.FakeQuestionRequestService _requests() =>
     fixtures.FakeQuestionRequestService(
       pendingByRecipient: {
         fixtures.testAuthUser.id: [
-          for (var i = 1; i <= 5; i++)
+          // SQL order: created_at desc — the fake must mirror the query.
+          for (var i = 5; i >= 1; i--)
             fixtures.testQuestionRequest(
               id: 'q$i',
               recipientId: fixtures.testAuthUser.id,
@@ -89,7 +90,8 @@ fixtures.FakeQuestionRequestService _requests() =>
       },
       answeredByRecipient: {
         fixtures.testAuthUser.id: [
-          for (var i = 1; i <= 5; i++)
+          // SQL order: answered_at desc, nulls last.
+          for (var i = 5; i >= 1; i--)
             fixtures.testQuestionRequest(
               id: 'a$i',
               recipientId: fixtures.testAuthUser.id,

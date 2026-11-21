@@ -399,13 +399,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final answers = await _questionRequestService.loadAnsweredForRecipient(
         user.id,
       );
-      answers.sort((a, b) {
-        if (a.answeredAt == null && b.answeredAt != null) return 1;
-        if (a.answeredAt != null && b.answeredAt == null) return -1;
-        return (b.answeredAt ?? b.createdAt).compareTo(
-          a.answeredAt ?? a.createdAt,
-        );
-      });
+      // C-17: no re-sort here — the service query already returns
+      // answered_at desc (nulls last), created_at desc.
       if (!mounted || request != _answersLoadRequest || _user?.id != user.id) {
         return;
       }
@@ -467,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final questionRequests = await _questionRequestService
           .loadPendingForRecipient(user.id);
-      questionRequests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // C-17: no re-sort here — the service query returns created_at desc.
       if (!mounted ||
           request != _questionsLoadRequest ||
           _user?.id != user.id) {
