@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6** (6/18); resto pendiente (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1, C-2, C-3, C-4, C-5, C-6, C-10** (7/18); resto pendiente (uno a uno) |
 
 ---
 
@@ -362,7 +362,7 @@ la entrada (ver C-10).
 | C-7 | Cero timeouts de red; HttpClient nuevo por descarga; un request colgado bloquea el avatar (**parcial resuelto en S-5**: `connectionTimeout` 10 s + `requestTimeout` 30 s + `followRedirects = false` en la descarga de avatares; queda compartir el `HttpClient` con el resto de descargas) | Medio | `profile_avatar_image_cache.dart:176-225` |
 | C-8 | Doble-tap: `_isSaving` se pone tras el `await` del picker → dos filas creadas | Medio | `home_screen.dart:506-524,821,895` |
 | C-9 | Cola de escritura serializada y lecturas que esperan TODO el backlog | Medio | `remote_family_photo_disk_cache.dart:20,89-92,145` |
-| C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
+| C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto (**✅ resuelto**: chunks de RPC en paralelo con `Future.wait` + un remove por bucket de ≤100 rutas con cortocircuito y validación previa del plan) | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
 | C-11 | Cachés de disco sin techo | Medio | 3 clases de caché |
 | C-12 | Caché de bytes con evicción por inserción, no LRU; `_byteCount` no resta la longitud previa | Medio | `profile_avatar_image_cache.dart:216-220` |
 | C-13 | Tempestad de reloads: `notifyListeners()` en cada evento de auth | Medio | `account_avatar_view.dart:53-59` |
@@ -400,7 +400,7 @@ correctas.
 ## Fase 2 — Escala de datos
 
 10. ✅ C-5 lote de `get_visible_account_avatars` (≤100 ids) → `loadMany` en Home (1 RPC por lote; el `warmCached` único en Home ya existía).
-11. ⏳ **C-6 ✅** `.range(0, 499)` en las 4 consultas de lista + gate `pagination_gate_test` · C-16 usar `loadMemberForOwner` · C-10 paralelizar bucles · C-17 borrar los re-sort.
+11. ⏳ **C-6 ✅** `.range(0, 499)` en las 4 consultas de lista + gate `pagination_gate_test` · **C-10 ✅** chunks de RPC en paralelo + removes agrupados por bucket · C-16 usar `loadMemberForOwner` · C-17 borrar los re-sort.
 
 ## Fase 3 — Arquitectura
 

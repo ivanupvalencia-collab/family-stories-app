@@ -76,7 +76,7 @@ void main() {
       } else if (request.method == 'DELETE') {
         final bucket = path.split('/').last;
         expect((jsonDecode(body) as Map)['prefixes'], [
-          resources.singleWhere((r) => r['bucket'] == bucket)['path'],
+          for (final r in resources.where((r) => r['bucket'] == bucket)) r['path'],
         ]);
         if (bucket == failBucket || missing) {
           request.response.statusCode = missing ? 404 : 403;
@@ -175,6 +175,20 @@ void main() {
     await remove();
     expect(calls, hasLength(3));
   });
+  test(
+    'objects of the same bucket are removed in a single request (C-10)',
+    () async {
+      resources = [
+        {'bucket': 'family-member-photos', 'path': 'usuario_a/member/a.png'},
+        {'bucket': 'family-member-photos', 'path': 'usuario_a/member/b.png'},
+        {'bucket': 'story-audio', 'path': 'request/actual-response.m4a'},
+      ];
+      await remove();
+      // Two buckets, two storage requests — not one per object.
+      expect(calls.where((c) => c.contains('/storage/')), hasLength(2));
+      expect(finishCalls, 1);
+    },
+  );
   test('already absent files are clean', () async {
     missing = true;
     await remove();

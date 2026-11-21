@@ -70,8 +70,9 @@ class SupabaseFamilyMemberDeletionService
       final plan = FamilyMemberDeletionPlan.fromJson(
         Map<String, dynamic>.from(data as Map),
       );
+      // C-10: validate the whole plan before touching storage, so a corrupt
+      // plan never applies a partial deletion.
       for (final resource in plan.resources) {
-        requireSession();
         if (!const {
               'family-member-photos',
               'story-photos',
@@ -80,14 +81,30 @@ class SupabaseFamilyMemberDeletionService
             resource.path.isEmpty) {
           throw const FormatException('Invalid deletion resource.');
         }
-        try {
-          await _client.storage.from(resource.bucket).remove([resource.path]);
-        } on StorageException catch (error) {
-          // Missing objects are clean. Permission/network failures are not.
-          if (error.statusCode != '404') rethrow;
-        }
-        requireSession();
       }
+      // C-10: one remove per bucket instead of one per object. The storage
+      // API takes up to 1000 prefixes per request; we stay at 100. The sweep
+      // stays sequential with a short-circuit: a failure stops it before
+      // finish runs, exactly like the per-object loop did.
+      final pathsByBucket = <String, List<String>>{};
+      for (final resource in plan.resources) {
+        pathsByBucket.putIfAbsent(resource.bucket, () => []).add(resource.path);
+      }
+      for (final entry in pathsByBucket.entries) {
+        final paths = entry.value;
+        for (var offset = 0; offset < paths.length; offset += 100) {
+          requireSession();
+          try {
+            await _client.storage
+                .from(entry.key)
+                .remove(paths.skip(offset).take(100).toList());
+          } on StorageException catch (error) {
+            // Missing objects are clean. Permission/network failures are not.
+            if (error.statusCode != '404') rethrow;
+          }
+        }
+      }
+      requireSession();
       await _client.rpc(
         'finish_family_member_delete',
         params: {'p_family_member_id': familyMemberId},
