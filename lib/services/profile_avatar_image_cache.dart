@@ -26,6 +26,7 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     String? backend,
     String? owner,
     AvatarUrlPolicy? urlPolicy,
+    this.maxBytes = 24 * 1024 * 1024,
   }) : _client = client,
        _disk =
            diskCache ??
@@ -66,6 +67,10 @@ class ProfileAvatarImageCache extends ChangeNotifier {
   final _pendingBytes = <String, Future<Uint8List>>{};
   final _bytes = <String, Uint8List>{};
   int _byteCount = 0;
+
+  /// C-12: budget of the in-memory raw-bytes cache; the head of [_bytes] is
+  /// the least recently used entry and is evicted while over budget.
+  final int maxBytes;
 
   void syncSession() {
     final client = _client;
@@ -183,7 +188,14 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     if (!_valid(scope, owner)) {
       return Future.error(StateError('Avatar session changed'));
     }
-    if (_bytes[key] case final bytes?) return Future.value(bytes);
+    final hit = _bytes.remove(key);
+    if (hit != null) {
+      // C-12: reading makes this the most recently used entry, so the
+      // eviction below removes the least recently *used* bytes, not the
+      // oldest inserted ones.
+      _bytes[key] = hit;
+      return Future.value(hit);
+    }
     return _pendingBytes[key] ??= () async {
       try {
         bool valid() => _valid(scope, owner) && _images[id]?.url == url;
@@ -241,9 +253,13 @@ class ProfileAvatarImageCache extends ChangeNotifier {
           }
         }
         if (!valid()) throw StateError('Avatar was invalidated');
+        // C-12: subtract any previous length before overwriting so the
+        // count stays exact, and evict from the head (least recently used)
+        // until the budget is met.
+        _byteCount -= _bytes[key]?.length ?? 0;
         _bytes[key] = bytes;
         _byteCount += bytes.length;
-        while (_byteCount > 24 * 1024 * 1024 && _bytes.isNotEmpty) {
+        while (_byteCount > maxBytes && _bytes.isNotEmpty) {
           _byteCount -= _bytes.remove(_bytes.keys.first)!.length;
         }
         return bytes;

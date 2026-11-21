@@ -318,4 +318,38 @@ void main() {
       await client.dispose();
     }
   });
+
+  test('the byte cache evicts least-recently-used entries (C-12)', () async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    final budgeted = ProfileAvatarImageCache(
+      urlPolicy: AvatarUrlPolicy.permissive(),
+      maxBytes: png.length * 5 ~/ 2,
+    );
+    // Flutter's decoded cache must not mask the byte cache: drop it between
+    // views so every resolve re-enters _loadBytes, where the use order lives.
+    Future<void> view(String id) async {
+      PaintingBinding.instance.imageCache
+        ..clear()
+        ..clearLiveImages();
+      await resolve(budgeted.imageFor(profile(id: id))!);
+    }
+
+    await view('lru-a');
+    await view('lru-b');
+    expect(downloads, 2);
+    await view('lru-a'); // Most recently used again.
+    await view('lru-c'); // Over budget: the least recently used (b) must go.
+    expect(downloads, 3);
+    await view('lru-a');
+    expect(
+      downloads,
+      3,
+      reason: 'C-12: the recently used entry was evicted first.',
+    );
+    await view('lru-b'); // b was the evicted one: it must re-download.
+    expect(downloads, 4);
+    budgeted.clear();
+  });
 }
