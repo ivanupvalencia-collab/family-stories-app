@@ -12,6 +12,208 @@
 --   public.question_requests / family_invitations -> roles {authenticated}
 --   storage.objects -> roles {authenticated} o {anon} segun politica.
 -- =============================================================================
+-- ---------------------------------------------------------------------------
+-- Helpers de storage ANTES de las politicas que los usan: create policy
+-- resuelve la funcion en el momento de crearse (C-4) y las 24 politicas de
+-- storage.objects dependen de estos cinco helpers. Se copian desde 0003,
+-- que los re-crea idempotentemente con create or replace. Fue el fallo de
+-- la primera sincronizacion con GitHub (SQLSTATE 42883: function ... does
+-- not exist).
+-- ---------------------------------------------------------------------------
+
+create or replace function public.story_photo_allowed(
+  p_name text,
+  p_operation text
+)
+returns boolean
+language plpgsql security definer
+set search_path to ''
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_story public.stories%rowtype;
+  v_owner uuid;
+begin
+  if v_user is null or p_name is null or p_name !~
+    '^[0-9a-f-]{36}/[0-9a-f-]{36}/[a-zA-Z0-9_-]+\.(jpg|png|webp|heic|heif)$' then
+    return false;
+  end if;
+  -- Un UUID malformado se rechaza en vez de provocar un error de politica.
+  begin
+    if p_operation = 'delete' then
+      -- Serializa la limpieza con el bloqueo de fila de set_story_photo.
+      select * into v_story from public.stories
+      where id = split_part(p_name, '/', 2)::uuid for update;
+    else
+      select * into v_story from public.stories
+      where id = split_part(p_name, '/', 2)::uuid;
+    end if;
+  exception when invalid_text_representation then
+    return false;
+  end;
+  if not found then
+    return false;
+  end if;
+  select owner_id into v_owner
+  from public.family_members where id = v_story.family_member_id;
+  if v_owner is distinct from v_user
+     and v_story.recorded_by is distinct from v_user then
+    return false;
+  end if;
+  if p_operation = 'read' then
+    return v_story.photo_path = p_name
+      or split_part(p_name, '/', 1) = v_user::text;
+  elsif p_operation = 'insert' then
+    return split_part(p_name, '/', 1) = v_user::text;
+  elsif p_operation = 'delete' then
+    -- Nunca borra el objeto activo: primero se confirma el cambio de referencia.
+    return v_story.photo_path is distinct from p_name;
+  end if;
+  return false;
+end;
+$function$;
+
+-- ---------------------------------------------------------------------------
+-- Predicados de politica para storage (C-4)
+-- Sustituyen los exists inline con casteo a texto de 0002: el uuid PK se
+-- compara en uuid (usable por family_members_pkey / question_requests_pkey) y
+-- storage.foldername() se calcula una sola vez por evaluacion de politica
+-- (antes: 2 llamadas por politica en family-member-photos).
+-- Un uuid malformado se rechaza con guarda previa + excepcion: nunca provoca
+-- un error de politica. SECURITY INVOKER a proposito: la consulta sobre las
+-- tablas publicas se evalua con las mismas RLS del usuario que consulta,
+-- identico a la subconsulta inline que sustituye.
+-- ---------------------------------------------------------------------------
+create or replace function public.family_member_photo_allowed(
+  p_name text
+)
+returns boolean
+language plpgsql
+set search_path to ''
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_parts text[];
+begin
+  if v_user is null or p_name is null then
+    return false;
+  end if;
+  v_parts := storage.foldername(p_name);
+  -- Ruta esperada: <uid>/<uuid-del-familiar>/<fichero>
+  if coalesce(array_length(v_parts, 1), 0) < 2
+    or v_parts[1] is distinct from v_user::text
+    or v_parts[2] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return false;
+  end if;
+  begin
+    return exists (select 1 from public.family_members fm
+      where fm.id = v_parts[2]::uuid
+        and fm.owner_id = v_user);
+  exception when invalid_text_representation then
+    return false;
+  end;
+end;
+$function$;
+
+create or replace function public.response_audio_allowed(
+  p_name text,
+  p_operation text
+)
+returns boolean
+language plpgsql
+set search_path to ''
+as $function$
+declare
+  v_user uuid := auth.uid();
+  v_parts text[];
+begin
+  if v_user is null or p_name is null or p_operation is null then
+    return false;
+  end if;
+  v_parts := storage.foldername(p_name);
+  -- Ruta esperada: <uuid-de-la-solicitud>/<fichero>
+  if coalesce(array_length(v_parts, 1), 0) < 1
+    or v_parts[1] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return false;
+  end if;
+  begin
+    if p_operation = 'owner-read' then
+      return exists (select 1
+        from public.question_requests qr
+        join public.family_members fm on fm.id = qr.family_member_id
+        where qr.id = v_parts[1]::uuid
+          and fm.owner_id = v_user);
+    elsif p_operation = 'responder-read' then
+      return exists (select 1 from public.question_requests qr
+        where qr.id = v_parts[1]::uuid
+          and qr.recipient_id = v_user);
+    elsif p_operation = 'responder-insert' then
+      return exists (select 1 from public.question_requests qr
+        where qr.id = v_parts[1]::uuid
+          and qr.recipient_id = v_user
+          and qr.status = 'pending');
+    end if;
+  exception when invalid_text_representation then
+    return false;
+  end;
+  return false;
+end;
+$function$;
+
+-- ---------------------------------------------------------------------------
+-- Borrado en dos fases de un familiar
+-- ---------------------------------------------------------------------------
+create or replace function public.family_delete_object_allowed(
+  p_bucket text,
+  p_name text
+)
+returns boolean
+language sql stable security definer
+set search_path to ''
+as $function$
+  select auth.uid() is not null and exists (
+    select 1 from public.family_member_deletions d
+    join public.family_members fm on fm.id = d.family_member_id
+    where d.owner_id = auth.uid()
+      and fm.owner_id = auth.uid()
+      and not d.completed
+      and exists (select 1 from jsonb_array_elements(d.resources) r
+        where r->>'bucket' = p_bucket and r->>'path' = p_name)
+  );
+$function$;
+
+create or replace function public.family_delete_storage_write_allowed(
+  p_bucket text,
+  p_name text
+)
+returns boolean
+language plpgsql security definer
+set search_path to ''
+as $function$
+declare v_member uuid;
+begin
+  if p_bucket = 'family-member-photos' then
+    select fm.id into v_member from public.family_members fm
+      where fm.owner_id::text = split_part(p_name, '/', 1)
+        and fm.id::text = split_part(p_name, '/', 2);
+  elsif p_bucket = 'story-photos' then
+    select s.family_member_id into v_member from public.stories s
+      where s.id::text = split_part(p_name, '/', 2);
+  elsif p_bucket = 'story-audio' then
+    select qr.family_member_id into v_member from public.question_requests qr
+      where qr.id::text = split_part(p_name, '/', 1);
+    if v_member is null then
+      select s.family_member_id into v_member from public.stories s
+        where s.audio_path = p_name limit 1;
+    end if;
+  end if;
+  -- S-18: si no resuelve el miembro, devuelve true (no-op). La politica
+  -- permisiva sigue gobernando. Se conserva fiel al estado real.
+  if v_member is null then return true; end if;
+  perform 1 from public.family_members where id = v_member for update;
+  return not exists (select 1 from public.family_member_deletions
+    where family_member_id = v_member);
+end $function$;
 
 -- ---------------------------------------------------------------------------
 -- public.family_members

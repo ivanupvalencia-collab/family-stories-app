@@ -17,7 +17,7 @@ Exportado completo desde el proyecto remoto el 2026-11-11 mediante `pg_class`,
 
 ```
 000001_baseline_schema.sql      6 tablas en orden topológico, RLS habilitado
-000002_baseline_policies.sql    6 políticas en public + 24 en storage.objects
+000002_baseline_policies.sql    5 helpers de storage + 6 políticas public + 24 en storage.objects
 000003_baseline_functions.sql   26 funciones (incluye las 6 RPC que faltaban)
 000004_baseline_triggers.sql    8 triggers de tabla + event trigger rls_auto_enable
 000005_baseline_grants.sql      grants por rol + 4 buckets
@@ -35,11 +35,15 @@ Exportado completo desde el proyecto remoto el 2026-11-11 mediante `pg_class`,
 **con tres excepciones puntuales ya corregidas en el propio volcado**: el cuerpo
 de `get_story_photo_metadata` (`can_edit` calculado, S-19), el de
 `get_family_invitation_preview` (sin `FOR UPDATE`, S-28) y las 10 políticas de
-storage de `0002`, que ahora delegan en los helpers `family_member_photo_allowed`
-y `response_audio_allowed` de `0003` (C-4: mismo comportamiento RLS, plan con
-índice; como ya ocurría con `story_photo_allowed`, `create policy` resuelve la
-función al crearse, por lo que en una BD nueva tienen que existir previamente);
-al aplicarlos con `create or replace`/`drop policy if exists` cambian esos
+storage de `0002`, que delegan en los helpers `family_member_photo_allowed` y
+`response_audio_allowed` (C-4: mismo comportamiento RLS, plan con índice). Los
+cinco helpers de storage (`story_photo_allowed`, `family_member_photo_allowed`,
+`response_audio_allowed`, `family_delete_object_allowed`,
+`family_delete_storage_write_allowed`) se definen ahora AL PRINCIPIO de `0002`,
+antes de las políticas: `create policy` resuelve la función al crearse y tiene
+que existir previamente — fue el fallo de la primera sincronización con GitHub
+(2026-11-21, SQLSTATE 42883) —; `0003` los re-crea idempotentemente con
+`create or replace`; al aplicarlos con `create or replace`/`drop policy if exists` cambian esos
 cuerpos y políticas con resultado acotado.
 **0007 sí modifica el proyecto**: revoca `TRUNCATE`, limita buckets y añade el
 límite de `question_text`. **0008 (S-5) añade un `CHECK` a `profiles.avatar_url`
