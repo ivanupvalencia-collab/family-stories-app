@@ -761,13 +761,13 @@ packages:
     source: hosted
     version: "7.1.1"
   record_android:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: record_android
-      sha256: "68c8cb40628a460b2a8bdf746697bd798a71cca7b03b8dac20e752d50425900f"
+      sha256: f5080279259c4ad769590f1c165762eaa4e414178adc2e2fab137103228e07ac
       url: "https://pub.dev"
     source: hosted
-    version: "2.3.0"
+    version: "2.2.0"
   record_ios:
     dependency: transitive
     description:
