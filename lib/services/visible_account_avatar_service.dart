@@ -36,16 +36,15 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
     ProfileAvatarImageCache? avatarCache,
   }) : _client = client ?? Supabase.instance.client {
     _owner = _client.auth.currentUser?.id;
+    _announcedOwner = _owner;
     avatarImages = avatarCache ?? ProfileAvatarImageCache.forClient(_client);
     avatarImages.addListener(_imagesChanged);
     // S-10: errors (e.g. refresh failures) must not become unhandled.
-    _subscription = listenAuthSafely(_client.auth.onAuthStateChange, (event) {
-      final changed = _syncAccount();
-      if (!changed && event.event == AuthChangeEvent.signedOut) _clear();
-      // A getter may already have synchronized the account before this event.
-      // Every mounted view still needs to hide/reload its former avatar.
-      notifyListeners();
-    });
+    // C-13: the handler only notifies when the visible account moved.
+    _subscription = listenAuthSafely(
+      _client.auth.onAuthStateChange,
+      handleAuthState,
+    );
   }
 
   static SupabaseVisibleAccountAvatarService? _shared;
@@ -70,6 +69,7 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
   void _imagesChanged() => notifyListeners();
   late final StreamSubscription<AuthState> _subscription;
   String? _owner;
+  String? _announcedOwner;
   int _generation = 0;
   final _cache = <String, UserProfile?>{};
   final _pending = <String, Future<UserProfile?>>{};
@@ -99,6 +99,21 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
     _owner = owner;
     _clear();
     return true;
+  }
+
+  /// C-13: every mounted avatar view reloads on each notifyListeners, so an
+  /// auth event only notifies when the visible account actually moved (a
+  /// getter may have synchronized it before the event arrived, hence the
+  /// announced-owner guard) or when the session was signed out and cleared.
+  @visibleForTesting
+  void handleAuthState(AuthState event) {
+    final changed = _syncAccount();
+    final signedOut = event.event == AuthChangeEvent.signedOut;
+    if (!changed && signedOut) _clear();
+    final owner = _owner;
+    if (!signedOut && owner == _announcedOwner) return;
+    _announcedOwner = owner;
+    notifyListeners();
   }
 
   @override

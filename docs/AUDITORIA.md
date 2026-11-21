@@ -36,7 +36,7 @@ desde entonces.
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
 | A-1…A-12 | Eje de arquitectura | — | ⏳ Fase 3 |
-| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1…C-7, C-8, C-9, C-10, C-11, C-12, C-16, C-17, C-18** (15/18); falta **C-13, C-14, C-15** (uno a uno) |
+| C-1…C-18 | Eje de concurrencia y rendimiento | — | ⏳ en curso: hechos **C-1…C-13, C-16, C-17, C-18** (16/18); falta **C-14, C-15** (uno a uno) |
 
 ---
 
@@ -365,7 +365,7 @@ la entrada (ver C-10).
 | C-10 | Bucles `await` secuenciales: chunks de RPC 100 en 100 y un `storage.remove` por objeto (**✅ resuelto**: chunks de RPC en paralelo con `Future.wait` + un remove por bucket de ≤100 rutas con cortocircuito y validación previa del plan) | Medio | `received_request_details_service.dart:29-44`, `family_member_deletion_service.dart:70-87` |
 | C-11 | Cachés de disco sin techo (**✅ resuelto**: presupuesto de bytes por árbol de owner —fotos/avatares—, por directorio de sesión —audio— y por cuenta —waveforms—, con evicción por mtime tras cada escritura; los ficheros <5 s quedan protegidos y una evicción solo degrada a re-descarga) | Medio | `disk_budget.dart` + 3 clases de caché |
 | C-12 | Caché de bytes con evicción por inserción, no LRU; `_byteCount` no resta la longitud previa (**✅ resuelto**: hit reordena la clave como MRU → la evicción expulsa el menos usado; `_byteCount` resta la longitud previa antes de sobrescribir; techo `maxBytes` inyectable) | Medio | `profile_avatar_image_cache.dart` |
-| C-13 | Tempestad de reloads: `notifyListeners()` en cada evento de auth | Medio | `account_avatar_view.dart:53-59` |
+| C-13 | Tempestad de reloads: `notifyListeners()` en cada evento de auth (**✅ resuelto**: las dos cachés notifican solo cuando la sesión visible cambia (guard de announce por `_announcedOwner`, cubre el pre-sync de getters) o al `signedOut`; `tokenRefreshed`/`userUpdated` con el mismo owner quedan silenciosos) | Medio | `visible_account_avatar_service.dart`, `profile_avatar_image_cache.dart` |
 | C-14 | `ListView(children:)` no lazy en 4 sitios | Medio | `family_member_screen.dart:570-584` |
 | C-15 | `TextPainter..layout()` dentro de `build()` | Medio | `aritoria_requests_view.dart:85-100` |
 | C-16 | Refresco de un familiar cargando la lista completa y escaneando en lineal (**✅ resuelto**: `_refreshRemoteFamilyMember` usa `loadMemberForOwner`, una fila con `.maybeSingle()`) | Medio | `family_member_screen.dart:309-318` |
@@ -418,5 +418,5 @@ guardar).
 
 ## Fase 4 — Rendimiento de UI y testabilidad
 
-17. ⏳ C-14/C-15 `ListView.builder` + caché de `TextPainter` · ✅ **C-11** presupuestos de caché en disco (techo por árbol de owner/por directorio de audio/por cuenta de waveform, evicción por mtime) · ✅ **C-12** LRU real + contabilidad exacta de `_byteCount` · C-13 debounce de `notifyListeners`.
+17. ⏳ C-14/C-15 `ListView.builder` + caché de `TextPainter` · ✅ **C-11** presupuestos de caché en disco (techo por árbol de owner/por directorio de audio/por cuenta de waveform, evicción por mtime) · ✅ **C-12** LRU real + contabilidad exacta de `_byteCount` · ✅ **C-13** notify de auth solo cuando la sesión visible cambia.
 18. ⏳ CI (`flutter analyze && flutter test` con lints estrictos) + README real + split de `test/widget_test.dart`.

@@ -107,6 +107,36 @@ void main() {
     },
   );
 
+  test('the service only reloads views when the visible account moves (C-13)',
+      () async {
+    var notifications = 0;
+    service.addListener(() => notifications++);
+    // The signed-in owner was announced at construction; same-owner events
+    // must stay silent instead of reloading every mounted avatar view.
+    service.handleAuthState(
+      const AuthState(AuthChangeEvent.tokenRefreshed, null),
+    );
+    service.handleAuthState(
+      const AuthState(AuthChangeEvent.userUpdated, null),
+    );
+    expect(
+      notifications,
+      0,
+      reason: 'C-13: a same-owner auth event reloaded every avatar view.',
+    );
+    await signIn('22222222-2222-4222-8222-222222222222');
+    final afterSwitch = notifications;
+    expect(afterSwitch, greaterThan(0));
+    service.handleAuthState(
+      const AuthState(AuthChangeEvent.tokenRefreshed, null),
+    );
+    expect(notifications, afterSwitch);
+    service.handleAuthState(
+      const AuthState(AuthChangeEvent.signedOut, null),
+    );
+    expect(notifications, afterSwitch + 1);
+  });
+
   test('unauthorized/missing profile is null; RPC failure can retry', () async {
     expect(await service.load('hidden'), isNull);
     expect(service.cached('hidden'), isNull);

@@ -37,18 +37,16 @@ class ProfileAvatarImageCache extends ChangeNotifier {
                  )),
        _backend = backend ?? client?.storage.url ?? '',
        _owner = owner ?? client?.auth.currentUser?.id,
+       _announcedOwner = owner ?? client?.auth.currentUser?.id,
        _urlPolicy =
            urlPolicy ??
            AvatarUrlPolicy.forBackend(backend ?? client?.storage.url ?? '') {
     // S-10: errors (e.g. refresh failures) must not become unhandled. The
     // client is optional here (local-only installations), so no subscription.
+    // C-13: the handler only notifies when the visible session moved.
     _subscription = client == null
         ? null
-        : listenAuthSafely(client.auth.onAuthStateChange, (event) {
-            syncSession();
-            if (event.event == AuthChangeEvent.signedOut) clear();
-            notifyListeners();
-          });
+        : listenAuthSafely(client.auth.onAuthStateChange, handleAuthState);
   }
   static final _shared = Expando<ProfileAvatarImageCache>();
   static ProfileAvatarImageCache forClient(SupabaseClient client) =>
@@ -59,6 +57,7 @@ class ProfileAvatarImageCache extends ChangeNotifier {
   final String _backend;
   final AvatarUrlPolicy _urlPolicy;
   String? _owner;
+  String? _announcedOwner;
   StreamSubscription<AuthState>? _subscription;
   Object _scope = Object();
   final _profiles = <String, UserProfile>{};
@@ -79,6 +78,22 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     clear();
     _owner = client.auth.currentUser?.id;
     if (previous != null) unawaited(_disk?.clearOwner(_backend, previous));
+  }
+
+  /// C-13: every mounted avatar view reloads on each notifyListeners, so an
+  /// auth event only notifies when the visible session actually moved. A
+  /// getter may have synchronized the owner before the event arrived, hence
+  /// the separately tracked announced owner: the hourly tokenRefreshed (or
+  /// a same-owner userUpdated) stays silent.
+  @visibleForTesting
+  void handleAuthState(AuthState event) {
+    syncSession();
+    final signedOut = event.event == AuthChangeEvent.signedOut;
+    if (signedOut) clear();
+    final owner = _owner;
+    if (!signedOut && owner == _announcedOwner) return;
+    _announcedOwner = owner;
+    notifyListeners();
   }
 
   bool _valid(Object scope, String? owner) {

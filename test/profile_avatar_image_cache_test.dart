@@ -352,4 +352,70 @@ void main() {
     expect(downloads, 4);
     budgeted.clear();
   });
+
+  test('same-owner auth events do not notify avatar listeners (C-13)',
+      () async {
+    final client = SupabaseClient(
+      'http://127.0.0.1:${server.port}',
+      'test-key',
+      authOptions: const AuthClientOptions(autoRefreshToken: false),
+    );
+    Future<void> signIn(String id) async {
+      await client.auth.recoverSession(
+        jsonEncode({
+          'access_token': 'test-token-$id',
+          'refresh_token': 'test-refresh',
+          'token_type': 'bearer',
+          'expires_in': 3600,
+          'expires_at': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+          'user': {
+            'id': id,
+            'aud': 'authenticated',
+            'app_metadata': {},
+            'user_metadata': {},
+            'created_at': '2026-10-18T12:00:00Z',
+          },
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final avatarCache = ProfileAvatarImageCache(
+      client: client,
+      urlPolicy: AvatarUrlPolicy.permissive(),
+    );
+    var notifications = 0;
+    avatarCache.addListener(() => notifications++);
+    try {
+      await signIn('c13-owner');
+      // Whatever the event fan-out, one owner is announced exactly once.
+      expect(notifications, 1);
+      // An hourly refresh or a metadata update changes nothing visible.
+      avatarCache.handleAuthState(
+        const AuthState(AuthChangeEvent.tokenRefreshed, null),
+      );
+      avatarCache.handleAuthState(
+        const AuthState(AuthChangeEvent.userUpdated, null),
+      );
+      expect(
+        notifications,
+        1,
+        reason: 'C-13: a same-owner auth event reloaded every avatar view.',
+      );
+      await signIn('c13-other');
+      final afterSwitch = notifications;
+      expect(afterSwitch, greaterThan(1));
+      avatarCache.handleAuthState(
+        const AuthState(AuthChangeEvent.tokenRefreshed, null),
+      );
+      expect(notifications, afterSwitch);
+      avatarCache.handleAuthState(
+        const AuthState(AuthChangeEvent.signedOut, null),
+      );
+      expect(notifications, afterSwitch + 1);
+    } finally {
+      avatarCache.dispose();
+      await client.dispose();
+    }
+  });
 }
