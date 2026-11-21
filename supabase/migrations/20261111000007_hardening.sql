@@ -21,11 +21,13 @@
 
 -- ---------------------------------------------------------------------------
 -- S-23: limites de bucket
+-- allowed_mime_types es text[] (upstream y proyecto vivo): array nativo,
+-- nunca ::jsonb (fallo de la 2a sincronizacion, SQLSTATE 42804).
 -- ---------------------------------------------------------------------------
 -- story-audio: audio comprimido. 20 MB es holgura frente a los ~10 MB que
 -- genera la app por grabacion, y evita subidas arbitrarias.
 update storage.buckets
-set allowed_mime_types = '["audio/mp4","audio/m4a","audio/aac","audio/mpeg","audio/wav","audio/x-wav"]'::jsonb,
+set allowed_mime_types = array['audio/mp4','audio/m4a','audio/aac','audio/mpeg','audio/wav','audio/x-wav'],
     file_size_limit = 20971520
 where id = 'story-audio';
 
@@ -33,7 +35,7 @@ where id = 'story-audio';
 -- razonable tamano. El MIME declarado por el cliente no es fiable por si solo
 -- (S-12); el tamano y el tipo ya reducen sustancialmente el abuso.
 update storage.buckets
-set allowed_mime_types = '["image/jpeg","image/png","image/webp","image/heic","image/heif"]'::jsonb,
+set allowed_mime_types = array['image/jpeg','image/png','image/webp','image/heic','image/heif'],
     file_size_limit = 5242880
 where id = 'avatars';
 

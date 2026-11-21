@@ -127,6 +127,8 @@ grant truncate on table public.family_member_deletions to service_role;
 --   family-member-photos  public=false  5 mime, 10 MB
 --   story-photos          public=false  5 mime, 10 MB
 -- Los limites de story-audio y avatars se anyaden en 0007.
+-- allowed_mime_types es text[] (upstream y proyecto vivo): array nativo,
+-- nunca ::jsonb (fallo de la 2a sincronizacion, SQLSTATE 42804).
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values
@@ -137,6 +139,6 @@ values
 on conflict (id) do update set public = excluded.public;
 
 update storage.buckets
-set allowed_mime_types = '["image/jpeg","image/png","image/webp","image/heic","image/heif"]'::jsonb,
+set allowed_mime_types = array['image/jpeg','image/png','image/webp','image/heic','image/heif'],
     file_size_limit = 10485760
 where id in ('family-member-photos', 'story-photos');

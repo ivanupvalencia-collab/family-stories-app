@@ -67,6 +67,11 @@ El exportador del dashboard devolvió tres defectos que `0001` corrige:
    `auth.users(id)`.
 3. **Sin entorno de autorización** — el volcado solo traía `CREATE TABLE`.
 
+> Un defecto ajeno al volcado afloró en la segunda sincronización con GitHub
+> (2026-11-21): `0005`/`0007` escribían `allowed_mime_types` con `'...'::jsonb`,
+> pero la columna de `storage.buckets` es `text[]` (también en upstream);
+> SQLSTATE 42804. Corregido con arrays nativos en ambos ficheros.
+
 ### Resumen de la postura de seguridad verificada
 
 - Las **6 tablas tienen RLS activo** y **no existe ninguna política
