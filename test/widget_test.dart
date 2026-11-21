@@ -2,6 +2,7 @@ import 'photo_editor_test_support.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:family_stories_app/app_graph.dart';
 import 'package:family_stories_app/main.dart';
@@ -3052,6 +3053,7 @@ class FakeProfileService implements ProfileService {
     required String name,
     required String? avatarKey,
     required String? avatarUrl,
+    Uint8List? avatarBytes,
   }) async {
     updatedUserIds.add(userId);
     updatedNames.add(name);

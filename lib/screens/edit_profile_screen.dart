@@ -37,6 +37,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   PickedProfileImage? _selectedPhoto;
   bool _isSaving = false;
   bool _pickingPhoto = false;
+  ImageProvider? _initialAvatarImage;
 
   @override
   void initState() {
@@ -44,6 +45,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController = TextEditingController(text: widget.profile.name);
     _selectedAvatarKey = widget.profile.avatarKey;
     _avatarUrl = widget.profile.avatarUrl;
+    final service = widget.profileService;
+    if (service is ProfileAvatarImageSource) {
+      _initialAvatarImage = (service as ProfileAvatarImageSource).avatarImages
+          .imageFor(widget.profile);
+    }
   }
 
   Future<void> _pickPhoto() async {
@@ -105,6 +111,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         name: _nameController.text.trim(),
         avatarKey: _selectedAvatarKey,
         avatarUrl: avatarUrl,
+        avatarBytes: selectedPhoto?.bytes,
       );
       if (mounted) {
         Navigator.of(context).pop(profile);
@@ -122,12 +129,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final service = widget.profileService;
-    final image = service is ProfileAvatarImageSource
-        ? (service as ProfileAvatarImageSource).avatarImages.imageFor(
-            widget.profile,
-          )
-        : null;
     return Scaffold(
       appBar: AppBar(title: const Text('Editar perfil')),
       body: SafeArea(
@@ -170,7 +171,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 16),
                     _AvatarPreview(
-                      imageProvider: image,
+                      imageProvider: _initialAvatarImage,
                       photo: _selectedPhoto,
                       avatarKey: _selectedAvatarKey,
                       avatarUrl: _avatarUrl,

@@ -290,6 +290,9 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
     String owner,
     int generation,
   ) async {
+    final profilesAtStart = {
+      for (final id in accountIds) id: avatarImages.cachedProfile(id),
+    };
     try {
       final rows = await _client.rpc(
         'get_visible_account_avatars',
@@ -310,6 +313,14 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
       }
       final now = DateTime.now();
       for (final entry in profiles.entries) {
+        // A save may publish a newer profile while this RPC is on the wire.
+        // Never replace it with the response's older metadata or image URL.
+        if (!identical(
+          profilesAtStart[entry.key],
+          avatarImages.cachedProfile(entry.key),
+        )) {
+          continue;
+        }
         final profile = entry.value;
         _cache[entry.key] = profile;
         _validatedAt[entry.key] = now;

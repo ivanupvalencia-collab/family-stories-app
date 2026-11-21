@@ -18,6 +18,7 @@ import '../services/invitation_service.dart';
 import '../services/invitation_share_service.dart';
 import '../services/profile_image_picker.dart';
 import '../services/profile_service.dart';
+import '../services/profile_avatar_image_cache.dart';
 import '../services/question_request_service.dart';
 import '../services/received_request_details_service.dart';
 import '../services/visible_account_avatar_service.dart';
@@ -84,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final QuestionRequestService _questionRequestService;
   late final FamilyStoryService _familyStoryService;
   late final ProfileService _profileService;
+  ProfileAvatarImageCache? _profileImages;
   late final ReceivedRequestDetailsService _detailsService;
   late FamilyMemberPhotoService _photos;
   final Map<String, ReceivedRequestDetails> _details = {};
@@ -124,6 +126,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _questionRequestService = widget.questionRequestService;
     _familyStoryService = widget.familyStoryService;
     _profileService = widget.profileService;
+    final profileSource = _profileService;
+    if (profileSource is ProfileAvatarImageSource) {
+      _profileImages = (profileSource as ProfileAvatarImageSource).avatarImages;
+      _profileImages!.addListener(_profileChanged);
+    }
     _detailsService = widget.receivedRequestDetailsService;
     _user = _authService.currentUser;
     _photos = _photoServiceFor(_user);
@@ -136,12 +143,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _profileImages?.removeListener(_profileChanged);
     WidgetsBinding.instance.removeObserver(this);
     _questionRealtimeGeneration++;
     _questionRealtimeDebounce?.cancel();
     unawaited(_questionRealtimeSubscription?.cancel());
     _authSubscription.cancel();
     super.dispose();
+  }
+
+  void _profileChanged() {
+    if (mounted) setState(() {});
   }
 
   @override

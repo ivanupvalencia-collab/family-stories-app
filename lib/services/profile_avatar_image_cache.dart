@@ -131,12 +131,36 @@ class ProfileAvatarImageCache extends ChangeNotifier {
     }
   }
 
-  Future<void> remember(UserProfile profile) async {
+  Future<void> remember(UserProfile profile, {Uint8List? bytes}) async {
     syncSession();
     final scope = _scope;
     final owner = _owner;
+    if (bytes != null) {
+      await RemoteFamilyPhotoDiskCache.validate(bytes);
+      if (!_valid(scope, owner)) return;
+    }
     final old = _profiles[profile.id];
     _profiles[profile.id] = profile;
+    // Evict the former revision before seeding the new one. Preload and all
+    // mounted views then resolve the same provider from the uploaded bytes.
+    final image = imageFor(profile);
+    if (bytes != null && image != null) {
+      final key = _key(profile.id, profile.avatarUrl!.trim());
+      _rememberBytes(key, bytes);
+      if (owner != null && _disk != null) {
+        await _disk.writeEntry(
+          _backend,
+          owner,
+          key,
+          bytes,
+          stillValid: () =>
+              _valid(scope, owner) && identical(_profiles[profile.id], profile),
+        );
+        if (!_valid(scope, owner) || !identical(_profiles[profile.id], profile)) {
+          return;
+        }
+      }
+    }
     preload(profile);
     if (owner != null && _disk != null) {
       await _disk.writeEntry(
@@ -177,6 +201,9 @@ class ProfileAvatarImageCache extends ChangeNotifier {
 
   ImageProvider? imageFor(UserProfile profile) {
     syncSession();
+    // Mounted routes may still hold the pre-save model. Shared committed
+    // metadata takes precedence so those views cannot evict the new revision.
+    profile = _profiles[profile.id] ?? profile;
     final url = profile.avatarUrl?.trim();
     final previous = _images[profile.id];
     if (previous?.url == url && url != null && url.isNotEmpty) return previous;
@@ -229,10 +256,9 @@ class ProfileAvatarImageCache extends ChangeNotifier {
           // abort every other download sharing its pool.
           Future<Uint8List> download() async {
             final uri = Uri.parse(url);
-            final request = await sharedHttpClient
-                .getUrl(uri)
-                // A redirect could leave the allowed origin behind it.
-                ..followRedirects = false;
+            final request = await sharedHttpClient.getUrl(uri)
+              // A redirect could leave the allowed origin behind it.
+              ..followRedirects = false;
             final response = await request.close();
             if (response.statusCode != 200) {
               throw NetworkImageLoadException(
@@ -271,17 +297,21 @@ class ProfileAvatarImageCache extends ChangeNotifier {
         // C-12: subtract any previous length before overwriting so the
         // count stays exact, and evict from the head (least recently used)
         // until the budget is met.
-        _byteCount -= _bytes[key]?.length ?? 0;
-        _bytes[key] = bytes;
-        _byteCount += bytes.length;
-        while (_byteCount > maxBytes && _bytes.isNotEmpty) {
-          _byteCount -= _bytes.remove(_bytes.keys.first)!.length;
-        }
+        _rememberBytes(key, bytes);
         return bytes;
       } finally {
         if (identical(scope, _scope)) _pendingBytes.remove(key);
       }
     }();
+  }
+
+  void _rememberBytes(String key, Uint8List bytes) {
+    _byteCount -= _bytes.remove(key)?.length ?? 0;
+    _bytes[key] = bytes;
+    _byteCount += bytes.length;
+    while (_byteCount > maxBytes && _bytes.isNotEmpty) {
+      _byteCount -= _bytes.remove(_bytes.keys.first)!.length;
+    }
   }
 
   void preload(UserProfile profile) {

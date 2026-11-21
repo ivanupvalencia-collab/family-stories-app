@@ -1,15 +1,53 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:family_stories_app/screens/accept_invitation_screen.dart';
 import 'package:family_stories_app/screens/edit_profile_screen.dart';
 import 'package:family_stories_app/screens/profile_screen.dart';
 import 'package:family_stories_app/widgets/profile_avatar_view.dart';
+import 'package:family_stories_app/widgets/aritoria_home_view.dart';
 import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/profile_avatar_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'widget_test.dart' as fixtures;
+import 'photo_editor_test_support.dart';
+
+class _SavedProfiles extends fixtures.FakeProfileService
+    implements ProfileAvatarImageSource {
+  _SavedProfiles()
+    : super(
+        profile: const UserProfile(
+          id: 'google-user-id',
+          name: 'Usuario D',
+          avatarUrl: 'https://example.com/old.jpg?v=1',
+        ),
+      );
+
+  @override
+  final avatarImages = ProfileAvatarImageCache();
+  Uint8List? savedBytes;
+
+  @override
+  Future<UserProfile> updateProfile({
+    required String userId,
+    required String name,
+    required String? avatarKey,
+    required String? avatarUrl,
+    Uint8List? avatarBytes,
+  }) async {
+    final updated = await super.updateProfile(
+      userId: userId,
+      name: name,
+      avatarKey: avatarKey,
+      avatarUrl: avatarUrl,
+    );
+    savedBytes = avatarBytes;
+    await avatarImages.remember(updated, bytes: avatarBytes);
+    return updated;
+  }
+}
 
 class _AvatarImages extends ProfileAvatarImageCache {
   final image = MemoryImage(fixtures.testPickedImage.bytes);
@@ -55,6 +93,83 @@ class _OfflineAuthService extends fixtures.FakeAuthService {
 }
 
 void main() {
+  testWidgets(
+    'saving the local photo refreshes Perfil and mounted Home immediately',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final profiles = _SavedProfiles();
+      addTearDown(profiles.avatarImages.dispose);
+      await tester.runAsync(
+        () => profiles.avatarImages.remember(
+          profiles.profile,
+          bytes: fixtures.testPickedImage.bytes,
+        ),
+      );
+      final originalImage = profiles.avatarImages.imageFor(profiles.profile)!;
+      final storage = fixtures.FakeAvatarStorageService(
+        uploadedUrl: 'https://example.com/new.jpg?v=2',
+      );
+      await tester.pumpWidget(
+        fixtures.testApp(
+          fixtures.MemoryFamilyMemberStorage(),
+          authService: fixtures.FakeAuthService(fixtures.testAuthUser),
+          profileService: profiles,
+          profileImagePicker: fixtures.FakeProfileImagePicker(
+            result: fixtures.testPickedImage,
+          ),
+          avatarStorageService: storage,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Perfil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Editar foto de perfil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pick_profile_photo')));
+      await tester.pump();
+      await confirmPhotoCrop(tester);
+      await tester.tap(find.text('Guardar'));
+      for (var attempt = 0; attempt < 100; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+        if (find.byType(EditProfileScreen).evaluate().isEmpty) break;
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(EditProfileScreen), findsNothing);
+      final avatar = tester.widget<ProfileAvatarView>(
+        find.byKey(const ValueKey('profile_avatar')),
+      );
+      expect(avatar.avatarUrl, storage.uploadedUrl);
+      expect(profiles.savedBytes, same(storage.uploadedImages.single.bytes));
+      expect(
+        avatar.imageProvider,
+        same(profiles.avatarImages.imageFor(profiles.profile)),
+      );
+      final image = tester.widget<RawImage>(
+        find.descendant(
+          of: find.byKey(const ValueKey('profile_avatar')),
+          matching: find.byType(RawImage),
+        ),
+      );
+      // No HTTP can succeed in this widget test: decoded pixels must come from
+      // the selected bytes, not a fresh download of the uploaded URL.
+      expect(image.image, isNotNull);
+      expect(
+        PaintingBinding.instance.imageCache.containsKey(originalImage),
+        isFalse,
+      );
+      final home = tester.widget<AritoriaHomeView>(
+        find.byType(AritoriaHomeView, skipOffstage: false),
+      );
+      expect(home.profile!.avatarUrl, storage.uploadedUrl);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   Future<void> openProfile(
     WidgetTester tester, {
     Size size = const Size(390, 844),

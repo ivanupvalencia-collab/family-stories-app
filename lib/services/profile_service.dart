@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,6 +16,7 @@ abstract class ProfileService {
     required String name,
     required String? avatarKey,
     required String? avatarUrl,
+    Uint8List? avatarBytes,
   });
 
   void clearCache();
@@ -134,6 +136,7 @@ class SupabaseProfileService
     required String name,
     required String? avatarKey,
     required String? avatarUrl,
+    Uint8List? avatarBytes,
   }) async {
     _syncAccount();
     _versions[userId] = (_versions[userId] ?? 0) + 1;
@@ -153,7 +156,7 @@ class SupabaseProfileService
     _syncAccount();
     if (generation == _cacheGeneration) {
       _cache[userId] = profile;
-      await avatarImages.remember(profile);
+      await avatarImages.remember(profile, bytes: avatarBytes);
     }
     return profile;
   }

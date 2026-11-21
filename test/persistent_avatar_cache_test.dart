@@ -279,6 +279,122 @@ void main() {
     },
   );
 
+  test('saved local bytes reach all avatar consumers and survive restart without download', () async {
+    final client = await newClient();
+    final cache = newImages(client);
+    final own = SupabaseProfileService(client: client, avatarCache: cache);
+    final visible = SupabaseVisibleAccountAvatarService(
+      client: client,
+      avatarCache: cache,
+    );
+    visibleServices.add(visible);
+    final original = await own.loadForUser('owner');
+    final oldImage = cache.imageFor(original)!;
+    await resolve(oldImage);
+    await visible.load('owner');
+    await visible.loadMany(['owner']);
+    var announcements = 0;
+    visible.addListener(() => announcements++);
+
+    revision = 2;
+    final updated = await own.updateProfile(
+      userId: 'owner',
+      name: 'Usuario B',
+      avatarKey: null,
+      avatarUrl: getUrl(2),
+      avatarBytes: png,
+    );
+    expect(announcements, greaterThan(0));
+    expect(visible.cached('owner')!.avatarUrl, updated.avatarUrl);
+    expect(PaintingBinding.instance.imageCache.containsKey(oldImage), isFalse);
+    await resolve(cache.imageFor(updated)!);
+    await resolve(cache.imageFor(visible.cached('owner')!)!);
+    expect(cache.imageFor(original), same(cache.imageFor(updated)));
+    await resolve(cache.imageFor(original)!);
+    expect(downloads, 1, reason: 'The uploaded image is already local.');
+
+    cache.clear();
+    final restarted = newImages(client);
+    final restored = (await restarted.readProfile('owner'))!;
+    expect(restored.avatarUrl, getUrl(2));
+    await resolve(restarted.imageFor(restored)!);
+    expect(downloads, 1, reason: 'The new revision must also be on disk.');
+    final otherAccount = ProfileAvatarImageCache(
+      diskCache: disk,
+      backend: client.storage.url,
+      owner: 'someone-else',
+    );
+    images.add(otherAccount);
+    expect(await otherAccount.readProfile('owner'), isNull);
+    expect(
+      await disk.readEntry(
+        client.storage.url,
+        'someone-else',
+        'avatar:owner:${getUrl(2)}',
+      ),
+      isNull,
+    );
+    await waitFor(() => replies == 3);
+  });
+
+  test('a visible-avatar RPC started before saving cannot restore the old revision', () async {
+    final client = await newClient();
+    final cache = newImages(client);
+    final visible = SupabaseVisibleAccountAvatarService(
+      client: client,
+      avatarCache: cache,
+    );
+    visibleServices.add(visible);
+    metadataGate = Completer<void>();
+    final pending = visible.load('owner');
+    await waitFor(() => metadataRequests == 1);
+    // The server will still respond with revision 1. Publish the successful
+    // save locally before that older response arrives.
+    final saved = UserProfile(
+      id: 'owner',
+      name: 'Saved name',
+      avatarUrl: getUrl(2),
+    );
+    await cache.remember(saved, bytes: png);
+    release(metadataGate);
+    await pending;
+    expect(visible.cached('owner'), same(saved));
+    expect(cache.cachedProfile('owner'), same(saved));
+    await resolve(cache.imageFor(saved)!);
+    expect(downloads, 0);
+    await waitFor(() => replies == 1);
+  });
+
+  test('a save finishing after an account change cannot publish local avatar bytes', () async {
+    final client = await newClient();
+    final cache = newImages(client);
+    final own = SupabaseProfileService(client: client, avatarCache: cache);
+    metadataGate = Completer<void>();
+    final saving = own.updateProfile(
+      userId: 'owner',
+      name: 'Saved name',
+      avatarKey: null,
+      avatarUrl: getUrl(1),
+      avatarBytes: png,
+    );
+    await waitFor(() => metadataRequests == 1);
+    await login(client, 'someone-else');
+    release(metadataGate);
+    await saving;
+    expect(own.cachedForUser('owner'), isNull);
+    expect(cache.cachedProfile('owner'), isNull);
+    expect(
+      await disk.readEntry(
+        client.storage.url,
+        'someone-else',
+        'avatar:owner:${getUrl(1)}',
+      ),
+      isNull,
+    );
+    expect(downloads, 0);
+    await waitFor(() => replies == 1);
+  });
+
   test('corrupt bytes are discarded and refetched; backend and account namespaces never mix', () async {
     final client = await newClient();
     final first = newImages(client);
