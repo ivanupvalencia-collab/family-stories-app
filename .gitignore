@@ -56,3 +56,7 @@ key.properties
 *.pem
 *.p8
 *.mobileprovision
+
+# The iOS platform folder is regenerated scaffolding (the project ships
+# Android; Xcode 27.2 recreated it during a toolchain update).
+ios/

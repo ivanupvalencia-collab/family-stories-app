@@ -6,6 +6,7 @@ import 'package:family_stories_app/models/user_profile.dart';
 import 'package:family_stories_app/services/family_member_photo_service.dart';
 import 'package:family_stories_app/services/profile_image_picker.dart';
 import 'package:family_stories_app/services/visible_account_avatar_service.dart';
+import 'package:family_stories_app/domain/home_hero.dart';
 import 'package:family_stories_app/widgets/aritoria_home_view.dart';
 import 'package:family_stories_app/widgets/family_member_photo_view.dart';
 import 'package:family_stories_app/widgets/profile_avatar_view.dart';

@@ -2,17 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'question_text.dart';
 
 import '../design/aritoria_design.dart';
+import '../domain/home_hero.dart';
+import '../domain/postgrest_failure.dart';
+import '../domain/request_display.dart';
 import '../models/family_member.dart';
 import '../models/family_story.dart';
 import '../services/question_request_service.dart';
 import '../services/story_photo_service.dart';
 import 'private_photo_view.dart';
-import '../models/profile_avatar.dart';
 import '../models/question_request.dart';
 import '../models/user_profile.dart';
 import '../services/family_member_photo_service.dart';
@@ -23,57 +24,8 @@ import '../services/visible_account_avatar_service.dart';
 
 const double _homeRequestLeadingSize = 48;
 
-FamilyMember? selectHomeHero(
-  List<FamilyMember> members, {
-  UserProfile? Function(String accountId)? linkedProfile,
-}) {
-  if (members.isEmpty) return null;
-  return members.firstWhere((member) {
-    if (member.photoPath != null) return true;
-    final accountId = member.linkedAccountId;
-    final profile = accountId == null ? null : linkedProfile?.call(accountId);
-    return (profile?.avatarUrl?.trim().isNotEmpty ?? false) ||
-        ProfileAvatarCatalog.findByKey(profile?.avatarKey) != null;
-  }, orElse: () => members.first);
-}
-
-String requestDate(DateTime date) {
-  final local = date.toLocal();
-  return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
-}
-
-String requestSubtitle(
-  QuestionRequest request,
-  ReceivedRequestDetails? details, {
-  bool keepTimingTogether = false,
-  bool recipientOnSeparateLine = false,
-}) {
-  final name = details?.senderName;
-  final answered = request.status == QuestionRequestStatus.answered;
-  final parts = <String>[
-    if (name != null)
-      '${answered ? 'Para' : 'De'} $name'
-    else
-      answered ? 'Para quien te preguntó' : 'Una pregunta para ti',
-    if (answered && request.answeredAt != null)
-      requestDate(request.answeredAt!)
-    else if (!answered)
-      requestDate(request.createdAt),
-    if (answered && details?.durationSeconds != null)
-      '${details!.durationSeconds! ~/ 60}:${(details.durationSeconds! % 60).toString().padLeft(2, '0')}',
-  ];
-  if (keepTimingTogether &&
-      answered &&
-      request.answeredAt != null &&
-      details?.durationSeconds != null) {
-    final duration = parts.removeLast();
-    parts[parts.length - 1] = '${parts.last}\u00a0·\u00a0$duration';
-  }
-  if (recipientOnSeparateLine && parts.length > 1) {
-    return '${parts.first}\n${parts.skip(1).join(' · ')}';
-  }
-  return parts.join(' · ');
-}
+// A-2: selectHomeHero, requestDate and requestSubtitle moved to
+// lib/domain/ (pure rules, no widget or Supabase dependency).
 
 class AritoriaHomeView extends StatelessWidget {
   const AritoriaHomeView({
@@ -662,8 +614,7 @@ class _HomeAnswerPreviewState extends State<_HomeAnswerPreview> {
         return fresh;
       } catch (error) {
         // Transient network errors do not hide an already cached thumbnail.
-        if (error is PostgrestException &&
-            (error.code == '42501' || error.code == 'PGRST301')) {
+        if (isPostgrestDenied(error)) {
           try {
             await _photos.rememberPreview(id, null);
           } catch (_) {}

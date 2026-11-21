@@ -35,7 +35,7 @@ desde entonces.
 | S-29 | Bucket `avatars` sin política `DELETE` | Bajo | ✅ este commit · política own-folder en `20261115000001` (**no aplicada**) + gate S-29 |
 | S-30 | Política muerta en `family_invitations` | Bajo | ✅ este commit · drop en `20261116000001` (**no aplicada**) + gate S-30 |
 | S-31 | Ver `0007_hardening.sql` | — | ✅ `b878d8c` |
-| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-3, A-4** (2/12); resto por grupos |
+| A-1…A-12 | Eje de arquitectura | — | ⏳ en curso: hechos **A-2, A-3, A-4** (3/12); resto por grupos |
 | C-1…C-18 | Eje de concurrencia y rendimiento | — | ✅ **completo (18/18)**: hechos **C-1…C-18** — sin vetoados en este eje |
 
 ---
@@ -172,6 +172,13 @@ mapean resultado → UI.
 disco y clasifica códigos de error de PostgREST (`:665-666`), duplicado en
 `visible_account_avatar_service.dart:177`. Es el único import `supabase_flutter`
 fuera de `services/`.
+
+**✅ resuelto (A-2):** `lib/domain/` contiene las reglas puras —
+`home_hero.dart` (`selectHomeHero`), `request_display.dart` (`requestDate`/
+`requestSubtitle`), `postgrest_failure.dart` (`isPostgrestDenied`, unifica la
+clasificación `42501/PGRST301` duplicada) y `app_failure.dart` (falla tipada
+para los casos de uso de A-1). `aritoria_home_view.dart` queda **sin import de
+`supabase_flutter`** — ya no existe ninguno fuera de `services/` y `domain/`.
 
 ## 🔴 A-3 · Acoplamiento concreto y singletons globales (Alto)
 

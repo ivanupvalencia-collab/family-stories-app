@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../domain/postgrest_failure.dart';
+
 import '../models/user_profile.dart';
 import 'auth_stream.dart';
 import 'profile_avatar_image_cache.dart';
@@ -319,7 +321,7 @@ class SupabaseVisibleAccountAvatarService extends VisibleAccountAvatarService
         }
       }
     } on PostgrestException catch (error) {
-      if ((error.code == '42501' || error.code == 'PGRST301') &&
+      if (isPostgrestDenied(error) &&
           _owner == owner &&
           generation == _generation) {
         final now = DateTime.now();
