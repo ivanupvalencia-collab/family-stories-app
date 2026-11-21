@@ -309,18 +309,15 @@ class _FamilyMemberScreenState extends State<FamilyMemberScreen>
 
     setState(() => _isRefreshingMember = true);
     try {
-      final familyMembers = await widget.familyMemberService.loadForOwner(
-        user.id,
-      );
-      FamilyMember? refreshedMember;
-      for (final familyMember in familyMembers) {
-        if (familyMember.id == _familyMember.id) {
-          refreshedMember = familyMember;
-          break;
-        }
-      }
+      // C-16: refresh this member only — one single-row query (.maybeSingle)
+      // instead of downloading the owner's whole list and scanning it.
+      final refreshedMember = await widget.familyMemberService
+          .loadMemberForOwner(
+            ownerId: user.id,
+            familyMemberId: _familyMember.id,
+          );
       if (mounted && _canManagePhoto && refreshedMember != null) {
-        setState(() => _familyMember = refreshedMember!);
+        setState(() => _familyMember = refreshedMember);
       }
     } catch (_) {
       if (mounted && showError) {

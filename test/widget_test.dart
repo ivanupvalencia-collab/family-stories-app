@@ -3113,12 +3113,15 @@ class FakeFamilyMemberService implements FamilyMemberService {
   final Object? loadError;
   final Object? createError;
   final List<String> requestedOwnerIds = [];
+  final List<String> requestedMemberIds = [];
+  int loadForOwnerCalls = 0;
   final List<String> createdOwnerIds = [];
   final List<String> createdNames = [];
   final List<String> createdRelationships = [];
 
   @override
   Future<List<FamilyMember>> loadForOwner(String ownerId) async {
+    loadForOwnerCalls++;
     requestedOwnerIds.add(ownerId);
     if (loadError != null) {
       throw loadError!;
@@ -3132,6 +3135,7 @@ class FakeFamilyMemberService implements FamilyMemberService {
     required String familyMemberId,
   }) async {
     requestedOwnerIds.add(ownerId);
+    requestedMemberIds.add(familyMemberId);
     if (loadError != null) {
       throw loadError!;
     }

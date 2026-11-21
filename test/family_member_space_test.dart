@@ -814,4 +814,29 @@ void main() {
       await capture('member-space-stories-preview');
     }
   });
+
+  testWidgets('remote refresh queries the single member, not the list (C-16)', (
+    tester,
+  ) async {
+    const member = FamilyMember(
+      id: 'member',
+      name: 'Usuario F',
+      relationship: 'Abuela',
+    );
+    final members = fixtures.FakeFamilyMemberService(members: [member]);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _space(member, [], remote: true, memberService: members),
+    );
+    await tester.pumpAndSettle();
+
+    expect(members.requestedMemberIds, [member.id]);
+    expect(
+      members.loadForOwnerCalls,
+      0,
+      reason:
+          'The remote refresh must not download the whole member list (C-16).',
+    );
+  });
 }
